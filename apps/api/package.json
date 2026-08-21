@@ -13,7 +13,8 @@
     "typecheck": "tsc --noEmit",
     "test": "jest",
     "test:watch": "jest --watch",
-    "test:cov": "jest --coverage"
+    "test:cov": "jest --coverage",
+    "verify:e2e": "node C:/Users/user/.gemini/antigravity-ide/brain/03900552-caa1-4500-ac82-618ae94feb7d/scratch/verify-e2e.js"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.10",

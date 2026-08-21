@@ -60,30 +60,6 @@ export const PropertyFilterSchema = z.object({
 
 export const PropertyMediaCategorySchema = z.enum(['IMAGE', 'DOCUMENT', 'FLOOR_PLAN']).default('IMAGE');
 
-// PG Structure Schemas (Foundation for future milestones)
-export const CreateFloorSchema = z.object({
-  propertyId: z.string().uuid(),
-  floorNumber: z.number().int().min(-2).max(100),
-  name: z.string().trim().min(1).max(50),
-});
-
-export const CreateRoomSchema = z.object({
-  propertyId: z.string().uuid(),
-  floorId: z.string().uuid(),
-  roomNumber: z.string().trim().min(1).max(20),
-  sharingType: z.nativeEnum(RoomSharingType),
-  capacity: z.number().int().min(1).max(20),
-  baseRent: z.number().positive('Rent must be a positive number'),
-  amenities: z.array(z.string()).optional().default([]),
-});
-
-export const CreateBedSchema = z.object({
-  roomId: z.string().uuid(),
-  bedNumber: z.string().trim().min(1).max(20),
-  monthlyRent: z.number().positive('Rent must be a positive number'),
-  status: z.nativeEnum(BedStatus).optional().default(BedStatus.AVAILABLE),
-});
-
 // Rental Unit Schemas (Foundation for future milestones)
 export const CreateRentalUnitSchema = z.object({
   propertyId: z.string().uuid(),
@@ -102,7 +78,4 @@ export const CreateRentalUnitSchema = z.object({
 export type CreatePropertyInput = z.infer<typeof CreatePropertySchema>;
 export type UpdatePropertyInput = z.infer<typeof UpdatePropertySchema>;
 export type PropertyFilterInput = z.infer<typeof PropertyFilterSchema>;
-export type CreateFloorInput = z.infer<typeof CreateFloorSchema>;
-export type CreateRoomInput = z.infer<typeof CreateRoomSchema>;
-export type CreateBedInput = z.infer<typeof CreateBedSchema>;
 export type CreateRentalUnitInput = z.infer<typeof CreateRentalUnitSchema>;

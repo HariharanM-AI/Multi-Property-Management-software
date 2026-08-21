@@ -477,7 +477,7 @@ export default function PropertyDetailPage() {
                   <div className="w-8 h-8 rounded-lg bg-teal-50 text-brand-teal flex items-center justify-center">
                     <Layers className="w-4 h-4" />
                   </div>
-                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-slate-100 text-slate-600 border border-slate-200">
+                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-brand-teal/10 text-brand-teal border border-brand-teal/20 animate-pulse">
                     CORE-005
                   </span>
                 </div>
@@ -485,6 +485,14 @@ export default function PropertyDetailPage() {
                 <p className="text-[11px] text-surface-textSecondary leading-relaxed">
                   Single, double, triple & dorm sharing room structures with floor plans.
                 </p>
+                <div className="pt-2">
+                  <Link
+                    href={`/properties/${propertyId}/floors`}
+                    className="inline-flex items-center text-[10px] font-bold text-brand-teal hover:underline"
+                  >
+                    Manage Inventory &rarr;
+                  </Link>
+                </div>
               </div>
 
               <div className="p-4 rounded-xl bg-surface-subtle border border-surface-border space-y-2">

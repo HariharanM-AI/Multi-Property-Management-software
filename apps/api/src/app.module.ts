@@ -9,6 +9,7 @@ import { OrganizationsModule } from './modules/organizations/organizations.modul
 import { TeamModule } from './modules/team/team.module';
 import { InvitationsModule } from './modules/invitations/invitations.module';
 import { PropertiesModule } from './modules/properties/properties.module';
+import { PgStructureModule } from './modules/pg-structure/pg-structure.module';
 import { AuthGuard } from './common/guards/auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
 import { PermissionsGuard } from './common/guards/permissions.guard';
@@ -40,6 +41,7 @@ import { GlobalHttpExceptionFilter } from './common/filters/http-exception.filte
     TeamModule,
     InvitationsModule,
     PropertiesModule,
+    PgStructureModule,
   ],
   providers: [
     {

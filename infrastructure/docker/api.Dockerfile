@@ -23,15 +23,17 @@ ENV PORT=4000
 # Install openssl for Prisma runtime
 RUN apk add --no-cache openssl dumb-init
 
-COPY --from=builder /app/package*.json ./
-COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/packages ./packages
-COPY --from=builder /app/apps/api/dist ./apps/api/dist
-COPY --from=builder /app/apps/api/package.json ./apps/api/package.json
-COPY --from=builder /app/prisma ./prisma
+COPY --chown=node:node --from=builder /app/package*.json ./
+COPY --chown=node:node --from=builder /app/node_modules ./node_modules
+COPY --chown=node:node --from=builder /app/packages ./packages
+COPY --chown=node:node --from=builder /app/apps/api/dist ./apps/api/dist
+COPY --chown=node:node --from=builder /app/apps/api/package.json ./apps/api/package.json
+COPY --chown=node:node --from=builder /app/prisma ./prisma
+
+RUN mkdir -p /app/uploads && chown -R node:node /app/uploads
 
 USER node
 EXPOSE 4000
 
 ENTRYPOINT ["/usr/bin/dumb-init", "--"]
-CMD ["node", "apps/api/dist/src/main.js"]
+CMD ["node", "apps/api/dist/main.js"]

@@ -59,6 +59,7 @@ enum BedStatus {
   MAINTENANCE
   CLEANING
   NOTICE
+  BLOCKED
 }
 
 enum RentalUnitStatus {
@@ -381,6 +382,7 @@ model Property {
   amenities      PropertyAmenity[]
   media          PropertyMedia[]
   floors         Floor[]
+  rooms          Room[]
   rentalUnits    RentalUnit[]
   meters         Meter[]
   mealPlans      MealPlan[]
@@ -465,17 +467,19 @@ model PropertyAmenity {
 // ------------------------------------------------------------------------------
 
 model Floor {
-  id          String   @id @default(uuid())
+  id          String    @id @default(uuid())
   propertyId  String
   floorNumber Int
   name        String
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
 
   property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
   rooms    Room[]
 
   @@unique([propertyId, floorNumber])
+  @@index([propertyId])
   @@map("floors")
 }
 
@@ -490,14 +494,18 @@ model Room {
   amenities   String[]        @default([])
   createdAt   DateTime        @default(now())
   updatedAt   DateTime        @updatedAt
+  deletedAt   DateTime?
 
-  floor Floor  @relation(fields: [floorId], references: [id], onDelete: Cascade)
-  beds  Bed[]
-  meters Meter[]
+  floor    Floor              @relation(fields: [floorId], references: [id], onDelete: Cascade)
+  property Property           @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  beds     Bed[]
+  meters   Meter[]
   maintenanceTickets MaintenanceTicket[]
   inventoryItems InventoryItem[]
 
   @@unique([floorId, roomNumber])
+  @@index([propertyId])
+  @@index([floorId])
   @@map("rooms")
 }
 
@@ -509,11 +517,13 @@ model Bed {
   status      BedStatus @default(AVAILABLE)
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
 
-  room   Room               @relation(fields: [roomId], references: [id], onDelete: Cascade)
-  stays  TenantStayHistory[]
+  room  Room                @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  stays TenantStayHistory[]
 
   @@unique([roomId, bedNumber])
+  @@index([roomId])
   @@index([status])
   @@map("beds")
 }

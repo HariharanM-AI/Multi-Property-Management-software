@@ -29,6 +29,7 @@ export enum BedStatus {
   MAINTENANCE = 'MAINTENANCE',
   CLEANING = 'CLEANING',
   NOTICE = 'NOTICE',
+  BLOCKED = 'BLOCKED',
 }
 
 export enum RentalUnitStatus {

@@ -112,3 +112,59 @@
 ### 5.9 Remove Property Media
 - **Endpoint**: `DELETE /api/v1/properties/:id/media/:mediaId`
 - **Permission**: `property.update`
+
+---
+
+## 6. PG Structure Inventory (`/api/v1/properties/:propertyId/...`)
+All structure endpoints operate within a scoped property context.
+
+### 6.1 Get PG Summary
+- **Endpoint**: `GET /api/v1/properties/:propertyId/pg/summary`
+- **Permission**: `property.read`
+- **Response** (`200 OK`):
+```json
+{
+  "success": true,
+  "data": {
+    "propertyId": "uuid",
+    "totalFloors": 3,
+    "totalRooms": 10,
+    "totalBeds": 24,
+    "availableBeds": 18,
+    "occupiedBeds": 6,
+    "reservedBeds": 0,
+    "maintenanceBeds": 0,
+    "blockedBeds": 0,
+    "cleaningBeds": 0,
+    "noticeBeds": 0,
+    "occupancyRate": 25
+  }
+}
+```
+
+### 6.2 Floors CRUD
+- `POST /api/v1/properties/:propertyId/floors` (Permission: `property.create`)
+  - Request: `{ "floorNumber": 1, "name": "First Floor" }`
+- `GET /api/v1/properties/:propertyId/floors` (Permission: `property.read`)
+- `GET /api/v1/properties/:propertyId/floors/:floorId` (Permission: `property.read`)
+- `PATCH /api/v1/properties/:propertyId/floors/:floorId` (Permission: `property.update`)
+- `DELETE /api/v1/properties/:propertyId/floors/:floorId` (Permission: `property.delete` - blocked if occupied beds exist)
+
+### 6.3 Rooms CRUD
+- `POST /api/v1/properties/:propertyId/rooms` (Permission: `property.create`)
+  - Request: `{ "floorId": "uuid", "roomNumber": "101", "sharingType": "DOUBLE", "capacity": 2, "baseRent": 6000, "autoGenerateBeds": true }`
+- `GET /api/v1/properties/:propertyId/rooms` (Permission: `property.read`)
+- `GET /api/v1/properties/:propertyId/rooms/:roomId` (Permission: `property.read`)
+- `PATCH /api/v1/properties/:propertyId/rooms/:roomId` (Permission: `property.update`)
+- `DELETE /api/v1/properties/:propertyId/rooms/:roomId` (Permission: `property.delete` - blocked if occupied beds exist)
+
+### 6.4 Beds CRUD
+- `POST /api/v1/properties/:propertyId/beds` (Permission: `property.create`)
+  - Request: `{ "roomId": "uuid", "bedNumber": "101-A", "monthlyRent": 6000, "status": "AVAILABLE" }`
+- `GET /api/v1/properties/:propertyId/beds` (Permission: `property.read`)
+- `GET /api/v1/properties/:propertyId/beds/:bedId` (Permission: `property.read`)
+- `PATCH /api/v1/properties/:propertyId/beds/:bedId` (Permission: `property.update`)
+- `PATCH /api/v1/properties/:propertyId/beds/:bedId/status` (Permission: `property.update`)
+  - Request: `{ "status": "OCCUPIED" }`
+- `DELETE /api/v1/properties/:propertyId/beds/:bedId` (Permission: `property.delete` - blocked if occupied)
+

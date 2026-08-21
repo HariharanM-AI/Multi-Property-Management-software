@@ -82,3 +82,23 @@ If a user possesses a permission (e.g. `property.read`) but requests a property 
 - Server-side MIME validation against verified binary signatures (JPEG, PNG, WEBP, PDF).
 - Maximum file size limits: 5 MB for images, 25 MB for documents.
 - Executable files (`.exe`, `.sh`, `.js`, `.bat`) are rejected immediately.
+
+---
+
+## 7. PG Structure Inventory Security & Safeguards (CORE-005)
+
+### 7.1 Scope & Capability Enforcement
+- PG inventory operations (Floors, Rooms, Beds) strictly enforce that the target property is of type `PG`.
+- Invoking these endpoints on a property with `propertyType === RENTAL_HOUSE` is rejected with `400 Bad Request`.
+
+### 7.2 Soft-Delete Safeguards & Referential Integrity
+- Floor, Room, and Bed deletions use soft-delete trackers (`deletedAt IS NOT NULL`) to preserve historical stay records.
+- Deletions are strictly prevented at the database service level under the following conditions:
+  - Deleting an occupied Bed (`status === OCCUPIED`) throws `400 Bad Request`.
+  - Deleting a Room containing any occupied beds throws `400 Bad Request`.
+  - Deleting a Floor containing any rooms with occupied beds throws `400 Bad Request`.
+
+### 7.3 Bed Status Transition Controls
+- State transitions are validated by the backend service to prevent data corruption.
+- Directly setting an `OCCUPIED` bed to `MAINTENANCE` or `BLOCKED` without an explicit checkout is rejected with `400 Bad Request`.
+
