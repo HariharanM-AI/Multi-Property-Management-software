@@ -1,0 +1,38 @@
+{
+  "name": "propertyos",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Enterprise Property Management Platform for the Indian Market",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspaces --if-present",
+    "dev:api": "npm run dev --workspace=@propertyos/api",
+    "dev:web": "npm run dev --workspace=@propertyos/web",
+    "build": "npm run build --workspaces --if-present",
+    "build:packages": "npm run build --workspace=@propertyos/types --workspace=@propertyos/validation --workspace=@propertyos/config",
+    "lint": "npm run lint --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "prisma:generate": "prisma generate",
+    "prisma:validate": "prisma validate",
+    "prisma:migrate": "prisma migrate dev",
+    "docker:up": "docker compose up -d",
+    "docker:down": "docker compose down"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.4",
+    "@typescript-eslint/eslint-plugin": "^8.67.0",
+    "@typescript-eslint/parser": "^8.67.0",
+    "eslint": "^9.20.1",
+    "prettier": "^3.5.1",
+    "prisma": "^6.4.0",
+    "typescript": "^5.7.3",
+    "vitest": "^4.1.11"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

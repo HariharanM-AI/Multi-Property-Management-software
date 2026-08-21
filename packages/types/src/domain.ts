@@ -1,0 +1,158 @@
+// ==============================================================================
+// PropertyOS Domain Types & Enums
+// ==============================================================================
+
+export enum PropertyType {
+  PG = 'PG',
+  RENTAL_HOUSE = 'RENTAL_HOUSE',
+}
+
+export enum PropertyStatus {
+  ACTIVE = 'ACTIVE',
+  INACTIVE = 'INACTIVE',
+  UNDER_MAINTENANCE = 'UNDER_MAINTENANCE',
+  ARCHIVED = 'ARCHIVED',
+}
+
+export enum RoomSharingType {
+  SINGLE = 'SINGLE',
+  DOUBLE = 'DOUBLE',
+  TRIPLE = 'TRIPLE',
+  FOUR_SHARING = 'FOUR_SHARING',
+  DORMITORY = 'DORMITORY',
+}
+
+export enum BedStatus {
+  AVAILABLE = 'AVAILABLE',
+  RESERVED = 'RESERVED',
+  OCCUPIED = 'OCCUPIED',
+  MAINTENANCE = 'MAINTENANCE',
+  CLEANING = 'CLEANING',
+  NOTICE = 'NOTICE',
+}
+
+export enum RentalUnitStatus {
+  AVAILABLE = 'AVAILABLE',
+  OCCUPIED = 'OCCUPIED',
+  MAINTENANCE = 'MAINTENANCE',
+  RESERVED = 'RESERVED',
+}
+
+export enum LeaseStatus {
+  DRAFT = 'DRAFT',
+  ACTIVE = 'ACTIVE',
+  NOTICE = 'NOTICE',
+  EXPIRED = 'EXPIRED',
+  TERMINATED = 'TERMINATED',
+}
+
+export enum TenantStatus {
+  PROSPECT = 'PROSPECT',
+  ACTIVE = 'ACTIVE',
+  NOTICE = 'NOTICE',
+  CHECKED_OUT = 'CHECKED_OUT',
+  ARCHIVED = 'ARCHIVED',
+}
+
+export enum KycDocumentType {
+  AADHAAR = 'AADHAAR',
+  PAN = 'PAN',
+  PASSPORT = 'PASSPORT',
+  DRIVING_LICENSE = 'DRIVING_LICENSE',
+  EMPLOYMENT_ID = 'EMPLOYMENT_ID',
+  STUDENT_ID = 'STUDENT_ID',
+  RENTAL_AGREEMENT = 'RENTAL_AGREEMENT',
+  POLICE_VERIFICATION = 'POLICE_VERIFICATION',
+  OTHER = 'OTHER',
+}
+
+export enum KycVerificationStatus {
+  PENDING = 'PENDING',
+  VERIFIED = 'VERIFIED',
+  REJECTED = 'REJECTED',
+}
+
+export enum AgreementStatus {
+  DRAFT = 'DRAFT',
+  PENDING_SIGNATURE = 'PENDING_SIGNATURE',
+  SIGNED = 'SIGNED',
+  EXPIRED = 'EXPIRED',
+  CANCELLED = 'CANCELLED',
+}
+
+export enum InvoiceStatus {
+  DRAFT = 'DRAFT',
+  ISSUED = 'ISSUED',
+  PARTIALLY_PAID = 'PARTIALLY_PAID',
+  PAID = 'PAID',
+  OVERDUE = 'OVERDUE',
+  CANCELLED = 'CANCELLED',
+}
+
+export enum PaymentMethod {
+  UPI = 'UPI',
+  BANK_TRANSFER_NEFT_IMPS = 'BANK_TRANSFER_NEFT_IMPS',
+  CREDIT_CARD = 'CREDIT_CARD',
+  DEBIT_CARD = 'DEBIT_CARD',
+  CASH = 'CASH',
+  CHEQUE = 'CHEQUE',
+  OTHER = 'OTHER',
+}
+
+export enum PaymentStatus {
+  PENDING = 'PENDING',
+  COMPLETED = 'COMPLETED',
+  FAILED = 'FAILED',
+  REFUNDED = 'REFUNDED',
+}
+
+export enum MaintenanceCategory {
+  PLUMBING = 'PLUMBING',
+  ELECTRICAL = 'ELECTRICAL',
+  CLEANING = 'CLEANING',
+  FURNITURE = 'FURNITURE',
+  APPLIANCE = 'APPLIANCE',
+  INTERNET = 'INTERNET',
+  OTHER = 'OTHER',
+}
+
+export enum MaintenancePriority {
+  LOW = 'LOW',
+  MEDIUM = 'MEDIUM',
+  HIGH = 'HIGH',
+  URGENT = 'URGENT',
+}
+
+export enum MaintenanceStatus {
+  OPEN = 'OPEN',
+  ASSIGNED = 'ASSIGNED',
+  IN_PROGRESS = 'IN_PROGRESS',
+  COMPLETED = 'COMPLETED',
+  VERIFIED = 'VERIFIED',
+  CLOSED = 'CLOSED',
+  CANCELLED = 'CANCELLED',
+}
+
+export enum ExpenseCategoryType {
+  SALARY = 'SALARY',
+  ELECTRICITY = 'ELECTRICITY',
+  WATER = 'WATER',
+  FOOD = 'FOOD',
+  MAINTENANCE = 'MAINTENANCE',
+  CLEANING = 'CLEANING',
+  INTERNET = 'INTERNET',
+  SUPPLIES = 'SUPPLIES',
+  PROPERTY_TAX = 'PROPERTY_TAX',
+  OTHER = 'OTHER',
+}
+
+export enum NotificationType {
+  RENT_DUE = 'RENT_DUE',
+  PAYMENT_RECEIVED = 'PAYMENT_RECEIVED',
+  PAYMENT_OVERDUE = 'PAYMENT_OVERDUE',
+  MAINTENANCE_UPDATED = 'MAINTENANCE_UPDATED',
+  LEASE_EXPIRING = 'LEASE_EXPIRING',
+  CHECKOUT_REMINDER = 'CHECKOUT_REMINDER',
+  VISITOR_REQUEST = 'VISITOR_REQUEST',
+  DOCUMENT_EXPIRING = 'DOCUMENT_EXPIRING',
+}

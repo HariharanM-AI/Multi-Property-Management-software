@@ -1,0 +1,9 @@
+{
+  "name": "@propertyos/config",
+  "version": "0.1.0",
+  "private": true,
+  "main": "index.js",
+  "scripts": {
+    "build": "echo 'Config package built'"
+  }
+}

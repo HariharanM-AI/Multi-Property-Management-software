@@ -1,0 +1,36 @@
+import { Injectable } from '@nestjs/common';
+import { LocalStorageDriver } from './local-storage.driver';
+import { IStorageDriver, UploadedFileResult } from './storage.interface';
+
+@Injectable()
+export class StorageService implements IStorageDriver {
+  private readonly activeDriver: IStorageDriver;
+
+  constructor(private readonly localDriver: LocalStorageDriver) {
+    // In local development or testing, use local storage driver.
+    // In future cloud environments, GCSStorageDriver can be injected without altering property domain logic.
+    this.activeDriver = this.localDriver;
+  }
+
+  validateFile(file: { originalname: string; mimetype: string; size: number }): void {
+    return this.activeDriver.validateFile(file);
+  }
+
+  async uploadFile(
+    file: {
+      originalname: string;
+      mimetype: string;
+      size: number;
+      buffer: Buffer;
+    },
+    organizationId: string,
+    propertyId: string,
+    category?: string
+  ): Promise<UploadedFileResult> {
+    return this.activeDriver.uploadFile(file, organizationId, propertyId, category);
+  }
+
+  async deleteFile(fileUrl: string, organizationId: string, propertyId: string): Promise<boolean> {
+    return this.activeDriver.deleteFile(fileUrl, organizationId, propertyId);
+  }
+}
