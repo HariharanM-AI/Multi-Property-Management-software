@@ -27,6 +27,12 @@ export enum Permission {
   TENANT_UPDATE = 'tenant.update',
   TENANT_DELETE = 'tenant.delete',
 
+  // Lease Management
+  LEASE_READ = 'lease.read',
+  LEASE_CREATE = 'lease.create',
+  LEASE_UPDATE = 'lease.update',
+  LEASE_TERMINATE = 'lease.terminate',
+
   // Billing & Finance Foundation
   BILLING_READ = 'billing.read',
   BILLING_CREATE = 'billing.create',
@@ -61,6 +67,10 @@ export const ROLE_PERMISSIONS_MAP: Record<UserRole, readonly Permission[]> = {
     Permission.TENANT_CREATE,
     Permission.TENANT_UPDATE,
     Permission.TENANT_DELETE,
+    Permission.LEASE_READ,
+    Permission.LEASE_CREATE,
+    Permission.LEASE_UPDATE,
+    Permission.LEASE_TERMINATE,
     Permission.BILLING_READ,
     Permission.BILLING_CREATE,
     Permission.BILLING_UPDATE,
@@ -80,6 +90,10 @@ export const ROLE_PERMISSIONS_MAP: Record<UserRole, readonly Permission[]> = {
     Permission.TENANT_READ,
     Permission.TENANT_CREATE,
     Permission.TENANT_UPDATE,
+    Permission.LEASE_READ,
+    Permission.LEASE_CREATE,
+    Permission.LEASE_UPDATE,
+    Permission.LEASE_TERMINATE,
     Permission.MAINTENANCE_READ,
     Permission.MAINTENANCE_CREATE,
     Permission.MAINTENANCE_ASSIGN,
@@ -92,6 +106,7 @@ export const ROLE_PERMISSIONS_MAP: Record<UserRole, readonly Permission[]> = {
     Permission.TEAM_READ,
     Permission.PROPERTY_READ,
     Permission.TENANT_READ,
+    Permission.LEASE_READ,
     Permission.BILLING_READ,
     Permission.BILLING_CREATE,
     Permission.BILLING_UPDATE,
@@ -104,6 +119,8 @@ export const ROLE_PERMISSIONS_MAP: Record<UserRole, readonly Permission[]> = {
     Permission.PROPERTY_READ,
     Permission.TENANT_READ,
     Permission.TENANT_UPDATE,
+    Permission.LEASE_READ,
+    Permission.LEASE_UPDATE,
     Permission.MAINTENANCE_READ,
     Permission.MAINTENANCE_CREATE,
     Permission.MAINTENANCE_UPDATE,
@@ -113,6 +130,7 @@ export const ROLE_PERMISSIONS_MAP: Record<UserRole, readonly Permission[]> = {
     Permission.ORGANIZATION_READ,
     Permission.PROPERTY_READ,
     Permission.TENANT_READ,
+    Permission.LEASE_READ,
   ],
 
   [UserRole.MAINTENANCE_STAFF]: [
@@ -124,6 +142,7 @@ export const ROLE_PERMISSIONS_MAP: Record<UserRole, readonly Permission[]> = {
 
   [UserRole.TENANT]: [
     Permission.PROPERTY_READ,
+    Permission.LEASE_READ,
     Permission.BILLING_READ,
     Permission.MAINTENANCE_READ,
     Permission.MAINTENANCE_CREATE,

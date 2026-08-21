@@ -548,7 +548,7 @@ export default function PropertyDetailPage() {
                   <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
                     <Home className="w-4 h-4" />
                   </div>
-                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-slate-100 text-slate-600 border border-slate-200">
+                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-blue-50 text-blue-600 border border-blue-200 animate-pulse">
                     CORE-006
                   </span>
                 </div>
@@ -556,6 +556,14 @@ export default function PropertyDetailPage() {
                 <p className="text-[11px] text-surface-textSecondary leading-relaxed">
                   Whole-unit flat specifications, square footage, and furnishing status.
                 </p>
+                <div className="pt-2">
+                  <Link
+                    href={`/properties/${propertyId}/units`}
+                    className="inline-flex items-center text-[10px] font-bold text-blue-600 hover:underline"
+                  >
+                    Manage Inventory &rarr;
+                  </Link>
+                </div>
               </div>
 
               <div className="p-4 rounded-xl bg-surface-subtle border border-surface-border space-y-2">

@@ -7,4 +7,5 @@ export * from './capabilities.js';
 export * from './amenities.js';
 export * from './property.js';
 export * from './pg-structure.js';
+export * from './rental.js';
 

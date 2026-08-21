@@ -60,22 +60,6 @@ export const PropertyFilterSchema = z.object({
 
 export const PropertyMediaCategorySchema = z.enum(['IMAGE', 'DOCUMENT', 'FLOOR_PLAN']).default('IMAGE');
 
-// Rental Unit Schemas (Foundation for future milestones)
-export const CreateRentalUnitSchema = z.object({
-  propertyId: z.string().uuid(),
-  unitNumber: z.string().trim().min(1).max(30),
-  unitType: z.string().trim().min(1).max(50),
-  floorNumber: z.number().int().optional().nullable(),
-  superBuiltupAreaSqFt: z.number().positive().optional().nullable(),
-  carpetAreaSqFt: z.number().positive().optional().nullable(),
-  furnishingStatus: z.enum(['UNFURNISHED', 'SEMI_FURNISHED', 'FULLY_FURNISHED']).default('SEMI_FURNISHED'),
-  monthlyRent: z.number().positive('Rent must be positive'),
-  securityDeposit: z.number().nonnegative('Deposit must be 0 or positive'),
-  maintenanceCharges: z.number().nonnegative().optional().default(0),
-  status: z.nativeEnum(RentalUnitStatus).optional().default(RentalUnitStatus.AVAILABLE),
-});
-
 export type CreatePropertyInput = z.infer<typeof CreatePropertySchema>;
 export type UpdatePropertyInput = z.infer<typeof UpdatePropertySchema>;
 export type PropertyFilterInput = z.infer<typeof PropertyFilterSchema>;
-export type CreateRentalUnitInput = z.infer<typeof CreateRentalUnitSchema>;
