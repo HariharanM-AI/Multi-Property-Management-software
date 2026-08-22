@@ -15,7 +15,8 @@
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
     "verify:e2e": "node C:/Users/user/.gemini/antigravity-ide/brain/03900552-caa1-4500-ac82-618ae94feb7d/scratch/verify-e2e.js",
-    "verify:rental-e2e": "node C:/Users/user/.gemini/antigravity-ide/brain/03900552-caa1-4500-ac82-618ae94feb7d/scratch/verify-rental-e2e.js"
+    "verify:rental-e2e": "node C:/Users/user/.gemini/antigravity-ide/brain/03900552-caa1-4500-ac82-618ae94feb7d/scratch/verify-rental-e2e.js",
+    "verify:tenant-e2e": "node C:/Users/user/.gemini/antigravity-ide/brain/03900552-caa1-4500-ac82-618ae94feb7d/scratch/verify-tenant-kyc-e2e.js"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.10",

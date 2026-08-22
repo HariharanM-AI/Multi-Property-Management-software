@@ -1,61 +1,49 @@
 import { z } from 'zod';
-import { TenantStatus, KycDocumentType } from '@propertyos/types';
-import { indianPhoneRegex } from './auth.schema.js';
+import { TenantStatus, KycDocumentType, KycVerificationStatus } from '@propertyos/types';
 
-export const CreateTenantProfileSchema = z.object({
-  organizationId: z.string().uuid(),
+export const CreateTenantSchema = z.object({
   firstName: z.string().trim().min(1, 'First name is required').max(50),
   lastName: z.string().trim().min(1, 'Last name is required').max(50),
-  email: z.string().trim().email('Invalid email').toLowerCase().optional().nullable(),
-  phone: z.string().trim().regex(indianPhoneRegex, 'Must be a valid 10-digit Indian phone number'),
-  dateOfBirth: z.string().datetime().optional().nullable(),
-  permanentAddress: z.string().trim().min(5).max(255),
-  permanentCity: z.string().trim().min(2).max(100),
-  permanentState: z.string().trim().min(2).max(100),
-  permanentPostalCode: z.string().trim().min(6).max(10),
-  occupation: z.string().trim().max(100).optional().nullable(),
-  employerOrCollege: z.string().trim().max(100).optional().nullable(),
-  emergencyContactName: z.string().trim().min(1).max(100),
-  emergencyContactPhone: z.string().trim().regex(indianPhoneRegex),
-  emergencyContactRelation: z.string().trim().min(1).max(50),
-  status: z.nativeEnum(TenantStatus).optional().default(TenantStatus.PROSPECT),
+  email: z.string().trim().email('Invalid email address').nullable().optional(),
+  phone: z.string().trim().min(7, 'Phone number must be at least 7 digits').max(15, 'Phone number too long'),
+  dateOfBirth: z.string().datetime({ message: 'Invalid date of birth format' }).nullable().optional(),
+  permanentAddress: z.string().trim().min(1, 'Permanent address is required').max(255),
+  permanentCity: z.string().trim().min(1, 'City is required').max(100),
+  permanentState: z.string().trim().min(1, 'State is required').max(100),
+  permanentPostalCode: z.string().trim().min(1, 'Postal code is required').max(20),
+  occupation: z.string().trim().max(100).nullable().optional(),
+  employerOrCollege: z.string().trim().max(100).nullable().optional(),
+  emergencyContactName: z.string().trim().min(1, 'Emergency contact name is required').max(100),
+  emergencyContactPhone: z.string().trim().min(1, 'Emergency contact phone is required').max(20),
+  emergencyContactRelation: z.string().trim().min(1, 'Emergency contact relation is required').max(50),
 });
 
-export const UploadKycDocumentMetadataSchema = z.object({
-  tenantId: z.string().uuid(),
+export const UpdateTenantSchema = CreateTenantSchema.partial().extend({
+  status: z.nativeEnum(TenantStatus).optional(),
+});
+
+export const UploadTenantDocumentSchema = z.object({
   documentType: z.nativeEnum(KycDocumentType),
-  documentNumber: z.string().trim().min(1).max(50).optional().nullable(),
-  fileName: z.string().min(1),
-  fileSize: z.number().int().positive().max(26214400, 'File exceeds 25MB max size'),
-  mimeType: z.enum([
-    'image/jpeg',
-    'image/png',
-    'image/webp',
-    'application/pdf',
-  ]),
+  documentNumber: z.string().trim().max(100).nullable().optional(),
 });
 
-export const CheckInTenantSchema = z.object({
-  tenantId: z.string().uuid(),
-  propertyId: z.string().uuid(),
-  propertyType: z.enum(['PG', 'RENTAL_HOUSE']),
-  bedId: z.string().uuid().optional().nullable(),
-  rentalUnitId: z.string().uuid().optional().nullable(),
-  startDate: z.string().datetime(),
-  monthlyRent: z.number().positive(),
-  securityDeposit: z.number().nonnegative(),
-  agreementTemplateId: z.string().uuid().optional().nullable(),
+export const VerifyDocumentSchema = z.object({
+  status: z.enum([KycVerificationStatus.VERIFIED, KycVerificationStatus.REJECTED]),
+  rejectionReason: z.string().trim().max(500).nullable().optional(),
 }).refine(
   (data) => {
-    if (data.propertyType === 'PG') return !!data.bedId;
-    if (data.propertyType === 'RENTAL_HOUSE') return !!data.rentalUnitId;
-    return false;
+    if (data.status === KycVerificationStatus.REJECTED && (!data.rejectionReason || data.rejectionReason.trim().length === 0)) {
+      return false;
+    }
+    return true;
   },
   {
-    message: 'Must provide bedId for PG properties or rentalUnitId for Whole-Unit Rental properties',
+    message: 'Rejection reason is required when rejecting a document',
+    path: ['rejectionReason'],
   }
 );
 
-export type CreateTenantProfileInput = z.infer<typeof CreateTenantProfileSchema>;
-export type UploadKycDocumentMetadataInput = z.infer<typeof UploadKycDocumentMetadataSchema>;
-export type CheckInTenantInput = z.infer<typeof CheckInTenantSchema>;
+export type CreateTenantInput = z.infer<typeof CreateTenantSchema>;
+export type UpdateTenantInput = z.infer<typeof UpdateTenantSchema>;
+export type UploadTenantDocumentInput = z.infer<typeof UploadTenantDocumentSchema>;
+export type VerifyDocumentInput = z.infer<typeof VerifyDocumentSchema>;

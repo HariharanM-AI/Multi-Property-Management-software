@@ -47,6 +47,8 @@ services:
       JWT_SECRET: "docker-dev-jwt-secret-propertyos-secure-key-32chars"
       COOKIE_SECRET: "docker-dev-session-cookie-secret-min32chars"
       ALLOWED_ORIGINS: "http://localhost:3000"
+    volumes:
+      - ./uploads:/app/uploads
     depends_on:
       postgres:
         condition: service_healthy
