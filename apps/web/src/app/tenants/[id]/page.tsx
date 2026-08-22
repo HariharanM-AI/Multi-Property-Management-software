@@ -35,6 +35,7 @@ import {
   X,
   UserMinus,
   ExternalLink,
+  FileSignature,
 } from 'lucide-react';
 
 export default function TenantDetailsPage() {
@@ -62,17 +63,34 @@ export default function TenantDetailsPage() {
   // Archive Action
   const [archiving, setArchiving] = useState(false);
 
+  // Digital Agreements
+  const [tenantAgreements, setTenantAgreements] = useState<any[]>([]);
+
   const fetchTenantDetails = useCallback(async () => {
     if (!tenantId) return;
     try {
       setLoading(true);
       setErrorMsg(null);
-      const res = await fetch(`/api/v1/tenants/${tenantId}`);
+      const token = localStorage.getItem('propertyos_token');
+      const [res, agrRes] = await Promise.all([
+        fetch(`/api/v1/tenants/${tenantId}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        }),
+        fetch(`/api/v1/tenants/${tenantId}/agreements`, {
+          headers: { Authorization: `Bearer ${token}` },
+        }),
+      ]);
+
       if (!res.ok) {
         throw new Error('Tenant profile not found or access denied');
       }
       const json = await res.json();
       setDetails(json.data);
+
+      if (agrRes.ok) {
+        const agrJson = await agrRes.json();
+        setTenantAgreements(agrJson.agreements || []);
+      }
     } catch (err: any) {
       setErrorMsg(err.message || 'Failed to load tenant details');
     } finally {
@@ -576,6 +594,56 @@ export default function TenantDetailsPage() {
                       </div>
                       <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
                         {lease.status}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Digital Agreements */}
+            <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4">
+              <div className="flex items-center justify-between">
+                <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                  <FileSignature className="w-5 h-5 text-brand-teal" />
+                  Digital Agreements ({tenantAgreements.length})
+                </h2>
+                <Link
+                  href="/agreements"
+                  className="text-xs font-semibold text-brand-teal hover:underline flex items-center gap-1"
+                >
+                  Manage All &rarr;
+                </Link>
+              </div>
+
+              {tenantAgreements.length === 0 ? (
+                <div className="py-6 text-center text-slate-400 text-xs">
+                  No digital agreements registered for this tenant.
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {tenantAgreements.map((agr: any) => (
+                    <div
+                      key={agr.id}
+                      className="p-4 rounded-xl border border-slate-200 bg-slate-50/50 flex items-center justify-between"
+                    >
+                      <div>
+                        <Link
+                          href={`/agreements/${agr.id}`}
+                          className="font-semibold text-slate-900 text-sm hover:text-brand-teal flex items-center gap-1.5"
+                        >
+                          {agr.agreementType.replace(/_/g, ' ')}
+                          <span className="text-[11px] font-mono px-1.5 py-0.5 bg-slate-100 rounded text-slate-600">
+                            v{agr.version}
+                          </span>
+                        </Link>
+                        <div className="text-xs text-slate-500 mt-0.5">
+                          Created: {new Date(agr.createdAt).toLocaleDateString()}
+                          {agr.contentHash && ` • Hash: ${agr.contentHash.substring(0, 12)}...`}
+                        </div>
+                      </div>
+                      <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-teal-50 text-teal-700 border border-teal-200">
+                        {agr.status}
                       </span>
                     </div>
                   ))}

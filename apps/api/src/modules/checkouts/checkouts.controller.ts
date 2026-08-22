@@ -32,7 +32,7 @@ import {
   CheckoutFilterInput,
 } from '@propertyos/validation';
 
-@Controller('api/v1')
+@Controller('')
 @UseGuards(AuthGuard, TenantOrgGuard, PermissionsGuard)
 export class CheckoutsController {
   constructor(private readonly checkoutsService: CheckoutsService) {}

@@ -36,6 +36,20 @@ export interface IStorageDriver {
 
   deleteTenantFile(fileUrl: string, organizationId: string, tenantId: string): Promise<boolean>;
 
+  uploadAgreementFile(
+    file: {
+      originalname: string;
+      mimetype: string;
+      size: number;
+      buffer: Buffer;
+    },
+    organizationId: string,
+    agreementId: string,
+    category?: string
+  ): Promise<UploadedFileResult>;
+
+  deleteAgreementFile(fileUrl: string, organizationId: string, agreementId: string): Promise<boolean>;
+
   validateFile(file: {
     originalname: string;
     mimetype: string;

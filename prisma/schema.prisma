@@ -124,12 +124,40 @@ enum SettlementStatus {
   VOID
 }
 
+enum AgreementType {
+  RENTAL_AGREEMENT
+  PG_AGREEMENT
+  HOUSE_RULES
+  ADDENDUM
+  OTHER
+}
+
+enum TemplateStatus {
+  DRAFT
+  ACTIVE
+  ARCHIVED
+}
+
 enum AgreementStatus {
   DRAFT
+  GENERATED
   PENDING_SIGNATURE
+  PARTIALLY_SIGNED
   SIGNED
-  EXPIRED
+  FINALIZED
   CANCELLED
+}
+
+enum SignatureStatus {
+  PENDING
+  SIGNED
+  DECLINED
+}
+
+enum AgreementSignerType {
+  TENANT
+  PROPERTY_MANAGER
+  OWNER
 }
 
 enum InvoiceStatus {
@@ -239,6 +267,7 @@ model Organization {
   checkIns          CheckIn[]
   checkouts         Checkout[]
   settlements       Settlement[]
+  agreements        Agreement[]
 
   @@map("organizations")
 }
@@ -420,6 +449,7 @@ model Property {
   serviceRequests ServiceRequest[]
   checkIns       CheckIn[]
   checkouts      Checkout[]
+  agreements     Agreement[]
 
   @@unique([organizationId, code])
   @@index([organizationId])
@@ -608,7 +638,7 @@ model Lease {
   rentalUnit  RentalUnit        @relation(fields: [rentalUnitId], references: [id], onDelete: Restrict)
   tenant      Tenant            @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   escalations RentEscalation[]
-  agreement   Agreement?
+  agreements  Agreement[]
   checkIn     CheckInRecord?
   checkOut    CheckOutRecord?
   checkIns    CheckIn[]
@@ -676,6 +706,7 @@ model Tenant {
   checkIns            CheckIn[]
   checkouts           Checkout[]
   settlements         Settlement[]
+  agreements          Agreement[]
 
   @@index([organizationId])
   @@index([phone])
@@ -731,38 +762,90 @@ model TenantStayHistory {
 // ------------------------------------------------------------------------------
 
 model AgreementTemplate {
-  id             String   @id @default(uuid())
+  id             String         @id @default(uuid())
   organizationId String
-  title          String
+  name           String
+  agreementType  AgreementType
+  description    String?
   content        String
-  propertyType   PropertyType
-  version        Int      @default(1)
-  isDefault      Boolean  @default(false)
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  version        Int            @default(1)
+  status         TemplateStatus @default(DRAFT)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   agreements   Agreement[]
 
+  @@index([organizationId])
+  @@index([status])
+  @@index([agreementType])
   @@map("agreement_templates")
 }
 
 model Agreement {
-  id           String          @id @default(uuid())
-  templateId   String
-  leaseId      String?         @unique
-  title        String
-  contentHtml  String
-  status       AgreementStatus @default(DRAFT)
-  signedAt     DateTime?
-  documentUrl  String?
-  createdAt    DateTime        @default(now())
-  updatedAt    DateTime        @updatedAt
+  id                  String          @id @default(uuid())
+  organizationId      String
+  tenantId            String
+  propertyId          String
+  templateId          String?
+  leaseId             String?
+  checkInId           String?
+  agreementType       AgreementType
+  status              AgreementStatus @default(DRAFT)
+  version             Int             @default(1)
+  previousAgreementId String?
+  templateVersion     Int?
+  renderedContent     String
+  documentPath        String?
+  contentHash         String?
+  generatedAt         DateTime?
+  signedAt            DateTime?
+  finalizedAt         DateTime?
+  cancelledAt         DateTime?
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
 
-  template AgreementTemplate @relation(fields: [templateId], references: [id], onDelete: Restrict)
-  lease    Lease?            @relation(fields: [leaseId], references: [id], onDelete: SetNull)
+  organization      Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  tenant            Tenant              @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  property          Property            @relation(fields: [propertyId], references: [id], onDelete: Restrict)
+  template          AgreementTemplate?  @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  lease             Lease?              @relation(fields: [leaseId], references: [id], onDelete: SetNull)
+  checkIn           CheckIn?            @relation(fields: [checkInId], references: [id], onDelete: SetNull)
+  previousAgreement Agreement?          @relation("AgreementVersionLineage", fields: [previousAgreementId], references: [id], onDelete: SetNull)
+  nextVersions      Agreement[]         @relation("AgreementVersionLineage")
+  signatures        AgreementSignature[]
 
+  @@index([organizationId])
+  @@index([tenantId])
+  @@index([propertyId])
+  @@index([status])
+  @@index([leaseId])
+  @@index([checkInId])
+  @@index([templateId])
+  @@index([previousAgreementId])
   @@map("agreements")
+}
+
+model AgreementSignature {
+  id            String              @id @default(uuid())
+  agreementId   String
+  signerType    AgreementSignerType
+  signerName    String
+  signerEmail   String?
+  status        SignatureStatus     @default(PENDING)
+  signedAt      DateTime?
+  signatureData String?
+  ipAddress     String?
+  userAgent     String?
+  contentHash   String?
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+
+  agreement Agreement @relation(fields: [agreementId], references: [id], onDelete: Cascade)
+
+  @@index([agreementId])
+  @@index([status])
+  @@map("agreement_signatures")
 }
 
 model CheckIn {
@@ -793,6 +876,7 @@ model CheckIn {
   lease        Lease?             @relation(fields: [leaseId], references: [id], onDelete: SetNull)
   stayHistory  TenantStayHistory? @relation(fields: [stayHistoryId], references: [id], onDelete: SetNull)
   checkouts    Checkout[]
+  agreements   Agreement[]
 
   @@index([organizationId])
   @@index([tenantId])

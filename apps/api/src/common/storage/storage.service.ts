@@ -51,4 +51,22 @@ export class StorageService implements IStorageDriver {
   async deleteTenantFile(fileUrl: string, organizationId: string, tenantId: string): Promise<boolean> {
     return this.activeDriver.deleteTenantFile(fileUrl, organizationId, tenantId);
   }
+
+  async uploadAgreementFile(
+    file: {
+      originalname: string;
+      mimetype: string;
+      size: number;
+      buffer: Buffer;
+    },
+    organizationId: string,
+    agreementId: string,
+    category?: string
+  ): Promise<UploadedFileResult> {
+    return this.activeDriver.uploadAgreementFile(file, organizationId, agreementId, category);
+  }
+
+  async deleteAgreementFile(fileUrl: string, organizationId: string, agreementId: string): Promise<boolean> {
+    return this.activeDriver.deleteAgreementFile(fileUrl, organizationId, agreementId);
+  }
 }

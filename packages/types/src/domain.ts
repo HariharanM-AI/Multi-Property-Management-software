@@ -73,14 +73,6 @@ export enum KycVerificationStatus {
   REJECTED = 'REJECTED',
 }
 
-export enum AgreementStatus {
-  DRAFT = 'DRAFT',
-  PENDING_SIGNATURE = 'PENDING_SIGNATURE',
-  SIGNED = 'SIGNED',
-  EXPIRED = 'EXPIRED',
-  CANCELLED = 'CANCELLED',
-}
-
 export enum InvoiceStatus {
   DRAFT = 'DRAFT',
   ISSUED = 'ISSUED',

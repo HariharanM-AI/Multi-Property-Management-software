@@ -166,4 +166,61 @@ export class LocalStorageDriver implements IStorageDriver {
       return false;
     }
   }
+
+  async uploadAgreementFile(
+    file: {
+      originalname: string;
+      mimetype: string;
+      size: number;
+      buffer: Buffer;
+    },
+    organizationId: string,
+    agreementId: string,
+    category = 'AGREEMENT'
+  ): Promise<UploadedFileResult> {
+    this.validateFile(file);
+
+    // Sanitize and defend against path traversal
+    const safeOrgId = path.basename(organizationId);
+    const safeAgreementId = path.basename(agreementId);
+
+    const ext = path.extname(file.originalname).toLowerCase();
+    const randomFileName = `${crypto.randomUUID()}${ext}`;
+
+    const targetDir = path.join(this.baseUploadDir, safeOrgId, 'agreements', safeAgreementId);
+    if (!fs.existsSync(targetDir)) {
+      fs.mkdirSync(targetDir, { recursive: true });
+    }
+
+    const targetFilePath = path.join(targetDir, randomFileName);
+    await fs.promises.writeFile(targetFilePath, file.buffer);
+
+    const fileUrl = `/uploads/${safeOrgId}/agreements/${safeAgreementId}/${randomFileName}`;
+
+    return {
+      fileName: randomFileName,
+      originalName: path.basename(file.originalname),
+      mimeType: file.mimetype.toLowerCase(),
+      fileSize: file.size,
+      fileUrl,
+      category,
+    };
+  }
+
+  async deleteAgreementFile(fileUrl: string, organizationId: string, agreementId: string): Promise<boolean> {
+    try {
+      const fileName = path.basename(fileUrl);
+      const safeOrgId = path.basename(organizationId);
+      const safeAgreementId = path.basename(agreementId);
+
+      const filePath = path.join(this.baseUploadDir, safeOrgId, 'agreements', safeAgreementId, fileName);
+      if (fs.existsSync(filePath)) {
+        await fs.promises.unlink(filePath);
+        return true;
+      }
+      return false;
+    } catch {
+      return false;
+    }
+  }
 }

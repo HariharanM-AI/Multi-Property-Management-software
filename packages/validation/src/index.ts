@@ -7,3 +7,4 @@ export * from './pg-structure.schema.js';
 export * from './rental.schema.js';
 export * from './checkin.schema.js';
 export * from './checkout.schema.js';
+export * from './agreement.schema.js';
