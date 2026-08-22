@@ -44,6 +44,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentPropertyType, activePat
     { name: 'Meal & Mess', href: '/pg/meals', icon: UtensilsCrossed, pgOnly: true },
     { name: 'Electricity', href: '/electricity', icon: Zap },
     { name: 'Tenants & KYC', href: '/tenants', icon: Users },
+    { name: 'Check-Ins', href: '/check-ins', icon: UserCheck },
     { name: 'Billing & Invoices', href: '/billing', icon: ReceiptText },
     { name: 'Maintenance', href: '/maintenance', icon: Wrench },
     { name: 'Staff & Roster', href: '/staff', icon: UserCheck },

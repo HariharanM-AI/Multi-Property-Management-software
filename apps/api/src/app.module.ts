@@ -12,6 +12,7 @@ import { PropertiesModule } from './modules/properties/properties.module';
 import { PgStructureModule } from './modules/pg-structure/pg-structure.module';
 import { RentalModule } from './modules/rental/rental.module';
 import { TenantsModule } from './modules/tenants/tenants.module';
+import { CheckinsModule } from './modules/checkins/checkins.module';
 import { AuthGuard } from './common/guards/auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
 import { PermissionsGuard } from './common/guards/permissions.guard';
@@ -46,6 +47,7 @@ import { GlobalHttpExceptionFilter } from './common/filters/http-exception.filte
     PgStructureModule,
     RentalModule,
     TenantsModule,
+    CheckinsModule,
   ],
   providers: [
     {

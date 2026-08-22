@@ -48,6 +48,11 @@ export enum Permission {
   MAINTENANCE_ASSIGN = 'maintenance.assign',
   MAINTENANCE_UPDATE = 'maintenance.update',
 
+  // Check-In & Onboarding Management
+  CHECKIN_READ = 'checkin.read',
+  CHECKIN_CREATE = 'checkin.create',
+  CHECKIN_CANCEL = 'checkin.cancel',
+
   // Reporting & Analytics Foundation
   REPORTS_READ = 'reports.read',
 }
@@ -79,6 +84,9 @@ export const ROLE_PERMISSIONS_MAP: Record<UserRole, readonly Permission[]> = {
     Permission.LEASE_CREATE,
     Permission.LEASE_UPDATE,
     Permission.LEASE_TERMINATE,
+    Permission.CHECKIN_READ,
+    Permission.CHECKIN_CREATE,
+    Permission.CHECKIN_CANCEL,
     Permission.BILLING_READ,
     Permission.BILLING_CREATE,
     Permission.BILLING_UPDATE,
@@ -105,6 +113,9 @@ export const ROLE_PERMISSIONS_MAP: Record<UserRole, readonly Permission[]> = {
     Permission.LEASE_CREATE,
     Permission.LEASE_UPDATE,
     Permission.LEASE_TERMINATE,
+    Permission.CHECKIN_READ,
+    Permission.CHECKIN_CREATE,
+    Permission.CHECKIN_CANCEL,
     Permission.MAINTENANCE_READ,
     Permission.MAINTENANCE_CREATE,
     Permission.MAINTENANCE_ASSIGN,
@@ -119,6 +130,7 @@ export const ROLE_PERMISSIONS_MAP: Record<UserRole, readonly Permission[]> = {
     Permission.TENANT_READ,
     Permission.TENANT_KYC_READ,
     Permission.LEASE_READ,
+    Permission.CHECKIN_READ,
     Permission.BILLING_READ,
     Permission.BILLING_CREATE,
     Permission.BILLING_UPDATE,
@@ -135,6 +147,8 @@ export const ROLE_PERMISSIONS_MAP: Record<UserRole, readonly Permission[]> = {
     Permission.TENANT_KYC_UPLOAD,
     Permission.LEASE_READ,
     Permission.LEASE_UPDATE,
+    Permission.CHECKIN_READ,
+    Permission.CHECKIN_CREATE,
     Permission.MAINTENANCE_READ,
     Permission.MAINTENANCE_CREATE,
     Permission.MAINTENANCE_UPDATE,
@@ -145,6 +159,7 @@ export const ROLE_PERMISSIONS_MAP: Record<UserRole, readonly Permission[]> = {
     Permission.PROPERTY_READ,
     Permission.TENANT_READ,
     Permission.LEASE_READ,
+    Permission.CHECKIN_READ,
   ],
 
   [UserRole.MAINTENANCE_STAFF]: [
