@@ -10,3 +10,4 @@ export * from './pg-structure.js';
 export * from './rental.js';
 export * from './tenant.js';
 export * from './checkin.js';
+export * from './checkout.js';

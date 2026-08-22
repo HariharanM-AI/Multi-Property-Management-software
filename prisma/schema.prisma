@@ -110,6 +110,20 @@ enum CheckInStatus {
   CANCELLED
 }
 
+enum CheckoutStatus {
+  INITIATED
+  SETTLEMENT_PENDING
+  READY
+  COMPLETED
+  CANCELLED
+}
+
+enum SettlementStatus {
+  DRAFT
+  FINALIZED
+  VOID
+}
+
 enum AgreementStatus {
   DRAFT
   PENDING_SIGNATURE
@@ -223,6 +237,8 @@ model Organization {
   sequences         OrganizationSequence[]
   propertyMedia     PropertyMedia[]
   checkIns          CheckIn[]
+  checkouts         Checkout[]
+  settlements       Settlement[]
 
   @@map("organizations")
 }
@@ -403,6 +419,7 @@ model Property {
   communityPosts CommunityPost[]
   serviceRequests ServiceRequest[]
   checkIns       CheckIn[]
+  checkouts      Checkout[]
 
   @@unique([organizationId, code])
   @@index([organizationId])
@@ -531,6 +548,7 @@ model Bed {
   room  Room                @relation(fields: [roomId], references: [id], onDelete: Cascade)
   stays TenantStayHistory[]
   checkIns CheckIn[]
+  checkouts Checkout[]
 
   @@unique([roomId, bedNumber])
   @@index([roomId])
@@ -565,6 +583,7 @@ model RentalUnit {
   maintenanceTickets MaintenanceTicket[]
   inventoryItems InventoryItem[]
   checkIns CheckIn[]
+  checkouts Checkout[]
 
   @@unique([propertyId, unitNumber])
   @@index([status])
@@ -593,6 +612,7 @@ model Lease {
   checkIn     CheckInRecord?
   checkOut    CheckOutRecord?
   checkIns    CheckIn[]
+  checkouts   Checkout[]
 
   @@index([rentalUnitId])
   @@index([tenantId])
@@ -654,6 +674,8 @@ model Tenant {
   communityPosts      CommunityPost[]
   notifications       Notification[]
   checkIns            CheckIn[]
+  checkouts           Checkout[]
+  settlements         Settlement[]
 
   @@index([organizationId])
   @@index([phone])
@@ -697,6 +719,7 @@ model TenantStayHistory {
   checkIn  CheckInRecord?
   checkOut CheckOutRecord?
   checkIns CheckIn[]
+  checkouts Checkout[]
 
   @@index([tenantId])
   @@index([bedId])
@@ -769,6 +792,7 @@ model CheckIn {
   rentalUnit   RentalUnit?        @relation(fields: [rentalUnitId], references: [id], onDelete: SetNull)
   lease        Lease?             @relation(fields: [leaseId], references: [id], onDelete: SetNull)
   stayHistory  TenantStayHistory? @relation(fields: [stayHistoryId], references: [id], onDelete: SetNull)
+  checkouts    Checkout[]
 
   @@index([organizationId])
   @@index([tenantId])
@@ -778,6 +802,72 @@ model CheckIn {
   @@index([rentalUnitId])
   @@index([leaseId])
   @@map("check_ins")
+}
+
+model Checkout {
+  id             String         @id @default(uuid())
+  organizationId String
+  tenantId       String
+  propertyId     String
+  checkInId      String?
+  stayHistoryId  String?
+  leaseId        String?
+  rentalUnitId   String?
+  bedId          String?
+  checkoutDate   DateTime
+  status         CheckoutStatus @default(INITIATED)
+  reason         String?
+  completedAt    DateTime?
+  cancelledAt    DateTime?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  organization Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  tenant       Tenant             @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  property     Property           @relation(fields: [propertyId], references: [id], onDelete: Restrict)
+  checkIn      CheckIn?           @relation(fields: [checkInId], references: [id], onDelete: SetNull)
+  stayHistory  TenantStayHistory? @relation(fields: [stayHistoryId], references: [id], onDelete: SetNull)
+  lease        Lease?             @relation(fields: [leaseId], references: [id], onDelete: SetNull)
+  rentalUnit   RentalUnit?        @relation(fields: [rentalUnitId], references: [id], onDelete: SetNull)
+  bed          Bed?               @relation(fields: [bedId], references: [id], onDelete: SetNull)
+  settlement   Settlement?
+
+  @@index([organizationId])
+  @@index([tenantId])
+  @@index([propertyId])
+  @@index([status])
+  @@index([checkInId])
+  @@index([leaseId])
+  @@index([bedId])
+  @@index([rentalUnitId])
+  @@map("checkouts")
+}
+
+model Settlement {
+  id                 String           @id @default(uuid())
+  organizationId     String
+  tenantId           String
+  checkoutId         String           @unique
+  securityDeposit    Decimal          @default(0) @db.Decimal(10, 2)
+  outstandingRent    Decimal          @default(0) @db.Decimal(10, 2)
+  maintenanceCharges Decimal          @default(0) @db.Decimal(10, 2)
+  deductions         Decimal          @default(0) @db.Decimal(10, 2)
+  refundableAmount   Decimal          @default(0) @db.Decimal(10, 2)
+  amountDue          Decimal          @default(0) @db.Decimal(10, 2)
+  amountRefundable   Decimal          @default(0) @db.Decimal(10, 2)
+  status             SettlementStatus @default(DRAFT)
+  notes              String?
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  tenant       Tenant       @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  checkout     Checkout     @relation(fields: [checkoutId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([tenantId])
+  @@index([status])
+  @@map("settlements")
 }
 
 model CheckInRecord {

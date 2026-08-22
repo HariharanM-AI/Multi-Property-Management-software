@@ -33,6 +33,7 @@ import {
   Loader2,
   Plus,
   X,
+  UserMinus,
   ExternalLink,
 } from 'lucide-react';
 
@@ -260,13 +261,24 @@ export default function TenantDetailsPage() {
           </div>
 
           <div className="flex items-center gap-2.5">
-            <Link
-              href={`/check-ins`}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 text-white font-medium text-sm hover:bg-blue-700 transition shadow-sm"
-            >
-              <CheckCircle2 className="w-4 h-4" />
-              Digital Check-In
-            </Link>
+            {tenant.status === TenantStatus.PROSPECT && (
+              <Link
+                href={`/check-ins`}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 text-white font-medium text-sm hover:bg-blue-700 transition shadow-sm"
+              >
+                <CheckCircle2 className="w-4 h-4" />
+                Digital Check-In
+              </Link>
+            )}
+            {tenant.status === TenantStatus.ACTIVE && (
+              <Link
+                href={`/check-outs`}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-teal-600 text-white font-medium text-sm hover:bg-teal-700 transition shadow-sm"
+              >
+                <UserMinus className="w-4 h-4" />
+                Start Check-Out
+              </Link>
+            )}
             <button
               onClick={() => setShowUploadModal(true)}
               className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-brand-teal text-white font-medium text-sm hover:bg-teal-700 transition shadow-sm"
