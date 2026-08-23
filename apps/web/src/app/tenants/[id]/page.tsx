@@ -36,6 +36,9 @@ import {
   UserMinus,
   ExternalLink,
   FileSignature,
+  ReceiptText,
+  CircleDollarSign,
+  Shield,
 } from 'lucide-react';
 
 export default function TenantDetailsPage() {
@@ -66,17 +69,23 @@ export default function TenantDetailsPage() {
   // Digital Agreements
   const [tenantAgreements, setTenantAgreements] = useState<any[]>([]);
 
+  // Financial Summary
+  const [financialSummary, setFinancialSummary] = useState<any | null>(null);
+
   const fetchTenantDetails = useCallback(async () => {
     if (!tenantId) return;
     try {
       setLoading(true);
       setErrorMsg(null);
       const token = localStorage.getItem('propertyos_token');
-      const [res, agrRes] = await Promise.all([
+      const [res, agrRes, finRes] = await Promise.all([
         fetch(`/api/v1/tenants/${tenantId}`, {
           headers: { Authorization: `Bearer ${token}` },
         }),
         fetch(`/api/v1/tenants/${tenantId}/agreements`, {
+          headers: { Authorization: `Bearer ${token}` },
+        }),
+        fetch(`/api/v1/financials/tenant/${tenantId}`, {
           headers: { Authorization: `Bearer ${token}` },
         }),
       ]);
@@ -90,6 +99,11 @@ export default function TenantDetailsPage() {
       if (agrRes.ok) {
         const agrJson = await agrRes.json();
         setTenantAgreements(agrJson.agreements || []);
+      }
+
+      if (finRes.ok) {
+        const finJson = await finRes.json();
+        if (finJson.data) setFinancialSummary(finJson.data);
       }
     } catch (err: any) {
       setErrorMsg(err.message || 'Failed to load tenant details');
@@ -650,6 +664,53 @@ export default function TenantDetailsPage() {
                 </div>
               )}
             </div>
+
+            {/* Billing & Financial Overview */}
+            {financialSummary && (
+              <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                    <ReceiptText className="w-5 h-5 text-brand-teal" />
+                    Billing & Financial Account
+                  </h2>
+                  <div className="flex items-center gap-2">
+                    <Link
+                      href={`/invoices?tenantId=${tenant.id}`}
+                      className="text-xs font-semibold text-brand-teal hover:underline"
+                    >
+                      Invoices ({financialSummary.currentInvoiceCount})
+                    </Link>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <div className="p-3 bg-slate-50 rounded-lg border border-slate-100">
+                    <span className="text-[11px] font-semibold text-slate-500 block uppercase">Invoiced</span>
+                    <span className="text-sm font-bold text-slate-900">
+                      ₹{Number(financialSummary.totalInvoiced).toLocaleString()}
+                    </span>
+                  </div>
+                  <div className="p-3 bg-slate-50 rounded-lg border border-slate-100">
+                    <span className="text-[11px] font-semibold text-slate-500 block uppercase">Paid</span>
+                    <span className="text-sm font-bold text-emerald-600">
+                      ₹{Number(financialSummary.totalPaid).toLocaleString()}
+                    </span>
+                  </div>
+                  <div className="p-3 bg-slate-50 rounded-lg border border-slate-100">
+                    <span className="text-[11px] font-semibold text-slate-500 block uppercase">Balance Due</span>
+                    <span className="text-sm font-bold text-amber-600">
+                      ₹{Number(financialSummary.outstandingBalance).toLocaleString()}
+                    </span>
+                  </div>
+                  <div className="p-3 bg-slate-50 rounded-lg border border-slate-100">
+                    <span className="text-[11px] font-semibold text-slate-500 block uppercase">Deposit Held</span>
+                    <span className="text-sm font-bold text-purple-600">
+                      ₹{Number(financialSummary.securityDepositHeld).toLocaleString()}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* PG Co-Living Stays History */}
             <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4">

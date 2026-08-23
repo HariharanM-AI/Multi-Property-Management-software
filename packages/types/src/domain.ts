@@ -73,31 +73,6 @@ export enum KycVerificationStatus {
   REJECTED = 'REJECTED',
 }
 
-export enum InvoiceStatus {
-  DRAFT = 'DRAFT',
-  ISSUED = 'ISSUED',
-  PARTIALLY_PAID = 'PARTIALLY_PAID',
-  PAID = 'PAID',
-  OVERDUE = 'OVERDUE',
-  CANCELLED = 'CANCELLED',
-}
-
-export enum PaymentMethod {
-  UPI = 'UPI',
-  BANK_TRANSFER_NEFT_IMPS = 'BANK_TRANSFER_NEFT_IMPS',
-  CREDIT_CARD = 'CREDIT_CARD',
-  DEBIT_CARD = 'DEBIT_CARD',
-  CASH = 'CASH',
-  CHEQUE = 'CHEQUE',
-  OTHER = 'OTHER',
-}
-
-export enum PaymentStatus {
-  PENDING = 'PENDING',
-  COMPLETED = 'COMPLETED',
-  FAILED = 'FAILED',
-  REFUNDED = 'REFUNDED',
-}
 
 export enum MaintenanceCategory {
   PLUMBING = 'PLUMBING',

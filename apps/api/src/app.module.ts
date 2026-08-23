@@ -15,6 +15,11 @@ import { TenantsModule } from './modules/tenants/tenants.module';
 import { CheckinsModule } from './modules/checkins/checkins.module';
 import { CheckoutsModule } from './modules/checkouts/checkouts.module';
 import { AgreementsModule } from './modules/agreements/agreements.module';
+import { LedgerModule } from './modules/ledger/ledger.module';
+import { InvoicesModule } from './modules/invoices/invoices.module';
+import { PaymentsModule } from './modules/payments/payments.module';
+import { SecurityDepositsModule } from './modules/security-deposits/security-deposits.module';
+import { BillingModule } from './modules/billing/billing.module';
 import { AuthGuard } from './common/guards/auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
 import { PermissionsGuard } from './common/guards/permissions.guard';
@@ -52,6 +57,11 @@ import { GlobalHttpExceptionFilter } from './common/filters/http-exception.filte
     CheckinsModule,
     CheckoutsModule,
     AgreementsModule,
+    LedgerModule,
+    InvoicesModule,
+    PaymentsModule,
+    SecurityDepositsModule,
+    BillingModule,
   ],
   providers: [
     {

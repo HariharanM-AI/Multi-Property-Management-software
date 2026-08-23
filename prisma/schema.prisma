@@ -166,24 +166,79 @@ enum InvoiceStatus {
   PARTIALLY_PAID
   PAID
   OVERDUE
+  VOID
   CANCELLED
 }
 
-enum PaymentMethod {
-  UPI
-  BANK_TRANSFER_NEFT_IMPS
-  CREDIT_CARD
-  DEBIT_CARD
-  CASH
-  CHEQUE
+enum BillingFrequency {
+  ONE_TIME
+  DAILY
+  WEEKLY
+  MONTHLY
+  QUARTERLY
+  YEARLY
+}
+
+enum ChargeType {
+  RENT
+  SECURITY_DEPOSIT
+  MAINTENANCE
+  UTILITY
+  LATE_FEE
+  DAMAGE
   OTHER
 }
 
 enum PaymentStatus {
+  RECORDED
+  ALLOCATED
+  PARTIALLY_ALLOCATED
+  REFUNDED
+  VOID
   PENDING
   COMPLETED
   FAILED
-  REFUNDED
+}
+
+enum PaymentMethod {
+  CASH
+  BANK_TRANSFER
+  UPI
+  CARD
+  CHEQUE
+  OTHER
+  BANK_TRANSFER_NEFT_IMPS
+  CREDIT_CARD
+  DEBIT_CARD
+}
+
+enum LedgerEntryType {
+  INVOICE
+  PAYMENT
+  REFUND
+  CREDIT
+  DEBIT
+  ADJUSTMENT
+  REVERSAL
+  SECURITY_DEPOSIT
+  SECURITY_DEPOSIT_REFUND
+}
+
+enum LedgerAccountType {
+  TENANT_RECEIVABLE
+  RENT_REVENUE
+  MAINTENANCE_REVENUE
+  UTILITY_REVENUE
+  SECURITY_DEPOSIT_LIABILITY
+  CASH
+  BANK
+  REFUND_PAYABLE
+  ADJUSTMENT
+}
+
+enum PaymentAllocationStatus {
+  ACTIVE
+  REVERSED
 }
 
 enum MaintenanceCategory {
@@ -252,22 +307,27 @@ model Organization {
   updatedAt   DateTime @updatedAt
   deletedAt   DateTime?
 
-  users             User[]
-  properties        Property[]
-  tenants           Tenant[]
-  invoices          Invoice[]
-  payments          Payment[]
-  expenses          ExpenseRecord[]
-  auditLogs         AuditLog[]
-  staffMembers      StaffMember[]
-  agreementTemplates AgreementTemplate[]
-  teamInvitations   TeamInvitation[]
-  sequences         OrganizationSequence[]
-  propertyMedia     PropertyMedia[]
-  checkIns          CheckIn[]
-  checkouts         Checkout[]
-  settlements       Settlement[]
-  agreements        Agreement[]
+  users                   User[]
+  properties              Property[]
+  tenants                 Tenant[]
+  invoices                Invoice[]
+  payments                Payment[]
+  expenses                ExpenseRecord[]
+  auditLogs               AuditLog[]
+  staffMembers            StaffMember[]
+  agreementTemplates      AgreementTemplate[]
+  teamInvitations         TeamInvitation[]
+  sequences               OrganizationSequence[]
+  propertyMedia           PropertyMedia[]
+  checkIns                CheckIn[]
+  checkouts               Checkout[]
+  settlements             Settlement[]
+  agreements              Agreement[]
+  billingCharges          BillingCharge[]
+  billingSchedules        BillingSchedule[]
+  credits                 Credit[]
+  securityDepositAccounts SecurityDepositAccount[]
+  ledgerEntries           LedgerEntry[]
 
   @@map("organizations")
 }
@@ -447,9 +507,10 @@ model Property {
   invoices       Invoice[]
   communityPosts CommunityPost[]
   serviceRequests ServiceRequest[]
-  checkIns       CheckIn[]
-  checkouts      Checkout[]
-  agreements     Agreement[]
+  checkIns         CheckIn[]
+  checkouts        Checkout[]
+  agreements       Agreement[]
+  billingSchedules BillingSchedule[]
 
   @@unique([organizationId, code])
   @@index([organizationId])
@@ -641,8 +702,11 @@ model Lease {
   agreements  Agreement[]
   checkIn     CheckInRecord?
   checkOut    CheckOutRecord?
-  checkIns    CheckIn[]
-  checkouts   Checkout[]
+  checkIns                CheckIn[]
+  checkouts               Checkout[]
+  billingSchedules        BillingSchedule[]
+  invoices                Invoice[]
+  securityDepositAccounts SecurityDepositAccount[]
 
   @@index([rentalUnitId])
   @@index([tenantId])
@@ -694,19 +758,22 @@ model Tenant {
   documents           TenantDocument[]
   stayHistories       TenantStayHistory[]
   leases              Lease[]
-  invoices            Invoice[]
-  payments            Payment[]
-  securityDeposits    SecurityDeposit[]
-  mealSubscriptions   MealSubscription[]
-  maintenanceTickets  MaintenanceTicket[]
-  visitors            VisitorRecord[]
-  marketplaceListings MarketplaceListing[]
-  communityPosts      CommunityPost[]
-  notifications       Notification[]
-  checkIns            CheckIn[]
-  checkouts           Checkout[]
-  settlements         Settlement[]
-  agreements          Agreement[]
+  invoices                Invoice[]
+  payments                Payment[]
+  mealSubscriptions       MealSubscription[]
+  maintenanceTickets      MaintenanceTicket[]
+  visitors                VisitorRecord[]
+  marketplaceListings     MarketplaceListing[]
+  communityPosts          CommunityPost[]
+  notifications           Notification[]
+  checkIns                CheckIn[]
+  checkouts               Checkout[]
+  settlements             Settlement[]
+  agreements              Agreement[]
+  billingSchedules        BillingSchedule[]
+  credits                 Credit[]
+  securityDepositAccounts SecurityDepositAccount[]
+  ledgerEntries           LedgerEntry[]
 
   @@index([organizationId])
   @@index([phone])
@@ -873,10 +940,13 @@ model CheckIn {
   property     Property           @relation(fields: [propertyId], references: [id], onDelete: Restrict)
   bed          Bed?               @relation(fields: [bedId], references: [id], onDelete: SetNull)
   rentalUnit   RentalUnit?        @relation(fields: [rentalUnitId], references: [id], onDelete: SetNull)
-  lease        Lease?             @relation(fields: [leaseId], references: [id], onDelete: SetNull)
-  stayHistory  TenantStayHistory? @relation(fields: [stayHistoryId], references: [id], onDelete: SetNull)
-  checkouts    Checkout[]
-  agreements   Agreement[]
+  lease                   Lease?             @relation(fields: [leaseId], references: [id], onDelete: SetNull)
+  stayHistory             TenantStayHistory? @relation(fields: [stayHistoryId], references: [id], onDelete: SetNull)
+  checkouts               Checkout[]
+  agreements              Agreement[]
+  billingSchedules        BillingSchedule[]
+  invoices                Invoice[]
+  securityDepositAccounts SecurityDepositAccount[]
 
   @@index([organizationId])
   @@index([tenantId])
@@ -991,144 +1061,237 @@ model CheckOutRecord {
 }
 
 // ------------------------------------------------------------------------------
-// BILLING, PAYMENTS, DEPOSITS & LEDGER
+// BILLING, INVOICING, PAYMENTS, SECURITY DEPOSITS & LEDGER (CORE-011)
 // ------------------------------------------------------------------------------
 
-model Invoice {
-  id                 String        @id @default(uuid())
-  organizationId     String
-  propertyId         String
-  tenantId           String
-  invoiceNumber      String        @unique
-  billingPeriodStart DateTime
-  billingPeriodEnd   DateTime
-  dueDate            DateTime
-  subtotal           Decimal       @db.Decimal(10, 2)
-  discountAmount     Decimal       @default(0) @db.Decimal(10, 2)
-  lateFeeAmount      Decimal       @default(0) @db.Decimal(10, 2)
-  totalAmount        Decimal       @db.Decimal(10, 2)
-  paidAmount         Decimal       @default(0) @db.Decimal(10, 2)
-  balanceDue         Decimal       @db.Decimal(10, 2)
-  status             InvoiceStatus @default(ISSUED)
-  notes              String?
-  createdAt          DateTime      @default(now())
-  updatedAt          DateTime      @updatedAt
+model BillingCharge {
+  id             String           @id @default(uuid())
+  organizationId String
+  name           String
+  chargeType     ChargeType
+  description    String?
+  amount         Decimal          @db.Decimal(12, 2)
+  frequency      BillingFrequency
+  isActive       Boolean          @default(true)
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
 
-  organization  Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  property      Property       @relation(fields: [propertyId], references: [id], onDelete: Restrict)
-  tenant        Tenant         @relation(fields: [tenantId], references: [id], onDelete: Restrict)
-  items         InvoiceItem[]
-  payments      Payment[]
-  ledgerEntries LedgerEntry[]
+  organization Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  invoiceLines InvoiceLine[]
+  schedules    BillingSchedule[]
 
   @@index([organizationId])
-  @@index([propertyId])
+  @@index([chargeType])
+  @@index([isActive])
+  @@map("billing_charges")
+}
+
+model BillingSchedule {
+  id              String           @id @default(uuid())
+  organizationId  String
+  tenantId        String
+  propertyId      String?
+  leaseId         String?
+  checkInId       String?
+  chargeId        String
+  startDate       DateTime
+  endDate         DateTime?
+  frequency       BillingFrequency
+  amount          Decimal          @db.Decimal(12, 2)
+  nextBillingDate DateTime?
+  active          Boolean          @default(true)
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  tenant       Tenant        @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  property     Property?     @relation(fields: [propertyId], references: [id], onDelete: SetNull)
+  lease        Lease?        @relation(fields: [leaseId], references: [id], onDelete: SetNull)
+  checkIn      CheckIn?      @relation(fields: [checkInId], references: [id], onDelete: SetNull)
+  charge       BillingCharge @relation(fields: [chargeId], references: [id], onDelete: Restrict)
+
+  @@index([organizationId])
   @@index([tenantId])
+  @@index([propertyId])
+  @@index([leaseId])
+  @@index([nextBillingDate])
+  @@index([active])
+  @@map("billing_schedules")
+}
+
+model Invoice {
+  id                String        @id @default(uuid())
+  organizationId    String
+  tenantId          String
+  propertyId        String?
+  leaseId           String?
+  checkInId         String?
+  invoiceNumber     String
+  issueDate         DateTime
+  dueDate           DateTime
+  subtotal          Decimal       @db.Decimal(12, 2)
+  adjustments       Decimal       @default(0) @db.Decimal(12, 2)
+  totalAmount       Decimal       @db.Decimal(12, 2)
+  paidAmount        Decimal       @default(0) @db.Decimal(12, 2)
+  outstandingAmount Decimal       @default(0) @db.Decimal(12, 2)
+  status            InvoiceStatus @default(DRAFT)
+  notes             String?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  organization  Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  tenant        Tenant              @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  property      Property?           @relation(fields: [propertyId], references: [id], onDelete: SetNull)
+  lease         Lease?              @relation(fields: [leaseId], references: [id], onDelete: SetNull)
+  checkIn       CheckIn?            @relation(fields: [checkInId], references: [id], onDelete: SetNull)
+  lines         InvoiceLine[]
+  allocations   PaymentAllocation[]
+  ledgerEntries LedgerEntry[]
+  credits       Credit[]
+
+  @@unique([organizationId, invoiceNumber])
+  @@index([organizationId])
+  @@index([tenantId])
+  @@index([propertyId])
   @@index([status])
+  @@index([dueDate])
   @@map("invoices")
 }
 
-model InvoiceItem {
-  id          String   @id @default(uuid())
+model InvoiceLine {
+  id          String         @id @default(uuid())
   invoiceId   String
+  chargeId    String?
   description String
-  amount      Decimal  @db.Decimal(10, 2)
-  category    String   // RENT, ELECTRICITY, MEALS, MAINTENANCE, LATE_FEE, OTHER
-  createdAt   DateTime @default(now())
+  chargeType  ChargeType
+  quantity    Decimal        @default(1) @db.Decimal(12, 2)
+  unitAmount  Decimal        @db.Decimal(12, 2)
+  totalAmount Decimal        @db.Decimal(12, 2)
+  createdAt   DateTime       @default(now())
 
-  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  invoice Invoice        @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  charge  BillingCharge? @relation(fields: [chargeId], references: [id], onDelete: SetNull)
 
-  @@map("invoice_items")
+  @@index([invoiceId])
+  @@index([chargeId])
+  @@map("invoice_lines")
 }
 
 model Payment {
-  id                   String        @id @default(uuid())
-  organizationId       String
-  invoiceId            String
-  tenantId             String
-  paymentNumber        String        @unique
-  amount               Decimal       @db.Decimal(10, 2)
-  paymentMethod        PaymentMethod
-  transactionReference String?
-  status               PaymentStatus @default(COMPLETED)
-  paymentDate          DateTime      @default(now())
-  notes                String?
-  createdAt            DateTime      @default(now())
+  id              String        @id @default(uuid())
+  organizationId  String
+  tenantId        String
+  amount          Decimal       @db.Decimal(12, 2)
+  paymentMethod   PaymentMethod
+  referenceNumber String?
+  paymentDate     DateTime
+  status          PaymentStatus @default(RECORDED)
+  notes           String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
 
-  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  invoice      Invoice       @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
-  tenant       Tenant        @relation(fields: [tenantId], references: [id], onDelete: Restrict)
-  receipt      Receipt?
-  ledgerEntry  LedgerEntry?
+  organization  Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  tenant        Tenant              @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  allocations   PaymentAllocation[]
+  ledgerEntries LedgerEntry[]
 
   @@index([organizationId])
-  @@index([invoiceId])
   @@index([tenantId])
+  @@index([paymentDate])
+  @@index([status])
   @@map("payments")
 }
 
-model Receipt {
-  id            String   @id @default(uuid())
-  paymentId     String   @unique
-  receiptNumber String   @unique
-  issuedAt      DateTime @default(now())
-  pdfUrl        String?
-  createdAt     DateTime @default(now())
+model PaymentAllocation {
+  id        String                  @id @default(uuid())
+  paymentId String
+  invoiceId String
+  amount    Decimal                 @db.Decimal(12, 2)
+  status    PaymentAllocationStatus @default(ACTIVE)
+  createdAt DateTime                @default(now())
 
-  payment Payment @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  payment Payment @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
 
-  @@map("receipts")
+  @@index([paymentId])
+  @@index([invoiceId])
+  @@index([status])
+  @@map("payment_allocations")
 }
 
-model LedgerEntry {
-  id             String   @id @default(uuid())
-  organizationId String
-  invoiceId      String?
-  paymentId      String?  @unique
-  entryType      String   // DEBIT, CREDIT
-  amount         Decimal  @db.Decimal(10, 2)
-  balance        Decimal  @db.Decimal(10, 2)
-  description    String
-  createdAt      DateTime @default(now())
+model Credit {
+  id              String   @id @default(uuid())
+  organizationId  String
+  tenantId        String
+  amount          Decimal  @db.Decimal(12, 2)
+  remainingAmount Decimal  @db.Decimal(12, 2)
+  reason          String
+  sourceInvoiceId String?
+  status          String   @default("ACTIVE")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
-  invoice Invoice? @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
-  payment Payment? @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+  organization  Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  tenant        Tenant       @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  sourceInvoice Invoice?     @relation(fields: [sourceInvoiceId], references: [id], onDelete: SetNull)
 
   @@index([organizationId])
-  @@map("ledger_entries")
+  @@index([tenantId])
+  @@index([status])
+  @@map("credits")
 }
 
-model SecurityDeposit {
+model SecurityDepositAccount {
   id             String   @id @default(uuid())
+  organizationId String
   tenantId       String
-  propertyId     String
-  totalReceived  Decimal  @db.Decimal(10, 2)
-  totalDeductions Decimal @default(0) @db.Decimal(10, 2)
-  totalRefunded  Decimal  @default(0) @db.Decimal(10, 2)
-  currentBalance Decimal  @db.Decimal(10, 2)
-  status         String   @default("HELD") // HELD, PARTIALLY_REFUNDED, FULLY_REFUNDED
+  leaseId        String?
+  checkInId      String?
+  amountHeld     Decimal  @default(0) @db.Decimal(12, 2)
+  amountRefunded Decimal  @default(0) @db.Decimal(12, 2)
+  amountDeducted Decimal  @default(0) @db.Decimal(12, 2)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  tenant       Tenant               @relation(fields: [tenantId], references: [id], onDelete: Restrict)
-  transactions DepositTransaction[]
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  tenant       Tenant       @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  lease        Lease?       @relation(fields: [leaseId], references: [id], onDelete: SetNull)
+  checkIn      CheckIn?     @relation(fields: [checkInId], references: [id], onDelete: SetNull)
 
+  @@index([organizationId])
   @@index([tenantId])
-  @@map("security_deposits")
+  @@index([leaseId])
+  @@index([checkInId])
+  @@map("security_deposit_accounts")
 }
 
-model DepositTransaction {
-  id                String   @id @default(uuid())
-  securityDepositId String
-  transactionType   String   // RECEIVED, DEDUCTION, REFUND
-  amount            Decimal  @db.Decimal(10, 2)
-  reason            String?
-  transactionDate   DateTime @default(now())
-  createdAt         DateTime @default(now())
+model LedgerEntry {
+  id             String            @id @default(uuid())
+  organizationId String
+  tenantId       String
+  invoiceId      String?
+  paymentId      String?
+  entryType      LedgerEntryType
+  accountType    LedgerAccountType
+  debitAmount    Decimal           @default(0) @db.Decimal(12, 2)
+  creditAmount   Decimal           @default(0) @db.Decimal(12, 2)
+  reference      String?
+  description    String?
+  createdAt      DateTime          @default(now())
 
-  securityDeposit SecurityDeposit @relation(fields: [securityDepositId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  tenant       Tenant       @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  invoice      Invoice?     @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+  payment      Payment?     @relation(fields: [paymentId], references: [id], onDelete: SetNull)
 
-  @@map("deposit_transactions")
+  @@index([organizationId])
+  @@index([tenantId])
+  @@index([invoiceId])
+  @@index([paymentId])
+  @@index([entryType])
+  @@index([accountType])
+  @@index([createdAt])
+  @@map("ledger_entries")
 }
 
 // ------------------------------------------------------------------------------

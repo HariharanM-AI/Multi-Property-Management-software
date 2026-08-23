@@ -12,3 +12,4 @@ export * from './tenant.js';
 export * from './checkin.js';
 export * from './checkout.js';
 export * from './agreement.js';
+export * from './billing.js';
