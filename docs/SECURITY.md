@@ -127,3 +127,13 @@ If a user possesses a permission (e.g. `property.read`) but requests a property 
 - **Meter Reading Tamper Prevention**: Decreasing meter readings (`current < previous`) are rejected with `400 Bad Request` unless authorized with `isResetOverride = true` and a mandatory non-empty `resetReason`.
 - **Unique Attendance Constraint**: Daily tenant mess attendance enforces unique constraint `@@unique([tenantId, mealDate, mealType])` with single-click idempotent updates.
 
+---
+
+## 10. Sub-Metered Electricity Billing Hardening & Concurrency Safeguards (CORE-014)
+- **Transactional Atomic Invoicing**: `ElectricityService.generateCharges` executes reading charge creation, invoice creation, line items, and double-entry ledger entries in a single PostgreSQL transaction client (`tx`). Any failure rolls back 100% of mutations, preventing orphaned charges or unbalanced ledgers.
+- **Charge Generation Advisory Locking**: Uses `SELECT pg_advisory_xact_lock(hashtext('electricity_charge_' || readingId))` to serialize concurrent charge generation calls, returning idempotent charge sets on race conditions.
+- **Active Rate Overlap Prevention**: Rates per property are validated against overlapping date ranges and serialized using `SELECT pg_advisory_xact_lock(hashtext('electricity_rate_' || propertyId))`.
+- **Meter Reset Authorization Matrix**: Meter resets (`isResetOverride: true`) require explicit `Permission.ELECTRICITY_UPDATE`. Roles lacking this permission receive `403 Forbidden`.
+- **Error Normalization**: Expected Prisma P2002 uniqueness conflicts are trapped and normalized to `409 Conflict` (HTTP Conflict) rather than generic internal server errors.
+
+

@@ -52,10 +52,13 @@ export class InvoicesService {
   async createInvoice(
     organizationId: string,
     dto: CreateInvoiceDto,
-    userId?: string
+    userId?: string,
+    tx?: Prisma.TransactionClient
   ): Promise<InvoiceDto> {
+    const client = tx || this.prisma;
+
     // Validate tenant exists in organization
-    const tenant = await this.prisma.tenant.findFirst({
+    const tenant = await client.tenant.findFirst({
       where: { id: dto.tenantId, organizationId },
     });
     if (!tenant) {
@@ -63,7 +66,7 @@ export class InvoicesService {
     }
 
     if (dto.propertyId) {
-      const property = await this.prisma.property.findFirst({
+      const property = await client.property.findFirst({
         where: { id: dto.propertyId, organizationId },
       });
       if (!property) {
@@ -71,10 +74,10 @@ export class InvoicesService {
       }
     }
 
-    return this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+    const executeCreate = async (txClient: Prisma.TransactionClient) => {
       const invoiceNumber = await this.invoiceNumberService.generateInvoiceNumber(
         organizationId,
-        tx
+        txClient
       );
 
       let subtotal = new Prisma.Decimal(0);
@@ -117,7 +120,7 @@ export class InvoicesService {
         totalAmount = new Prisma.Decimal(0);
       }
 
-      const invoice = await tx.invoice.create({
+      const invoice = await txClient.invoice.create({
         data: {
           organizationId,
           tenantId: dto.tenantId,
@@ -146,7 +149,7 @@ export class InvoicesService {
       });
 
       // Create Audit Log
-      await tx.auditLog.create({
+      await txClient.auditLog.create({
         data: {
           organizationId,
           userId: userId || null,
@@ -162,7 +165,13 @@ export class InvoicesService {
       });
 
       return this.mapToDto(invoice);
-    });
+    };
+
+    if (tx) {
+      return executeCreate(tx);
+    }
+
+    return this.prisma.$transaction(executeCreate);
   }
 
   /**
@@ -346,14 +355,17 @@ export class InvoicesService {
   }
 
   /**
-   * Issues an invoice (DRAFT -> ISSUED) and generates double-entry ledger entries atomically
+   * Issues an invoice (DRAFT -> ISSUED) and generates double-entry ledger records
    */
   async issueInvoice(
     organizationId: string,
     id: string,
-    userId?: string
+    userId?: string,
+    tx?: Prisma.TransactionClient
   ): Promise<InvoiceDto> {
-    const invoice = await this.prisma.invoice.findFirst({
+    const client = tx || this.prisma;
+
+    const invoice = await client.invoice.findFirst({
       where: { id, organizationId },
       include: { lines: true, tenant: true, property: true },
     });
@@ -370,8 +382,8 @@ export class InvoicesService {
       throw new BadRequestException(`Cannot issue invoice with status ${invoice.status}`);
     }
 
-    return this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
-      const updated = await tx.invoice.update({
+    const executeIssue = async (txClient: Prisma.TransactionClient) => {
+      const updated = await txClient.invoice.update({
         where: { id },
         data: {
           status: InvoiceStatus.ISSUED,
@@ -452,9 +464,9 @@ export class InvoicesService {
         }
       }
 
-      await this.ledgerService.recordTransaction(organizationId, ledgerEntries, tx);
+      await this.ledgerService.recordTransaction(organizationId, ledgerEntries, txClient);
 
-      await tx.auditLog.create({
+      await txClient.auditLog.create({
         data: {
           organizationId,
           userId: userId || null,
@@ -469,7 +481,13 @@ export class InvoicesService {
       });
 
       return this.mapToDto(updated);
-    });
+    };
+
+    if (tx) {
+      return executeIssue(tx);
+    }
+
+    return this.prisma.$transaction(executeIssue);
   }
 
   /**

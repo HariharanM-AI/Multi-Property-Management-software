@@ -44,6 +44,7 @@ graph TD
 | **CORE-011** | Billing, Invoicing & Double-Entry Ledger | `scratch/verify-billing-e2e.js` | `billing.service.spec.ts`, `invoices.service.spec.ts`, `payments.service.spec.ts`, `ledger.service.spec.ts`, `security-deposits.service.spec.ts` | Double-entry $DR \equiv CR$, Over-allocation protection, Idempotent billing cycles | **VERIFIED (PASS)** |
 | **CORE-012** | Electricity & PG Meal Management | `scratch/verify-electricity-meals-e2e.js` | `electricity.service.spec.ts`, `meals.service.spec.ts` | Monotonic readings, Reset override, Remainder allocation, Mess matrix `@@unique` | **VERIFIED (PASS)** |
 | **CORE-013** | Maintenance & Work Order Management | `scratch/verify-maintenance-e2e.js` | `maintenance.service.spec.ts` | Deterministic lifecycle, PG & Rental targeting, Cost protection, Status history, Vendor CRUD | **VERIFIED (PASS)** |
+| **CORE-014** | Sub-Metered Electricity Billing Hardening | `scratch/verify-electricity-hardening-e2e.js` | `electricity.service.spec.ts` (16 tests) | Atomic invoice tx propagation, Advisory locks on charge & rate creation, Reset RBAC, P2002 409 conflict normalization, Rollback test | **VERIFIED (PASS)** |
 
 ---
 

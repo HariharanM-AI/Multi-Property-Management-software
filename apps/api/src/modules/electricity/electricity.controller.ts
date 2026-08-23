@@ -18,6 +18,7 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe';
 import {
   Permission,
+  UserRole,
   MeterStatus,
   ElectricityChargeStatus,
   CreateElectricityMeterDto,
@@ -98,11 +99,12 @@ export class ElectricityController {
   async recordReading(
     @CurrentUser('organizationId') orgId: string,
     @CurrentUser('id') userId: string,
+    @CurrentUser('roles') userRoles: UserRole[],
     @Param('propertyId', ParseUUIDPipe) propertyId: string,
     @Body(new ZodValidationPipe(RecordElectricityReadingSchema))
     dto: RecordElectricityReadingDto
   ) {
-    return this.electricityService.recordReading(orgId, propertyId, dto, userId);
+    return this.electricityService.recordReading(orgId, propertyId, dto, userId, userRoles);
   }
 
   @Get('properties/:propertyId/electricity/readings')
@@ -129,6 +131,17 @@ export class ElectricityController {
     dto: CreateElectricityRateDto
   ) {
     return this.electricityService.createRate(orgId, propertyId, dto, userId);
+  }
+
+  @Patch('properties/:propertyId/electricity/rates/:rateId/deactivate')
+  @RequirePermissions(Permission.ELECTRICITY_UPDATE)
+  async deactivateRate(
+    @CurrentUser('organizationId') orgId: string,
+    @CurrentUser('id') userId: string,
+    @Param('propertyId', ParseUUIDPipe) propertyId: string,
+    @Param('rateId', ParseUUIDPipe) rateId: string
+  ) {
+    return this.electricityService.deactivateRate(orgId, propertyId, rateId, userId);
   }
 
   @Get('properties/:propertyId/electricity/rates')

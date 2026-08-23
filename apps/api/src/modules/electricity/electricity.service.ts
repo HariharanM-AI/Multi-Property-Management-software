@@ -3,6 +3,7 @@ import {
   NotFoundException,
   BadRequestException,
   ConflictException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
 import { InvoicesService } from '../invoices/invoices.service';
@@ -26,6 +27,9 @@ import {
   ChargeType,
   PropertyType,
   CheckInStatus,
+  UserRole,
+  Permission,
+  hasPermission,
 } from '@propertyos/types';
 import { Prisma } from '@prisma/client';
 
@@ -273,7 +277,8 @@ export class ElectricityService {
     organizationId: string,
     propertyId: string,
     dto: RecordElectricityReadingDto,
-    userId: string
+    userId: string,
+    userRoles?: UserRole[]
   ): Promise<ElectricityReadingDto> {
     await this.validateProperty(organizationId, propertyId);
 
@@ -282,6 +287,17 @@ export class ElectricityService {
     });
     if (!meter) {
       throw new NotFoundException(`Meter ${dto.meterId} not found`);
+    }
+
+    if (dto.isResetOverride) {
+      if (userRoles && !hasPermission(userRoles, Permission.ELECTRICITY_UPDATE)) {
+        throw new ForbiddenException(
+          'You do not have permission to perform a meter reset override. Permission ELECTRICITY_UPDATE is required.'
+        );
+      }
+      if (!dto.resetReason || dto.resetReason.trim().length === 0) {
+        throw new BadRequestException('Reset reason is mandatory for meter reset override');
+      }
     }
 
     const readingDate = new Date(dto.readingDate);
@@ -321,67 +337,73 @@ export class ElectricityService {
           `Current reading (${currentReading}) cannot be lower than previous reading (${previousReading}) without an authorized reset override`
         );
       }
-      if (!dto.resetReason || dto.resetReason.trim().length === 0) {
-        throw new BadRequestException('Reset reason is mandatory for meter reset override');
-      }
       // On authorized reset, units consumed is the current reading (starting from 0 baseline on new cycle)
       unitsConsumed = currentReading;
     } else {
       unitsConsumed = currentReading.sub(previousReading);
     }
 
-    const reading = await this.prisma.$transaction(async (tx) => {
-      const created = await tx.electricityReading.create({
-        data: {
+    try {
+      const reading = await this.prisma.$transaction(async (tx) => {
+        const created = await tx.electricityReading.create({
+          data: {
+            organizationId,
+            propertyId,
+            meterId: dto.meterId,
+            readingDate,
+            previousReading,
+            currentReading,
+            unitsConsumed,
+            previousReadingId: latestPreviousReading?.id || null,
+            isResetOverride: !!dto.isResetOverride,
+            resetReason: dto.resetReason || null,
+            recordedBy: userId,
+            notes: dto.notes || null,
+          },
+          include: {
+            meter: { select: { id: true, meterNumber: true, meterType: true, roomId: true } },
+          },
+        });
+
+        // Update meter's lastReadingAt
+        await tx.electricityMeter.update({
+          where: { id: dto.meterId },
+          data: { lastReadingAt: readingDate },
+        });
+
+        const auditAction = dto.isResetOverride
+          ? 'ELECTRICITY_READING_RESET'
+          : 'ELECTRICITY_READING_RECORDED';
+
+        await this.writeAuditLog(
+          tx,
           organizationId,
-          propertyId,
-          meterId: dto.meterId,
-          readingDate,
-          previousReading,
-          currentReading,
-          unitsConsumed,
-          previousReadingId: latestPreviousReading?.id || null,
-          isResetOverride: !!dto.isResetOverride,
-          resetReason: dto.resetReason || null,
-          recordedBy: userId,
-          notes: dto.notes || null,
-        },
-        include: {
-          meter: { select: { id: true, meterNumber: true, meterType: true, roomId: true } },
-        },
+          userId,
+          auditAction,
+          'ElectricityReading',
+          created.id,
+          {
+            meterNumber: meter.meterNumber,
+            previousReading: previousReading.toString(),
+            currentReading: currentReading.toString(),
+            unitsConsumed: unitsConsumed.toString(),
+            isResetOverride: dto.isResetOverride,
+            resetReason: dto.resetReason,
+          }
+        );
+
+        return created;
       });
 
-      // Update meter's lastReadingAt
-      await tx.electricityMeter.update({
-        where: { id: dto.meterId },
-        data: { lastReadingAt: readingDate },
-      });
-
-      const auditAction = dto.isResetOverride
-        ? 'ELECTRICITY_READING_RESET'
-        : 'ELECTRICITY_READING_RECORDED';
-
-      await this.writeAuditLog(
-        tx,
-        organizationId,
-        userId,
-        auditAction,
-        'ElectricityReading',
-        created.id,
-        {
-          meterNumber: meter.meterNumber,
-          previousReading: previousReading.toString(),
-          currentReading: currentReading.toString(),
-          unitsConsumed: unitsConsumed.toString(),
-          isResetOverride: dto.isResetOverride,
-          resetReason: dto.resetReason,
-        }
-      );
-
-      return created;
-    });
-
-    return this.mapReadingToDto(reading);
+      return this.mapReadingToDto(reading);
+    } catch (err: any) {
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+        throw new ConflictException(
+          `A reading for meter ${meter.meterNumber} on ${readingDate.toISOString().split('T')[0]} already exists`
+        );
+      }
+      throw err;
+    }
   }
 
   async getReadings(
@@ -433,6 +455,37 @@ export class ElectricityService {
     }
 
     const rate = await this.prisma.$transaction(async (tx) => {
+      // Transaction-scoped advisory lock for this property to serialize concurrent rate creation
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('electricity_rate_' || ${propertyId}))`;
+
+      // Check for overlapping ACTIVE rates for the property
+      const overlappingRates = await tx.electricityRate.findMany({
+        where: {
+          organizationId,
+          propertyId,
+          status: ElectricityRateStatus.ACTIVE,
+          AND: [
+            {
+              effectiveFrom: {
+                lte: effectiveTo || new Date('9999-12-31T23:59:59.999Z'),
+              },
+            },
+            {
+              OR: [
+                { effectiveTo: null },
+                { effectiveTo: { gte: effectiveFrom } },
+              ],
+            },
+          ],
+        },
+      });
+
+      if (overlappingRates.length > 0) {
+        throw new ConflictException(
+          `An active electricity rate already exists for property ${propertyId} that overlaps with period ${effectiveFrom.toISOString().split('T')[0]} to ${effectiveTo ? effectiveTo.toISOString().split('T')[0] : 'indefinite'}. Conflicting Rate ID: ${overlappingRates[0].id}`
+        );
+      }
+
       const created = await tx.electricityRate.create({
         data: {
           organizationId,
@@ -451,13 +504,55 @@ export class ElectricityService {
         'ELECTRICITY_RATE_CREATED',
         'ElectricityRate',
         created.id,
-        { ratePerUnit: ratePerUnit.toString(), effectiveFrom: effectiveFrom.toISOString(), effectiveTo: effectiveTo?.toISOString() }
+        {
+          ratePerUnit: ratePerUnit.toString(),
+          effectiveFrom: effectiveFrom.toISOString(),
+          effectiveTo: effectiveTo?.toISOString(),
+        }
       );
 
       return created;
     });
 
     return this.mapRateToDto(rate);
+  }
+
+  async deactivateRate(
+    organizationId: string,
+    propertyId: string,
+    rateId: string,
+    userId: string
+  ): Promise<ElectricityRateDto> {
+    await this.validateProperty(organizationId, propertyId);
+
+    const rate = await this.prisma.electricityRate.findFirst({
+      where: { id: rateId, propertyId, organizationId },
+    });
+
+    if (!rate) {
+      throw new NotFoundException(`Rate ${rateId} not found`);
+    }
+
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const res = await tx.electricityRate.update({
+        where: { id: rateId },
+        data: { status: ElectricityRateStatus.INACTIVE },
+      });
+
+      await this.writeAuditLog(
+        tx,
+        organizationId,
+        userId,
+        'ELECTRICITY_RATE_DEACTIVATED',
+        'ElectricityRate',
+        rateId,
+        { previousStatus: rate.status }
+      );
+
+      return res;
+    });
+
+    return this.mapRateToDto(updated);
   }
 
   async getRates(
@@ -518,6 +613,9 @@ export class ElectricityService {
     await this.validateProperty(organizationId, propertyId);
 
     return this.prisma.$transaction(async (tx) => {
+      // Transaction-scoped advisory lock for this reading to serialize concurrent charge generation
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('electricity_charge_' || ${dto.readingId}))`;
+
       // 1. Fetch reading with meter info
       const reading = await tx.electricityReading.findFirst({
         where: { id: dto.readingId, propertyId, organizationId },
@@ -534,7 +632,7 @@ export class ElectricityService {
         throw new NotFoundException(`Reading ${dto.readingId} not found`);
       }
 
-      // Check if charges were already generated for this reading (idempotency)
+      // Check if charges were already generated for this reading (idempotency under lock)
       const existingCharges = await tx.electricityCharge.findMany({
         where: { readingId: dto.readingId, organizationId },
         include: {
@@ -676,7 +774,7 @@ export class ElectricityService {
         createdCharges.push(charge);
       }
 
-      // Auto-invoicing integration if requested
+      // Auto-invoicing integration if requested: atomic within the SAME transaction tx
       if (dto.autoInvoice) {
         for (const charge of createdCharges) {
           if (charge.tenantId && charge.amount.greaterThan(0)) {
@@ -692,18 +790,19 @@ export class ElectricityService {
                 dueDate: dueDate.toISOString(),
                 lines: [
                   {
-                    description: `Electricity Charge - Meter ${reading.meter.meterNumber} (${charge.unitsConsumed} units @ ₹${ratePerUnit}/unit)`,
+                    description: `Electricity Charge - Meter ${reading.meter.meterNumber} (${charge.unitsConsumed.toFixed(2)} units @ ₹${ratePerUnit}/unit)`,
                     chargeType: ChargeType.UTILITY,
-                    quantity: charge.unitsConsumed.toNumber(),
-                    unitAmount: ratePerUnit.toNumber(),
+                    quantity: 1,
+                    unitAmount: charge.amount.toNumber(),
                   },
                 ],
               },
-              userId
+              userId,
+              tx
             );
 
-            // Issue invoice to trigger balanced ledger entries
-            await this.invoicesService.issueInvoice(organizationId, invoiceDto.id, userId);
+            // Issue invoice to trigger balanced ledger entries inside the SAME transaction tx
+            await this.invoicesService.issueInvoice(organizationId, invoiceDto.id, userId, tx);
 
             // Update charge with invoice link
             await tx.electricityCharge.update({
