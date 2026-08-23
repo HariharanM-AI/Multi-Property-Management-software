@@ -22,6 +22,7 @@ import { SecurityDepositsModule } from './modules/security-deposits/security-dep
 import { BillingModule } from './modules/billing/billing.module';
 import { ElectricityModule } from './modules/electricity/electricity.module';
 import { MealsModule } from './modules/meals/meals.module';
+import { MaintenanceModule } from './modules/maintenance/maintenance.module';
 import { AuthGuard } from './common/guards/auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
 import { PermissionsGuard } from './common/guards/permissions.guard';
@@ -42,7 +43,7 @@ import { GlobalHttpExceptionFilter } from './common/filters/http-exception.filte
       useFactory: (config: ConfigService) => [
         {
           ttl: (config.get<number>('RATE_LIMIT_TTL') || 60) * 1000,
-          limit: config.get<number>('RATE_LIMIT_MAX') || 100,
+          limit: config.get<number>('RATE_LIMIT_MAX') || 2000,
         },
       ],
     }),
@@ -66,6 +67,7 @@ import { GlobalHttpExceptionFilter } from './common/filters/http-exception.filte
     BillingModule,
     ElectricityModule,
     MealsModule,
+    MaintenanceModule,
   ],
   providers: [
     {

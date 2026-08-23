@@ -15,3 +15,4 @@ export * from './agreement.js';
 export * from './billing.js';
 export * from './electricity.js';
 export * from './meals.js';
+export * from './maintenance.js';

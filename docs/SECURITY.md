@@ -52,10 +52,17 @@ If a user possesses a permission (e.g. `property.read`) but requests a property 
 | `billing.read` | View Invoices & Payments | ✅ | ❌ | ✅ | ❌ | ❌ | ❌ |
 | `billing.create` | Generate Invoices | ✅ | ❌ | ✅ | ❌ | ❌ | ❌ |
 | `billing.update` | Record Payments | ✅ | ❌ | ✅ | ❌ | ❌ | ❌ |
-| `maintenance.read` | View Tickets | ✅ | ✅ | ❌ | ✅ | ❌ | ✅ |
-| `maintenance.create` | Create Ticket | ✅ | ✅ | ❌ | ✅ | ❌ | ❌ |
-| `maintenance.assign` | Assign Tickets | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ |
-| `maintenance.update` | Update Ticket Status | ✅ | ✅ | ❌ | ✅ | ❌ | ✅ |
+| `maintenance.read` | View Maintenance Tickets | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `maintenance.create` | Create Ticket / Request | ✅ | ✅ | ❌ | ✅ | ❌ | ✅ |
+| `maintenance.update` | Update Ticket & Schedule | ✅ | ✅ | ❌ | ✅ | ❌ | ✅ |
+| `maintenance.assign` | Assign Staff to Ticket | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ |
+| `maintenance.comment` | Add Comments / Discussion | ✅ | ✅ | ❌ | ✅ | ❌ | ✅ |
+| `maintenance.complete` | Mark Work Completed | ✅ | ✅ | ❌ | ❌ | ❌ | ✅ |
+| `maintenance.verify` | Verify Completed Work | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ |
+| `maintenance.close` | Close Verified Ticket | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ |
+| `maintenance.cancel` | Cancel Maintenance Ticket | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ |
+| `maintenance.manage_cost` | Manage Estimates & Actual Costs | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ |
+| `maintenance.manage_vendor` | Manage Vendors | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ |
 | `reports.read` | View Reports | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ |
 
 ---

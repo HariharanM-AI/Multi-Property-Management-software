@@ -292,3 +292,31 @@ All structure endpoints operate within a scoped property context.
 - `GET /api/v1/properties/:propertyId/meals/summary` (Permission: `meal.read`)
 - `GET /api/v1/tenants/:tenantId/meals/summary` (Permission: `meal.read`)
 
+---
+
+## 15. Maintenance & Work Order Management (`/api/v1/maintenance`)
+- `POST /api/v1/maintenance/tickets` (Permission: `maintenance.create`) — Create maintenance ticket (PG room/bed/floor/common or Rental unit/common)
+- `GET /api/v1/maintenance/tickets` (Permission: `maintenance.read`) — Search and filter tickets with pagination and sorting
+- `GET /api/v1/maintenance/tickets/:id` (Permission: `maintenance.read`) — Get ticket details with timeline, comments, attachments
+- `PATCH /api/v1/maintenance/tickets/:id` (Permission: `maintenance.update`) — Update ticket details, schedule, category, priority
+- `POST /api/v1/maintenance/tickets/:id/assign` (Permission: `maintenance.assign`) — Assign staff member to ticket (OPEN -> ASSIGNED)
+- `POST /api/v1/maintenance/tickets/:id/reassign` (Permission: `maintenance.assign`) — Reassign staff member
+- `POST /api/v1/maintenance/tickets/:id/unassign` (Permission: `maintenance.assign`) — Unassign staff member (ASSIGNED -> OPEN)
+- `POST /api/v1/maintenance/tickets/:id/start` (Permission: `maintenance.update`) — Start work on ticket (ASSIGNED/OPEN -> IN_PROGRESS)
+- `POST /api/v1/maintenance/tickets/:id/complete` (Permission: `maintenance.complete`) — Complete work with actual cost & resolution notes (IN_PROGRESS/ASSIGNED -> COMPLETED)
+- `POST /api/v1/maintenance/tickets/:id/verify` (Permission: `maintenance.verify`) — Manager verifies completed work (COMPLETED -> VERIFIED)
+- `POST /api/v1/maintenance/tickets/:id/close` (Permission: `maintenance.close`) — Close verified ticket (VERIFIED/COMPLETED -> CLOSED)
+- `POST /api/v1/maintenance/tickets/:id/cancel` (Permission: `maintenance.cancel`) — Cancel ticket with reason (OPEN/ASSIGNED/IN_PROGRESS -> CANCELLED)
+- `POST /api/v1/maintenance/tickets/:id/comments` (Permission: `maintenance.comment`) — Post comment on ticket
+- `GET /api/v1/maintenance/tickets/:id/comments` (Permission: `maintenance.read`) — Get all comments on ticket
+- `POST /api/v1/maintenance/tickets/:id/attachments` (Permission: `maintenance.create`) — Add attachment metadata (BEFORE, AFTER, RECEIPT, INVOICE, OTHER)
+- `GET /api/v1/maintenance/tickets/:id/attachments` (Permission: `maintenance.read`) — Get attachments on ticket
+- `PATCH /api/v1/maintenance/tickets/:id/cost` (Permission: `maintenance.manage_cost`) — Update estimated & actual costs (Decimal protected)
+- `POST /api/v1/maintenance/vendors` (Permission: `maintenance.manage_vendor`) — Register maintenance vendor
+- `GET /api/v1/maintenance/vendors` (Permission: `maintenance.read`) — List maintenance vendors
+- `GET /api/v1/maintenance/vendors/:id` (Permission: `maintenance.read`) — Get vendor details
+- `PATCH /api/v1/maintenance/vendors/:id` (Permission: `maintenance.manage_vendor`) — Update vendor details
+- `GET /api/v1/maintenance/summary` (Permission: `maintenance.read`) — Organization-wide maintenance KPIs and cost totals
+- `GET /api/v1/properties/:propertyId/maintenance/summary` (Permission: `maintenance.read`) — Property-specific maintenance KPIs and cost totals
+- `GET /api/v1/tenants/:tenantId/maintenance/summary` (Permission: `maintenance.read`) — Tenant-specific maintenance requests summary
+

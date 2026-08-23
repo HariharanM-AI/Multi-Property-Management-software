@@ -73,34 +73,6 @@ export enum KycVerificationStatus {
   REJECTED = 'REJECTED',
 }
 
-
-export enum MaintenanceCategory {
-  PLUMBING = 'PLUMBING',
-  ELECTRICAL = 'ELECTRICAL',
-  CLEANING = 'CLEANING',
-  FURNITURE = 'FURNITURE',
-  APPLIANCE = 'APPLIANCE',
-  INTERNET = 'INTERNET',
-  OTHER = 'OTHER',
-}
-
-export enum MaintenancePriority {
-  LOW = 'LOW',
-  MEDIUM = 'MEDIUM',
-  HIGH = 'HIGH',
-  URGENT = 'URGENT',
-}
-
-export enum MaintenanceStatus {
-  OPEN = 'OPEN',
-  ASSIGNED = 'ASSIGNED',
-  IN_PROGRESS = 'IN_PROGRESS',
-  COMPLETED = 'COMPLETED',
-  VERIFIED = 'VERIFIED',
-  CLOSED = 'CLOSED',
-  CANCELLED = 'CANCELLED',
-}
-
 export enum ExpenseCategoryType {
   SALARY = 'SALARY',
   ELECTRICITY = 'ELECTRICITY',

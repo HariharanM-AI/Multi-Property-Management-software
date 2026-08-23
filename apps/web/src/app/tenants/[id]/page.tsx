@@ -41,6 +41,7 @@ import {
   Shield,
   Zap,
   UtensilsCrossed,
+  Wrench,
 } from 'lucide-react';
 
 export default function TenantDetailsPage() {
@@ -78,13 +79,16 @@ export default function TenantDetailsPage() {
   const [elecSummary, setElecSummary] = useState<any | null>(null);
   const [mealSummary, setMealSummary] = useState<any | null>(null);
 
+  // Maintenance Summary (CORE-013)
+  const [maintSummary, setMaintSummary] = useState<any | null>(null);
+
   const fetchTenantDetails = useCallback(async () => {
     if (!tenantId) return;
     try {
       setLoading(true);
       setErrorMsg(null);
       const token = localStorage.getItem('propertyos_token');
-      const [res, agrRes, finRes, elecRes, mealRes] = await Promise.all([
+      const [res, agrRes, finRes, elecRes, mealRes, maintRes] = await Promise.all([
         fetch(`/api/v1/tenants/${tenantId}`, {
           headers: { Authorization: `Bearer ${token}` },
         }),
@@ -98,6 +102,9 @@ export default function TenantDetailsPage() {
           headers: { Authorization: `Bearer ${token}` },
         }),
         fetch(`/api/v1/tenants/${tenantId}/meals/summary`, {
+          headers: { Authorization: `Bearer ${token}` },
+        }),
+        fetch(`/api/v1/tenants/${tenantId}/maintenance/summary`, {
           headers: { Authorization: `Bearer ${token}` },
         }),
       ]);
@@ -126,6 +133,11 @@ export default function TenantDetailsPage() {
       if (mealRes.ok) {
         const mJson = await mealRes.json();
         if (mJson.data || mJson) setMealSummary(mJson.data || mJson);
+      }
+
+      if (maintRes.ok) {
+        const mntJson = await maintRes.json();
+        if (mntJson.data || mntJson) setMaintSummary(mntJson.data || mntJson);
       }
     } catch (err: any) {
       setErrorMsg(err.message || 'Failed to load tenant details');
@@ -831,6 +843,59 @@ export default function TenantDetailsPage() {
                         {r.mealType}: {r.status}
                       </span>
                     ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Maintenance Requests & Work Orders (CORE-013) */}
+            {maintSummary && (
+              <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                    <Wrench className="w-5 h-5 text-teal-600" />
+                    Maintenance & Work Orders
+                  </h2>
+                  <Link
+                    href="/maintenance"
+                    className="text-xs font-semibold text-brand-teal hover:underline"
+                  >
+                    View All Tickets
+                  </Link>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                  <div className="p-3 bg-slate-50 rounded-lg border border-slate-100">
+                    <span className="text-[11px] font-semibold text-slate-500 block uppercase">Total Requests</span>
+                    <span className="text-sm font-bold text-slate-900">
+                      {maintSummary.totalTickets || 0}
+                    </span>
+                  </div>
+                  <div className="p-3 bg-slate-50 rounded-lg border border-slate-100">
+                    <span className="text-[11px] font-semibold text-slate-500 block uppercase">Active In Progress</span>
+                    <span className="text-sm font-bold text-amber-600">
+                      {maintSummary.activeTickets || 0}
+                    </span>
+                  </div>
+                  <div className="p-3 bg-slate-50 rounded-lg border border-slate-100">
+                    <span className="text-[11px] font-semibold text-slate-500 block uppercase">Resolved / Closed</span>
+                    <span className="text-sm font-bold text-emerald-600">
+                      {maintSummary.completedTickets || 0}
+                    </span>
+                  </div>
+                </div>
+
+                {maintSummary.latestTicket && (
+                  <div className="border-t border-slate-100 pt-2 flex items-center justify-between text-xs">
+                    <span className="text-slate-600">
+                      Latest: <span className="font-semibold text-slate-800">{maintSummary.latestTicket.title}</span> ({maintSummary.latestTicket.ticketNumber})
+                    </span>
+                    <Link
+                      href={`/maintenance/${maintSummary.latestTicket.id}`}
+                      className="text-teal-600 hover:underline font-semibold"
+                    >
+                      View Ticket →
+                    </Link>
                   </div>
                 )}
               </div>

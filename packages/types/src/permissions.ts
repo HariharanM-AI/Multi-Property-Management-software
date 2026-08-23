@@ -58,11 +58,18 @@ export enum Permission {
   SECURITY_DEPOSIT_READ = 'security_deposit.read',
   SECURITY_DEPOSIT_UPDATE = 'security_deposit.update',
 
-  // Maintenance & Operations Foundation
+  // Maintenance & Operations Foundation (CORE-013)
   MAINTENANCE_READ = 'maintenance.read',
   MAINTENANCE_CREATE = 'maintenance.create',
-  MAINTENANCE_ASSIGN = 'maintenance.assign',
   MAINTENANCE_UPDATE = 'maintenance.update',
+  MAINTENANCE_ASSIGN = 'maintenance.assign',
+  MAINTENANCE_COMMENT = 'maintenance.comment',
+  MAINTENANCE_COMPLETE = 'maintenance.complete',
+  MAINTENANCE_VERIFY = 'maintenance.verify',
+  MAINTENANCE_CLOSE = 'maintenance.close',
+  MAINTENANCE_CANCEL = 'maintenance.cancel',
+  MAINTENANCE_MANAGE_COST = 'maintenance.manage_cost',
+  MAINTENANCE_MANAGE_VENDOR = 'maintenance.manage_vendor',
 
   // Check-In & Onboarding Management
   CHECKIN_READ = 'checkin.read',
@@ -182,8 +189,15 @@ export const ROLE_PERMISSIONS_MAP: Record<UserRole, readonly Permission[]> = {
     Permission.SECURITY_DEPOSIT_UPDATE,
     Permission.MAINTENANCE_READ,
     Permission.MAINTENANCE_CREATE,
-    Permission.MAINTENANCE_ASSIGN,
     Permission.MAINTENANCE_UPDATE,
+    Permission.MAINTENANCE_ASSIGN,
+    Permission.MAINTENANCE_COMMENT,
+    Permission.MAINTENANCE_COMPLETE,
+    Permission.MAINTENANCE_VERIFY,
+    Permission.MAINTENANCE_CLOSE,
+    Permission.MAINTENANCE_CANCEL,
+    Permission.MAINTENANCE_MANAGE_COST,
+    Permission.MAINTENANCE_MANAGE_VENDOR,
     Permission.REPORTS_READ,
   ],
 
@@ -248,8 +262,15 @@ export const ROLE_PERMISSIONS_MAP: Record<UserRole, readonly Permission[]> = {
     Permission.SECURITY_DEPOSIT_UPDATE,
     Permission.MAINTENANCE_READ,
     Permission.MAINTENANCE_CREATE,
-    Permission.MAINTENANCE_ASSIGN,
     Permission.MAINTENANCE_UPDATE,
+    Permission.MAINTENANCE_ASSIGN,
+    Permission.MAINTENANCE_COMMENT,
+    Permission.MAINTENANCE_COMPLETE,
+    Permission.MAINTENANCE_VERIFY,
+    Permission.MAINTENANCE_CLOSE,
+    Permission.MAINTENANCE_CANCEL,
+    Permission.MAINTENANCE_MANAGE_COST,
+    Permission.MAINTENANCE_MANAGE_VENDOR,
     Permission.REPORTS_READ,
   ],
 
@@ -284,6 +305,8 @@ export const ROLE_PERMISSIONS_MAP: Record<UserRole, readonly Permission[]> = {
     Permission.LEDGER_READ,
     Permission.SECURITY_DEPOSIT_READ,
     Permission.SECURITY_DEPOSIT_UPDATE,
+    Permission.MAINTENANCE_READ,
+    Permission.MAINTENANCE_MANAGE_COST,
     Permission.REPORTS_READ,
   ],
 
@@ -320,6 +343,7 @@ export const ROLE_PERMISSIONS_MAP: Record<UserRole, readonly Permission[]> = {
     Permission.MAINTENANCE_READ,
     Permission.MAINTENANCE_CREATE,
     Permission.MAINTENANCE_UPDATE,
+    Permission.MAINTENANCE_COMMENT,
   ],
 
   [UserRole.SECURITY]: [
@@ -332,13 +356,17 @@ export const ROLE_PERMISSIONS_MAP: Record<UserRole, readonly Permission[]> = {
     Permission.AGREEMENT_READ,
     Permission.INVOICE_READ,
     Permission.PAYMENT_READ,
+    Permission.MAINTENANCE_READ,
   ],
 
   [UserRole.MAINTENANCE_STAFF]: [
     Permission.ORGANIZATION_READ,
     Permission.PROPERTY_READ,
     Permission.MAINTENANCE_READ,
+    Permission.MAINTENANCE_CREATE,
     Permission.MAINTENANCE_UPDATE,
+    Permission.MAINTENANCE_COMMENT,
+    Permission.MAINTENANCE_COMPLETE,
   ],
 
   [UserRole.TENANT]: [
@@ -354,6 +382,7 @@ export const ROLE_PERMISSIONS_MAP: Record<UserRole, readonly Permission[]> = {
     Permission.SECURITY_DEPOSIT_READ,
     Permission.MAINTENANCE_READ,
     Permission.MAINTENANCE_CREATE,
+    Permission.MAINTENANCE_COMMENT,
   ],
 };
 

@@ -23,7 +23,11 @@ graph TD
     CORE011 --> CORE012[CORE-012: Electricity & PG Meal Management]
     CORE005 --> CORE012
     
-    CORE004 --> CORE016[CORE-016: Maintenance Ticketing]
+    CORE004 --> CORE013[CORE-013: Maintenance & Work Orders Foundation]
+    CORE005 --> CORE013
+    CORE006 --> CORE013
+    CORE007 --> CORE013
+    
     CORE003 --> CORE017[CORE-017: Staff & Attendance]
     CORE004 --> CORE018[CORE-018: Visitor Management]
     CORE004 --> CORE019[CORE-019: Inventory Tracking]
@@ -52,6 +56,6 @@ graph TD
 3. **Tier 2 (Core Physical Models)**: CORE-004 (Properties), CORE-005 (PG Hierarchy), CORE-006 (Rental Hierarchy).
 4. **Tier 3 (Tenant & Lifecycle)**: CORE-007 (Tenants & KYC), CORE-008 (Check-In), CORE-010 (Agreements), CORE-009 (Check-Out & Settlement).
 5. **Tier 4 (Financial & Utilities)**: CORE-011 (Billing & Ledger Foundation), CORE-012 (Electricity & PG Meal Management).
-6. **Tier 5 (Operations & Facility)**: CORE-016 (Maintenance), CORE-017 (Staff/Attendance), CORE-018 (Visitors), CORE-019 (Inventory), CORE-020 (Expenses).
+6. **Tier 5 (Operations & Facility)**: CORE-013 (Maintenance & Work Order Foundation), CORE-017 (Staff/Attendance), CORE-018 (Visitors), CORE-019 (Inventory), CORE-020 (Expenses).
 7. **Tier 6 (Analytics & Dashboards)**: CORE-021 (P&L), CORE-022 (Executive Dashboards).
 8. **Tier 7 (Engagement & Ecosystem)**: CORE-023 (Notifications), CORE-024 (Discovery), CORE-025 (Community), CORE-026 (Marketplace), CORE-027 (Services).
