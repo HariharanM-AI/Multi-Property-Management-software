@@ -8,3 +8,5 @@ export * from './rental.schema.js';
 export * from './checkin.schema.js';
 export * from './checkout.schema.js';
 export * from './agreement.schema.js';
+export * from './electricity.schema.js';
+export * from './meal.schema.js';

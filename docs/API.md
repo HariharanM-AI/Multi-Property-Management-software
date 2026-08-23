@@ -168,3 +168,127 @@ All structure endpoints operate within a scoped property context.
   - Request: `{ "status": "OCCUPIED" }`
 - `DELETE /api/v1/properties/:propertyId/beds/:bedId` (Permission: `property.delete` - blocked if occupied)
 
+---
+
+## 7. Whole-Unit Rentals (`/api/v1/properties/:propertyId/units`, `/leases`)
+- `GET /api/v1/properties/:propertyId/rental/summary` (Permission: `property.read`)
+- `POST /api/v1/properties/:propertyId/units` (Permission: `property.create`)
+- `GET /api/v1/properties/:propertyId/units` (Permission: `property.read`)
+- `GET /api/v1/properties/:propertyId/units/:unitId` (Permission: `property.read`)
+- `PATCH /api/v1/properties/:propertyId/units/:unitId` (Permission: `property.update`)
+- `DELETE /api/v1/properties/:propertyId/units/:unitId` (Permission: `property.delete`)
+- `POST /api/v1/properties/:propertyId/leases` (Permission: `lease.create`)
+- `GET /api/v1/properties/:propertyId/leases` (Permission: `lease.read`)
+- `GET /api/v1/properties/:propertyId/leases/:leaseId` (Permission: `lease.read`)
+- `PATCH /api/v1/properties/:propertyId/leases/:leaseId` (Permission: `lease.update`)
+- `POST /api/v1/properties/:propertyId/leases/:leaseId/terminate` (Permission: `lease.terminate`)
+
+---
+
+## 8. Tenant & KYC Management (`/api/v1/tenants`)
+- `POST /api/v1/tenants` (Permission: `tenant.create`)
+- `GET /api/v1/tenants` (Permission: `tenant.read`)
+- `GET /api/v1/tenants/:id` (Permission: `tenant.read`)
+- `PATCH /api/v1/tenants/:id` (Permission: `tenant.update`)
+- `DELETE /api/v1/tenants/:id` (Permission: `tenant.delete`)
+- `POST /api/v1/tenants/:id/documents` (Permission: `tenant.create`)
+- `POST /api/v1/tenants/:id/documents/:docId/verify` (Permission: `tenant.verify`)
+- `DELETE /api/v1/tenants/:id/documents/:docId` (Permission: `tenant.delete`)
+
+---
+
+## 9. Digital Onboarding & Check-In (`/api/v1/check-ins`, `/properties/:propertyId/check-ins`)
+- `GET /api/v1/tenants/:tenantId/onboarding-status` (Permission: `checkin.read`)
+- `POST /api/v1/properties/:propertyId/check-ins` (Permission: `checkin.create`)
+- `GET /api/v1/properties/:propertyId/check-ins` (Permission: `checkin.read`)
+- `GET /api/v1/check-ins/:checkInId` (Permission: `checkin.read`)
+- `POST /api/v1/check-ins/:checkInId/ready` (Permission: `checkin.update`)
+- `POST /api/v1/check-ins/:checkInId/complete` (Permission: `checkin.complete`)
+- `POST /api/v1/check-ins/:checkInId/cancel` (Permission: `checkin.cancel`)
+
+---
+
+## 10. Digital Notice & Check-Out Settlement (`/api/v1/checkouts`, `/properties/:propertyId/checkouts`)
+- `POST /api/v1/properties/:propertyId/checkouts` (Permission: `checkout.create`)
+- `GET /api/v1/properties/:propertyId/checkouts` (Permission: `checkout.read`)
+- `GET /api/v1/checkouts/:checkoutId` (Permission: `checkout.read`)
+- `GET /api/v1/checkouts/:checkoutId/settlement` (Permission: `checkout.read`)
+- `PATCH /api/v1/checkouts/:checkoutId/settlement` (Permission: `checkout.update`)
+- `POST /api/v1/checkouts/:checkoutId/ready` (Permission: `checkout.update`)
+- `POST /api/v1/checkouts/:checkoutId/complete` (Permission: `checkout.complete`)
+- `POST /api/v1/checkouts/:checkoutId/cancel` (Permission: `checkout.cancel`)
+
+---
+
+## 11. Digital Agreements & Signatures (`/api/v1/agreements`, `/agreement-templates`)
+- `POST /api/v1/agreement-templates` (Permission: `agreement.create`)
+- `GET /api/v1/agreement-templates` (Permission: `agreement.read`)
+- `PATCH /api/v1/agreement-templates/:templateId` (Permission: `agreement.update`)
+- `POST /api/v1/agreement-templates/:templateId/activate` (Permission: `agreement.update`)
+- `POST /api/v1/agreement-templates/:templateId/archive` (Permission: `agreement.delete`)
+- `POST /api/v1/properties/:propertyId/agreements` (Permission: `agreement.create`)
+- `GET /api/v1/agreements/:agreementId` (Permission: `agreement.read`)
+- `POST /api/v1/agreements/:agreementId/generate` (Permission: `agreement.create`)
+- `POST /api/v1/agreements/:agreementId/send-for-signature` (Permission: `agreement.update`)
+- `POST /api/v1/agreements/:agreementId/sign` (Permission: `agreement.sign`)
+- `POST /api/v1/agreements/:agreementId/finalize` (Permission: `agreement.finalize`)
+- `POST /api/v1/agreements/:agreementId/cancel` (Permission: `agreement.cancel`)
+
+---
+
+## 12. Billing, Invoicing & Double-Entry Ledger (`/api/v1/billing`, `/invoices`, `/payments`, `/ledger`)
+- `POST /api/v1/billing/charges` (Permission: `billing.create`)
+- `GET /api/v1/billing/charges` (Permission: `billing.read`)
+- `POST /api/v1/billing/schedules` (Permission: `billing.create`)
+- `GET /api/v1/billing/schedules` (Permission: `billing.read`)
+- `POST /api/v1/billing/generate-due` (Permission: `billing.create`)
+- `POST /api/v1/invoices` (Permission: `billing.create`)
+- `GET /api/v1/invoices` (Permission: `billing.read`)
+- `GET /api/v1/invoices/:id` (Permission: `billing.read`)
+- `POST /api/v1/invoices/:id/issue` (Permission: `billing.update`)
+- `POST /api/v1/invoices/:id/void` (Permission: `billing.update`)
+- `POST /api/v1/payments` (Permission: `payment.create`)
+- `GET /api/v1/payments` (Permission: `payment.read`)
+- `POST /api/v1/payments/:id/allocate` (Permission: `payment.create`)
+- `GET /api/v1/ledger` (Permission: `ledger.read`)
+- `GET /api/v1/ledger/tenant/:tenantId` (Permission: `ledger.read`)
+- `GET /api/v1/ledger/invoice/:invoiceId` (Permission: `ledger.read`)
+- `GET /api/v1/financials/tenant/:tenantId` (Permission: `billing.read`)
+- `GET /api/v1/financials/property/:propertyId` (Permission: `billing.read`)
+- `GET /api/v1/financials/organization` (Permission: `billing.read`)
+
+---
+
+## 13. Electricity Management (`/api/v1/properties/:propertyId/electricity`)
+- `POST /api/v1/properties/:propertyId/electricity/meters` (Permission: `electricity.create`)
+- `GET /api/v1/properties/:propertyId/electricity/meters` (Permission: `electricity.read`)
+- `GET /api/v1/properties/:propertyId/electricity/meters/:meterId` (Permission: `electricity.read`)
+- `PATCH /api/v1/properties/:propertyId/electricity/meters/:meterId` (Permission: `electricity.update`)
+- `POST /api/v1/properties/:propertyId/electricity/readings` (Permission: `electricity.create`)
+- `GET /api/v1/properties/:propertyId/electricity/readings` (Permission: `electricity.read`)
+- `POST /api/v1/properties/:propertyId/electricity/rates` (Permission: `electricity.create`)
+- `GET /api/v1/properties/:propertyId/electricity/rates` (Permission: `electricity.read`)
+- `POST /api/v1/properties/:propertyId/electricity/charges/generate` (Permission: `electricity.create`)
+- `GET /api/v1/properties/:propertyId/electricity/charges` (Permission: `electricity.read`)
+- `GET /api/v1/properties/:propertyId/electricity/summary` (Permission: `electricity.read`)
+- `GET /api/v1/tenants/:tenantId/electricity/summary` (Permission: `electricity.read`)
+
+---
+
+## 14. PG Meal Management (`/api/v1/properties/:propertyId/meals`)
+- `POST /api/v1/properties/:propertyId/meals/plans` (Permission: `meal.create`)
+- `GET /api/v1/properties/:propertyId/meals/plans` (Permission: `meal.read`)
+- `GET /api/v1/properties/:propertyId/meals/plans/:planId` (Permission: `meal.read`)
+- `PATCH /api/v1/properties/:propertyId/meals/plans/:planId` (Permission: `meal.update`)
+- `POST /api/v1/properties/:propertyId/meals/subscriptions` (Permission: `meal.create`)
+- `GET /api/v1/properties/:propertyId/meals/subscriptions` (Permission: `meal.read`)
+- `PATCH /api/v1/properties/:propertyId/meals/subscriptions/:subscriptionId` (Permission: `meal.update`)
+- `POST /api/v1/properties/:propertyId/meals/records` (Permission: `meal.create`)
+- `POST /api/v1/properties/:propertyId/meals/records/bulk` (Permission: `meal.create`)
+- `GET /api/v1/properties/:propertyId/meals/matrix` (Permission: `meal.read`)
+- `GET /api/v1/properties/:propertyId/meals/records` (Permission: `meal.read`)
+- `POST /api/v1/properties/:propertyId/meals/charges/generate` (Permission: `meal.create`)
+- `GET /api/v1/properties/:propertyId/meals/charges` (Permission: `meal.read`)
+- `GET /api/v1/properties/:propertyId/meals/summary` (Permission: `meal.read`)
+- `GET /api/v1/tenants/:tenantId/meals/summary` (Permission: `meal.read`)
+

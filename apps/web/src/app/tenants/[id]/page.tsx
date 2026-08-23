@@ -39,6 +39,8 @@ import {
   ReceiptText,
   CircleDollarSign,
   Shield,
+  Zap,
+  UtensilsCrossed,
 } from 'lucide-react';
 
 export default function TenantDetailsPage() {
@@ -72,13 +74,17 @@ export default function TenantDetailsPage() {
   // Financial Summary
   const [financialSummary, setFinancialSummary] = useState<any | null>(null);
 
+  // Electricity & Meals Summaries (CORE-012)
+  const [elecSummary, setElecSummary] = useState<any | null>(null);
+  const [mealSummary, setMealSummary] = useState<any | null>(null);
+
   const fetchTenantDetails = useCallback(async () => {
     if (!tenantId) return;
     try {
       setLoading(true);
       setErrorMsg(null);
       const token = localStorage.getItem('propertyos_token');
-      const [res, agrRes, finRes] = await Promise.all([
+      const [res, agrRes, finRes, elecRes, mealRes] = await Promise.all([
         fetch(`/api/v1/tenants/${tenantId}`, {
           headers: { Authorization: `Bearer ${token}` },
         }),
@@ -86,6 +92,12 @@ export default function TenantDetailsPage() {
           headers: { Authorization: `Bearer ${token}` },
         }),
         fetch(`/api/v1/financials/tenant/${tenantId}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        }),
+        fetch(`/api/v1/tenants/${tenantId}/electricity/summary`, {
+          headers: { Authorization: `Bearer ${token}` },
+        }),
+        fetch(`/api/v1/tenants/${tenantId}/meals/summary`, {
           headers: { Authorization: `Bearer ${token}` },
         }),
       ]);
@@ -104,6 +116,16 @@ export default function TenantDetailsPage() {
       if (finRes.ok) {
         const finJson = await finRes.json();
         if (finJson.data) setFinancialSummary(finJson.data);
+      }
+
+      if (elecRes.ok) {
+        const eJson = await elecRes.json();
+        if (eJson.data || eJson) setElecSummary(eJson.data || eJson);
+      }
+
+      if (mealRes.ok) {
+        const mJson = await mealRes.json();
+        if (mJson.data || mJson) setMealSummary(mJson.data || mJson);
       }
     } catch (err: any) {
       setErrorMsg(err.message || 'Failed to load tenant details');
@@ -709,6 +731,108 @@ export default function TenantDetailsPage() {
                     </span>
                   </div>
                 </div>
+              </div>
+            )}
+
+            {/* Electricity & Utility Allocation (CORE-012) */}
+            {elecSummary && (
+              <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                    <Zap className="w-5 h-5 text-amber-500" />
+                    Electricity & Utility Allocation
+                  </h2>
+                  <Link
+                    href="/electricity"
+                    className="text-xs font-semibold text-brand-teal hover:underline"
+                  >
+                    View All Readings
+                  </Link>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                  <div className="p-3 bg-slate-50 rounded-lg border border-slate-100">
+                    <span className="text-[11px] font-semibold text-slate-500 block uppercase">Allocated Units</span>
+                    <span className="text-sm font-bold text-slate-900">
+                      {elecSummary.currentPeriodUnits} units
+                    </span>
+                  </div>
+                  <div className="p-3 bg-slate-50 rounded-lg border border-slate-100">
+                    <span className="text-[11px] font-semibold text-slate-500 block uppercase">Allocated Charges</span>
+                    <span className="text-sm font-bold text-amber-600">
+                      ₹{Number(elecSummary.allocatedAmount).toLocaleString('en-IN')}
+                    </span>
+                  </div>
+                  <div className="p-3 bg-slate-50 rounded-lg border border-slate-100">
+                    <span className="text-[11px] font-semibold text-slate-500 block uppercase">Assigned Meter</span>
+                    <span className="text-sm font-bold text-slate-900">
+                      {elecSummary.meter ? `Meter ${elecSummary.meter.meterNumber}` : 'No meter linked'}
+                    </span>
+                  </div>
+                </div>
+
+                {elecSummary.recentCharges && elecSummary.recentCharges.length > 0 && (
+                  <div className="divide-y divide-slate-100 border-t border-slate-100 pt-2">
+                    {elecSummary.recentCharges.slice(0, 3).map((chg: any) => (
+                      <div key={chg.id} className="py-2 flex items-center justify-between text-xs">
+                        <span className="text-slate-600">
+                          {new Date(chg.chargePeriodStart).toLocaleDateString()} - {new Date(chg.chargePeriodEnd).toLocaleDateString()} ({chg.unitsConsumed} units)
+                        </span>
+                        <span className="font-bold text-slate-900">₹{Number(chg.amount).toFixed(2)}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* PG Mess & Meal Subscription (CORE-012) */}
+            {mealSummary && (
+              <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                    <UtensilsCrossed className="w-5 h-5 text-emerald-600" />
+                    PG Mess & Meal Plan
+                  </h2>
+                  <Link
+                    href="/meals"
+                    className="text-xs font-semibold text-brand-teal hover:underline"
+                  >
+                    Attendance Matrix
+                  </Link>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                  <div className="p-3 bg-slate-50 rounded-lg border border-slate-100">
+                    <span className="text-[11px] font-semibold text-slate-500 block uppercase">Active Package</span>
+                    <span className="text-sm font-bold text-slate-900">
+                      {mealSummary.activePlan ? mealSummary.activePlan.name : 'No Active Plan'}
+                    </span>
+                  </div>
+                  <div className="p-3 bg-slate-50 rounded-lg border border-slate-100">
+                    <span className="text-[11px] font-semibold text-slate-500 block uppercase">Plan Price</span>
+                    <span className="text-sm font-bold text-emerald-600">
+                      {mealSummary.activePlan ? `₹${Number(mealSummary.activePlan.price).toFixed(2)}/mo` : '—'}
+                    </span>
+                  </div>
+                  <div className="p-3 bg-slate-50 rounded-lg border border-slate-100">
+                    <span className="text-[11px] font-semibold text-slate-500 block uppercase">Subscription Status</span>
+                    <span className="text-sm font-bold text-brand-teal">
+                      {mealSummary.subscription ? mealSummary.subscription.status : 'Inactive'}
+                    </span>
+                  </div>
+                </div>
+
+                {mealSummary.todayRecords && mealSummary.todayRecords.length > 0 && (
+                  <div className="border-t border-slate-100 pt-2 flex items-center gap-4 text-xs">
+                    <span className="font-semibold text-slate-700">Today's Meals:</span>
+                    {mealSummary.todayRecords.map((r: any) => (
+                      <span key={r.id} className="px-2 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-200 font-medium">
+                        {r.mealType}: {r.status}
+                      </span>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
 

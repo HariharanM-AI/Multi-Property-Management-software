@@ -241,6 +241,72 @@ enum PaymentAllocationStatus {
   REVERSED
 }
 
+enum MeterType {
+  ROOM
+  PROPERTY
+  COMMON_AREA
+}
+
+enum MeterStatus {
+  ACTIVE
+  INACTIVE
+  MAINTENANCE
+}
+
+enum ElectricityRateStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum ElectricityChargeStatus {
+  PENDING
+  INVOICED
+  CANCELLED
+}
+
+enum ElectricityAllocationType {
+  TENANT_SPECIFIC
+  ROOM_SHARED
+  PROPERTY_COMMON
+}
+
+enum MealType {
+  BREAKFAST
+  LUNCH
+  DINNER
+}
+
+enum MealPlanStatus {
+  ACTIVE
+  INACTIVE
+  ARCHIVED
+}
+
+enum MealSubscriptionStatus {
+  ACTIVE
+  PAUSED
+  CANCELLED
+  EXPIRED
+}
+
+enum MealRecordStatus {
+  CONSUMED
+  SKIPPED
+  NOT_AVAILABLE
+  EXCUSED
+}
+
+enum MealChargeStatus {
+  PENDING
+  INVOICED
+  CANCELLED
+}
+
+enum MealBillingMode {
+  SUBSCRIPTION
+  PER_MEAL
+}
+
 enum MaintenanceCategory {
   PLUMBING
   ELECTRICAL
@@ -328,6 +394,14 @@ model Organization {
   credits                 Credit[]
   securityDepositAccounts SecurityDepositAccount[]
   ledgerEntries           LedgerEntry[]
+  electricityMeters       ElectricityMeter[]
+  electricityReadings     ElectricityReading[]
+  electricityRates        ElectricityRate[]
+  electricityCharges      ElectricityCharge[]
+  mealPlans               MealPlan[]
+  mealSubscriptions       MealSubscription[]
+  mealRecords             MealRecord[]
+  mealCharges             MealCharge[]
 
   @@map("organizations")
 }
@@ -497,8 +571,14 @@ model Property {
   floors         Floor[]
   rooms          Room[]
   rentalUnits    RentalUnit[]
-  meters         Meter[]
-  mealPlans      MealPlan[]
+  electricityMeters       ElectricityMeter[]
+  electricityReadings     ElectricityReading[]
+  electricityRates        ElectricityRate[]
+  electricityCharges      ElectricityCharge[]
+  mealPlans               MealPlan[]
+  mealSubscriptions       MealSubscription[]
+  mealRecords             MealRecord[]
+  mealCharges             MealCharge[]
   maintenanceTickets MaintenanceTicket[]
   staffMembers   StaffMember[]
   visitors       VisitorRecord[]
@@ -616,7 +696,8 @@ model Room {
   floor    Floor              @relation(fields: [floorId], references: [id], onDelete: Cascade)
   property Property           @relation(fields: [propertyId], references: [id], onDelete: Cascade)
   beds     Bed[]
-  meters   Meter[]
+  electricityMeters   ElectricityMeter[]
+  electricityCharges  ElectricityCharge[]
   maintenanceTickets MaintenanceTicket[]
   inventoryItems InventoryItem[]
 
@@ -670,7 +751,7 @@ model RentalUnit {
 
   property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
   leases   Lease[]
-  meters   Meter[]
+  electricityMeters ElectricityMeter[]
   maintenanceTickets MaintenanceTicket[]
   inventoryItems InventoryItem[]
   checkIns CheckIn[]
@@ -760,7 +841,10 @@ model Tenant {
   leases              Lease[]
   invoices                Invoice[]
   payments                Payment[]
+  electricityCharges      ElectricityCharge[]
   mealSubscriptions       MealSubscription[]
+  mealRecords             MealRecord[]
+  mealCharges             MealCharge[]
   maintenanceTickets      MaintenanceTicket[]
   visitors                VisitorRecord[]
   marketplaceListings     MarketplaceListing[]
@@ -1146,8 +1230,10 @@ model Invoice {
   checkIn       CheckIn?            @relation(fields: [checkInId], references: [id], onDelete: SetNull)
   lines         InvoiceLine[]
   allocations   PaymentAllocation[]
-  ledgerEntries LedgerEntry[]
-  credits       Credit[]
+  ledgerEntries      LedgerEntry[]
+  credits            Credit[]
+  electricityCharges ElectricityCharge[]
+  mealCharges        MealCharge[]
 
   @@unique([organizationId, invoiceNumber])
   @@index([organizationId])
@@ -1295,69 +1381,126 @@ model LedgerEntry {
 }
 
 // ------------------------------------------------------------------------------
-// ELECTRICITY & UTILITIES
+// ELECTRICITY & UTILITIES (PG & Configurable Properties)
 // ------------------------------------------------------------------------------
 
-model Meter {
-  id           String    @id @default(uuid())
-  propertyId   String
-  roomId       String?
-  rentalUnitId String?
-  meterNumber  String
-  initialReading Decimal @default(0) @db.Decimal(10, 2)
-  createdAt    DateTime  @default(now())
+model ElectricityMeter {
+  id             String      @id @default(uuid())
+  organizationId String
+  propertyId     String
+  roomId         String?
+  rentalUnitId   String?
+  meterNumber    String
+  meterType      MeterType   @default(ROOM)
+  status         MeterStatus @default(ACTIVE)
+  initialReading Decimal     @default(0) @db.Decimal(12, 2)
+  installedAt    DateTime    @default(now())
+  lastReadingAt  DateTime?
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
 
-  property   Property            @relation(fields: [propertyId], references: [id], onDelete: Cascade)
-  room       Room?               @relation(fields: [roomId], references: [id], onDelete: SetNull)
-  rentalUnit RentalUnit?         @relation(fields: [rentalUnitId], references: [id], onDelete: SetNull)
-  readings   MeterReading[]
-  charges    ElectricityCharge[]
+  organization Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  property     Property             @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  room         Room?                @relation(fields: [roomId], references: [id], onDelete: SetNull)
+  rentalUnit   RentalUnit?          @relation(fields: [rentalUnitId], references: [id], onDelete: SetNull)
+  readings     ElectricityReading[]
+  charges      ElectricityCharge[]
 
   @@unique([propertyId, meterNumber])
-  @@map("meters")
+  @@index([organizationId])
+  @@index([propertyId])
+  @@index([roomId])
+  @@index([meterType])
+  @@index([status])
+  @@map("electricity_meters")
 }
 
-model MeterReading {
-  id              String   @id @default(uuid())
-  meterId         String
-  readingDate     DateTime
-  previousReading Decimal  @db.Decimal(10, 2)
-  currentReading  Decimal  @db.Decimal(10, 2)
-  unitsConsumed   Decimal  @db.Decimal(10, 2)
-  isResetOverride Boolean  @default(false)
-  resetReason     String?
-  recordedBy      String?
-  createdAt       DateTime @default(now())
+model ElectricityReading {
+  id                String   @id @default(uuid())
+  organizationId    String
+  propertyId        String
+  meterId           String
+  readingDate       DateTime
+  previousReading   Decimal  @db.Decimal(12, 2)
+  currentReading    Decimal  @db.Decimal(12, 2)
+  unitsConsumed     Decimal  @db.Decimal(12, 2)
+  previousReadingId String?
+  isResetOverride   Boolean  @default(false)
+  resetReason       String?
+  recordedBy        String?
+  notes             String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 
-  meter Meter @relation(fields: [meterId], references: [id], onDelete: Cascade)
+  organization Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  property     Property            @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  meter        ElectricityMeter    @relation(fields: [meterId], references: [id], onDelete: Cascade)
+  charges      ElectricityCharge[]
 
-  @@index([meterId, readingDate])
-  @@map("meter_readings")
+  @@unique([meterId, readingDate])
+  @@index([organizationId])
+  @@index([propertyId])
+  @@index([meterId])
+  @@index([readingDate])
+  @@map("electricity_readings")
 }
 
 model ElectricityRate {
-  id             String   @id @default(uuid())
+  id             String                @id @default(uuid())
+  organizationId String
   propertyId     String
-  ratePerUnitInr Decimal  @db.Decimal(10, 2)
+  ratePerUnit    Decimal               @db.Decimal(12, 2)
   effectiveFrom  DateTime
-  createdAt      DateTime @default(now())
+  effectiveTo    DateTime?
+  status         ElectricityRateStatus @default(ACTIVE)
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
 
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  property     Property     @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
   @@index([propertyId])
+  @@index([effectiveFrom])
+  @@index([status])
   @@map("electricity_rates")
 }
 
 model ElectricityCharge {
-  id            String   @id @default(uuid())
-  meterId       String
-  readingId     String
-  units         Decimal  @db.Decimal(10, 2)
-  ratePerUnit   Decimal  @db.Decimal(10, 2)
-  totalCharge   Decimal  @db.Decimal(10, 2)
-  billingMonth  DateTime
-  createdAt     DateTime @default(now())
+  id                String                    @id @default(uuid())
+  organizationId    String
+  propertyId        String
+  meterId           String?
+  readingId         String
+  tenantId          String?
+  roomId            String?
+  chargePeriodStart DateTime
+  chargePeriodEnd   DateTime
+  unitsConsumed     Decimal                   @db.Decimal(12, 2)
+  ratePerUnit       Decimal                   @db.Decimal(12, 2)
+  amount            Decimal                   @db.Decimal(12, 2)
+  allocationType    ElectricityAllocationType @default(ROOM_SHARED)
+  status            ElectricityChargeStatus   @default(PENDING)
+  invoiceId         String?
+  invoiceLineId     String?
+  createdAt         DateTime                  @default(now())
+  updatedAt         DateTime                  @updatedAt
 
-  meter Meter @relation(fields: [meterId], references: [id], onDelete: Cascade)
+  organization Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  property     Property           @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  meter        ElectricityMeter?  @relation(fields: [meterId], references: [id], onDelete: SetNull)
+  reading      ElectricityReading @relation(fields: [readingId], references: [id], onDelete: Cascade)
+  tenant       Tenant?            @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+  room         Room?              @relation(fields: [roomId], references: [id], onDelete: SetNull)
+  invoice      Invoice?           @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
 
+  @@index([organizationId])
+  @@index([propertyId])
+  @@index([meterId])
+  @@index([readingId])
+  @@index([tenantId])
+  @@index([roomId])
+  @@index([status])
   @@map("electricity_charges")
 }
 
@@ -1366,52 +1509,115 @@ model ElectricityCharge {
 // ------------------------------------------------------------------------------
 
 model MealPlan {
-  id          String   @id @default(uuid())
-  propertyId  String
-  name        String
-  description String?
-  pricePerDay Decimal  @db.Decimal(10, 2)
-  hasBreakfast Boolean @default(true)
-  hasLunch     Boolean @default(true)
-  hasDinner    Boolean @default(true)
-  createdAt   DateTime @default(now())
+  id               String           @id @default(uuid())
+  organizationId   String
+  propertyId       String
+  name             String
+  description      String?
+  price            Decimal          @db.Decimal(12, 2)
+  billingFrequency BillingFrequency @default(MONTHLY)
+  status           MealPlanStatus   @default(ACTIVE)
+  hasBreakfast     Boolean          @default(true)
+  hasLunch         Boolean          @default(true)
+  hasDinner        Boolean          @default(true)
+  effectiveFrom    DateTime?
+  effectiveTo      DateTime?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
 
+  organization  Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   property      Property           @relation(fields: [propertyId], references: [id], onDelete: Cascade)
   subscriptions MealSubscription[]
+  charges       MealCharge[]
 
+  @@index([organizationId])
+  @@index([propertyId])
+  @@index([status])
   @@map("meal_plans")
 }
 
 model MealSubscription {
-  id          String    @id @default(uuid())
-  mealPlanId  String
-  tenantId    String
-  startDate   DateTime
-  endDate     DateTime?
-  isActive    Boolean   @default(true)
-  createdAt   DateTime  @default(now())
+  id             String                 @id @default(uuid())
+  organizationId String
+  propertyId     String
+  tenantId       String
+  mealPlanId     String
+  startDate      DateTime
+  endDate        DateTime?
+  status         MealSubscriptionStatus @default(ACTIVE)
+  createdAt      DateTime               @default(now())
+  updatedAt      DateTime               @updatedAt
 
-  mealPlan MealPlan          @relation(fields: [mealPlanId], references: [id], onDelete: Restrict)
-  tenant   Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  records  MealDailyRecord[]
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  property     Property     @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  tenant       Tenant       @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  mealPlan     MealPlan     @relation(fields: [mealPlanId], references: [id], onDelete: Restrict)
 
+  @@index([organizationId])
+  @@index([propertyId])
   @@index([tenantId])
+  @@index([mealPlanId])
+  @@index([status])
   @@map("meal_subscriptions")
 }
 
-model MealDailyRecord {
-  id             String   @id @default(uuid())
-  subscriptionId String
-  date           DateTime
-  breakfastTaken Boolean  @default(false)
-  lunchTaken     Boolean  @default(false)
-  dinnerTaken    Boolean  @default(false)
-  createdAt      DateTime @default(now())
+model MealRecord {
+  id             String           @id @default(uuid())
+  organizationId String
+  propertyId     String
+  tenantId       String
+  mealDate       DateTime
+  mealType       MealType
+  status         MealRecordStatus @default(CONSUMED)
+  recordedAt     DateTime         @default(now())
+  recordedBy     String?
+  notes          String?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
 
-  subscription MealSubscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  property     Property     @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  tenant       Tenant       @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  charges      MealCharge[]
 
-  @@unique([subscriptionId, date])
-  @@map("meal_daily_records")
+  @@unique([tenantId, mealDate, mealType])
+  @@index([organizationId])
+  @@index([propertyId])
+  @@index([tenantId])
+  @@index([mealDate])
+  @@index([status])
+  @@map("meal_records")
+}
+
+model MealCharge {
+  id             String           @id @default(uuid())
+  organizationId String
+  propertyId     String
+  tenantId       String
+  mealPlanId     String?
+  mealRecordId   String?
+  periodStart    DateTime
+  periodEnd      DateTime
+  billingMode    MealBillingMode  @default(SUBSCRIPTION)
+  amount         Decimal          @db.Decimal(12, 2)
+  status         MealChargeStatus @default(PENDING)
+  invoiceId      String?
+  invoiceLineId  String?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  property     Property     @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  tenant       Tenant       @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  mealPlan     MealPlan?    @relation(fields: [mealPlanId], references: [id], onDelete: SetNull)
+  mealRecord   MealRecord?  @relation(fields: [mealRecordId], references: [id], onDelete: SetNull)
+  invoice      Invoice?     @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId])
+  @@index([propertyId])
+  @@index([tenantId])
+  @@index([status])
+  @@map("meal_charges")
 }
 
 // ------------------------------------------------------------------------------

@@ -21,6 +21,19 @@ const DecimalStringOrNumber = z
     { message: 'Amount must be a non-negative decimal' }
   );
 
+const SignedDecimalStringOrNumber = z
+  .union([
+    z.string().regex(/^-?\d+(\.\d{1,2})?$/, 'Must be a valid decimal amount'),
+    z.number(),
+  ])
+  .refine(
+    (val) => {
+      const num = typeof val === 'number' ? val : parseFloat(val);
+      return !isNaN(num);
+    },
+    { message: 'Must be a valid decimal amount' }
+  );
+
 const PositiveDecimalStringOrNumber = z
   .union([
     z.string().regex(/^\d+(\.\d{1,2})?$/, 'Amount must be a valid monetary decimal with up to 2 decimal places'),
@@ -117,7 +130,7 @@ export const CreateInvoiceSchema = z
     issueDate: z.string().datetime({ message: 'issueDate must be a valid ISO datetime' }),
     dueDate: z.string().datetime({ message: 'dueDate must be a valid ISO datetime' }),
     lines: z.array(CreateInvoiceLineSchema).min(1, 'Invoice must have at least one line item'),
-    adjustments: DecimalStringOrNumber.optional().default(0),
+    adjustments: SignedDecimalStringOrNumber.optional().default(0),
     notes: z.string().trim().max(1000).optional().nullable(),
   })
   .refine(
@@ -135,7 +148,7 @@ export const CreateInvoiceSchema = z
 
 export const UpdateInvoiceSchema = z.object({
   dueDate: z.string().datetime().optional(),
-  adjustments: DecimalStringOrNumber.optional(),
+  adjustments: SignedDecimalStringOrNumber.optional(),
   notes: z.string().trim().max(1000).optional().nullable(),
   lines: z.array(CreateInvoiceLineSchema).min(1).optional(),
 });

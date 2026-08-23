@@ -102,3 +102,21 @@ If a user possesses a permission (e.g. `property.read`) but requests a property 
 - State transitions are validated by the backend service to prevent data corruption.
 - Directly setting an `OCCUPIED` bed to `MAINTENANCE` or `BLOCKED` without an explicit checkout is rejected with `400 Bad Request`.
 
+---
+
+## 8. Billing, Invoicing & Double-Entry Ledger Integrity (CORE-011)
+- **Zero Rounding Leakage**: All monetary values use 12,2 Decimal precision.
+- **Balanced Double-Entry Constraint**: Every issued invoice, payment allocation, and deposit forfeiture generates balanced double-entry ledger entries where `Total Debit === Total Credit`.
+- **Append-Only Immutability**: Ledger entries cannot be modified or physically deleted. Corrections require offsetting reversing entries.
+- **Idempotent Billing Runs**: Due billing cycle generators run idempotently using deterministic date windows and existing schedule tracking.
+- **Over-Allocation Prevention**: Payment allocation cannot exceed either the unallocated payment balance or the invoice outstanding balance.
+
+---
+
+## 9. Electricity & PG Mess Isolation and Deterministic Allocation (CORE-012)
+- **Zero-AI Deterministic Execution**: All calculations are strictly rule-based arithmetic.
+- **Property Type Isolation**: Electricity room-sharing and PG mess plans/attendance fail closed (`404 Not Found`) when invoked against `RENTAL_HOUSE` properties.
+- **Deterministic Remainder Allocation**: When dividing utility costs across multiple tenants, base amounts are truncated to 2 decimal places and the remainder cents are deterministically distributed such that `sum(tenant allocations) === total reading charge` exactly.
+- **Meter Reading Tamper Prevention**: Decreasing meter readings (`current < previous`) are rejected with `400 Bad Request` unless authorized with `isResetOverride = true` and a mandatory non-empty `resetReason`.
+- **Unique Attendance Constraint**: Daily tenant mess attendance enforces unique constraint `@@unique([tenantId, mealDate, mealType])` with single-click idempotent updates.
+

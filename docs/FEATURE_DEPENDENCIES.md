@@ -19,12 +19,9 @@ graph TD
     CORE007 --> CORE008
     
     CORE008 --> CORE010[CORE-010: Agreements & Templates]
-    CORE008 --> CORE011[CORE-011: Billing & Invoices]
-    CORE011 --> CORE012[CORE-012: Payments & Receipts]
-    CORE008 --> CORE013[CORE-013: Security Deposits]
-    
-    CORE005 --> CORE014[CORE-014: Electricity Billing]
-    CORE005 --> CORE015[CORE-015: Meal Management - PG Only]
+    CORE008 --> CORE011[CORE-011: Billing & Double-Entry Ledger]
+    CORE011 --> CORE012[CORE-012: Electricity & PG Meal Management]
+    CORE005 --> CORE012
     
     CORE004 --> CORE016[CORE-016: Maintenance Ticketing]
     CORE003 --> CORE017[CORE-017: Staff & Attendance]
@@ -37,8 +34,7 @@ graph TD
     
     CORE021 --> CORE022[CORE-022: Multi-Property Dashboard]
     CORE008 --> CORE009[CORE-009: Digital Check-Out & Settlement]
-    CORE012 --> CORE009
-    CORE013 --> CORE009
+    CORE011 --> CORE009
     
     CORE002 --> CORE023[CORE-023: In-App Notifications]
     CORE004 --> CORE024[CORE-024: Property Discovery & PostGIS]
@@ -54,8 +50,8 @@ graph TD
 1. **Tier 0 (Foundation)**: CORE-001 (Monorepo, Config, Docker, Prisma, Packages), CORE-030 (Security Baseline), CORE-028 (Audit Log Foundation), CORE-029 (Queue Foundation).
 2. **Tier 1 (Identity & Multi-Tenancy)**: CORE-002 (Auth), CORE-003 (Orgs & RBAC).
 3. **Tier 2 (Core Physical Models)**: CORE-004 (Properties), CORE-005 (PG Hierarchy), CORE-006 (Rental Hierarchy).
-4. **Tier 3 (Tenant & Lifecycle)**: CORE-007 (Tenants & KYC), CORE-008 (Check-In), CORE-010 (Agreements).
-5. **Tier 4 (Financial & Utilities)**: CORE-011 (Billing), CORE-012 (Payments), CORE-013 (Deposits), CORE-014 (Electricity), CORE-015 (Meals).
+4. **Tier 3 (Tenant & Lifecycle)**: CORE-007 (Tenants & KYC), CORE-008 (Check-In), CORE-010 (Agreements), CORE-009 (Check-Out & Settlement).
+5. **Tier 4 (Financial & Utilities)**: CORE-011 (Billing & Ledger Foundation), CORE-012 (Electricity & PG Meal Management).
 6. **Tier 5 (Operations & Facility)**: CORE-016 (Maintenance), CORE-017 (Staff/Attendance), CORE-018 (Visitors), CORE-019 (Inventory), CORE-020 (Expenses).
-7. **Tier 6 (Analytics & Dashboards)**: CORE-021 (P&L), CORE-022 (Executive Dashboards), CORE-009 (Check-Out & Settlement).
+7. **Tier 6 (Analytics & Dashboards)**: CORE-021 (P&L), CORE-022 (Executive Dashboards).
 8. **Tier 7 (Engagement & Ecosystem)**: CORE-023 (Notifications), CORE-024 (Discovery), CORE-025 (Community), CORE-026 (Marketplace), CORE-027 (Services).

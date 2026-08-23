@@ -66,14 +66,12 @@ async function runBillingE2E() {
     '/properties',
     'POST',
     {
-      name: 'Verma Heights PG',
-      type: 'PG',
-      addressLine1: '123 Tech Park Road',
-      city: 'Bangalore',
+      name: `Verma Heights PG ${timestamp}`,
+      propertyType: 'PG',
+      address: '123 Tech Park Road',
+      city: 'Bengaluru',
       state: 'Karnataka',
       postalCode: '560100',
-      country: 'IND',
-      amenityIds: [],
     },
     ownerCookie
   );
@@ -98,6 +96,10 @@ async function runBillingE2E() {
       emergencyContactName: 'Ramesh Nair',
       emergencyContactPhone: '9845099999',
       emergencyContactRelation: 'Father',
+      permanentAddress: '12 Brigade Road',
+      permanentCity: 'Bengaluru',
+      permanentState: 'Karnataka',
+      permanentPostalCode: '560025',
     },
     ownerCookie
   );
@@ -147,7 +149,7 @@ async function runBillingE2E() {
 
   // 6. Create Recurring Billing Schedule
   console.log('\n6. Creating Recurring Billing Schedule...');
-  const today = new Date().toISOString().split('T')[0];
+  const today = new Date().toISOString();
   const schedRes = await apiRequest(
     '/billing/schedules',
     'POST',
@@ -192,7 +194,7 @@ async function runBillingE2E() {
       tenantId,
       propertyId,
       issueDate: today,
-      dueDate: new Date(Date.now() + 5 * 86400000).toISOString().split('T')[0],
+      dueDate: new Date(Date.now() + 5 * 86400000).toISOString(),
       adjustments: '-500.00', // ₹500 early-bird discount
       notes: 'Early-bird discount applied',
       lines: [
@@ -214,7 +216,7 @@ async function runBillingE2E() {
   );
 
   if (invRes.status !== 201) {
-    console.error('❌ Invoice creation failed:', invRes.data);
+    console.error('❌ Invoice creation failed:', JSON.stringify(invRes.data, null, 2));
     process.exit(1);
   }
 
@@ -251,11 +253,11 @@ async function runBillingE2E() {
     invCredit += Number(entry.creditAmount);
   }
   console.log(`   Total Debit: ₹${invDebit} | Total Credit: ₹${invCredit}`);
-  if (invDebit !== invCredit || invDebit !== 13000) {
+  if (invDebit !== invCredit || invDebit !== 13500) {
     console.error(`❌ Ledger unbalanced or mismatch! Debit: ${invDebit}, Credit: ${invCredit}`);
     process.exit(1);
   }
-  console.log(`✅ Balanced Double-Entry Invariant verified (Total DR === Total CR === ₹13,000)`);
+  console.log(`✅ Balanced Double-Entry Invariant verified (Total DR === Total CR === ₹13,500)`);
 
   // 10. Record Payment
   console.log('\n10. Recording Payment with Reference (UPI)...');
