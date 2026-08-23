@@ -738,7 +738,7 @@ export default function TenantDetailsPage() {
                   </div>
                   <div className="p-3 bg-slate-50 rounded-lg border border-slate-100">
                     <span className="text-[11px] font-semibold text-slate-500 block uppercase">Deposit Held</span>
-                    <span className="text-sm font-bold text-purple-600">
+                    <span className="text-sm font-bold text-brand-navy">
                       ₹{Number(financialSummary.securityDepositHeld).toLocaleString()}
                     </span>
                   </div>
@@ -802,8 +802,8 @@ export default function TenantDetailsPage() {
             {mealSummary && (
               <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4">
                 <div className="flex items-center justify-between">
-                  <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
-                    <UtensilsCrossed className="w-5 h-5 text-emerald-600" />
+                  <h2 className="text-base font-bold text-brand-navy flex items-center gap-2">
+                    <UtensilsCrossed className="w-5 h-5 text-brand-teal" />
                     PG Mess & Meal Plan
                   </h2>
                   <Link
@@ -852,8 +852,8 @@ export default function TenantDetailsPage() {
             {maintSummary && (
               <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4">
                 <div className="flex items-center justify-between">
-                  <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
-                    <Wrench className="w-5 h-5 text-teal-600" />
+                  <h2 className="text-base font-bold text-brand-navy flex items-center gap-2">
+                    <Wrench className="w-5 h-5 text-brand-teal" />
                     Maintenance & Work Orders
                   </h2>
                   <Link

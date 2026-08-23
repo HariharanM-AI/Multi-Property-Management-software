@@ -2,8 +2,12 @@
 
 import React, { useState, useEffect, use } from 'react';
 import Link from 'next/link';
-import { Sidebar } from '@/components/layout/Sidebar';
-import { PropertyType } from '@propertyos/types';
+import { AppShell } from '@/components/layout/AppShell';
+import { PageHeader } from '@/components/ui/PageHeader';
+import { StatusBadge } from '@/components/ui/StatusBadge';
+import { Button } from '@/components/ui/Button';
+import { Modal } from '@/components/ui/Modal';
+import { EmptyState } from '@/components/ui/EmptyState';
 import {
   Wrench,
   ArrowLeft,
@@ -18,13 +22,11 @@ import {
   MessageSquare,
   History,
   Send,
-  XCircle,
   Play,
   Check,
   ShieldCheck,
   Ban,
   RefreshCw,
-  Plus,
 } from 'lucide-react';
 
 const API_BASE = '/api/v1';
@@ -38,7 +40,7 @@ export default function MaintenanceTicketDetailPage({ params }: { params: Promis
   const [submittingComment, setSubmittingComment] = useState<boolean>(false);
 
   // Modal / Action States
-  const [actionModal, setActionModal] = useState<string | null>(null); // 'ASSIGN', 'COMPLETE', 'CANCEL', 'VERIFY', 'CLOSE'
+  const [actionModal, setActionModal] = useState<string | null>(null); // 'ASSIGN', 'COMPLETE', 'CANCEL'
   const [staffUsers, setStaffUsers] = useState<any[]>([]);
   const [selectedStaffId, setSelectedStaffId] = useState<string>('');
   const [assignNotes, setAssignNotes] = useState<string>('');
@@ -46,6 +48,7 @@ export default function MaintenanceTicketDetailPage({ params }: { params: Promis
   const [resolutionNotesInput, setResolutionNotesInput] = useState<string>('');
   const [cancelReasonInput, setCancelReasonInput] = useState<string>('');
   const [isProcessingAction, setIsProcessingAction] = useState<boolean>(false);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   const fetchTicket = async () => {
     try {
@@ -119,6 +122,7 @@ export default function MaintenanceTicketDetailPage({ params }: { params: Promis
 
   const executeAction = async (endpoint: string, method: string = 'POST', payload: any = {}) => {
     setIsProcessingAction(true);
+    setActionError(null);
     try {
       const token = typeof window !== 'undefined' ? localStorage.getItem('propertyos_token') : null;
       const headers: Record<string, string> = { 'Content-Type': 'application/json' };
@@ -139,156 +143,182 @@ export default function MaintenanceTicketDetailPage({ params }: { params: Promis
       setActionModal(null);
       fetchTicket();
     } catch (e: any) {
-      alert(e.message || 'Error updating ticket status');
+      setActionError(e.message || 'Error updating ticket status');
     } finally {
       setIsProcessingAction(false);
     }
   };
 
-  const propertyType = ticket?.property?.propertyType === 'RENTAL_HOUSE' ? PropertyType.RENTAL_HOUSE : PropertyType.PG;
-
   const STEPS = ['OPEN', 'ASSIGNED', 'IN_PROGRESS', 'COMPLETED', 'VERIFIED', 'CLOSED'];
   const currentStepIndex = STEPS.indexOf(ticket?.status || 'OPEN');
 
   return (
-    <div className="flex h-screen bg-slate-950 text-slate-100 font-sans antialiased overflow-hidden">
-      {/* Sidebar */}
-      <Sidebar currentPropertyType={propertyType} activePath="/maintenance" />
-
-      {/* Main Content */}
-      <main className="flex-1 flex flex-col min-w-0 overflow-y-auto bg-slate-900/50">
-        {/* Header */}
-        <header className="h-16 px-8 border-b border-slate-800 bg-slate-900/80 backdrop-blur flex items-center justify-between shrink-0 sticky top-0 z-20">
-          <div className="flex items-center gap-4">
-            <Link
-              href="/maintenance"
-              className="p-2 rounded-lg bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700 transition"
-            >
-              <ArrowLeft className="w-4 h-4" />
-            </Link>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="font-mono text-xs font-semibold text-teal-400">{ticket?.ticketNumber}</span>
-                <span className="text-slate-500">•</span>
-                <h1 className="font-bold text-base text-white tracking-tight">{ticket?.title || 'Loading Ticket...'}</h1>
-              </div>
-              <p className="text-xs text-slate-400">{ticket?.property?.name}</p>
-            </div>
-          </div>
-
-          {/* Action Buttons Toolbar */}
-          {ticket && (
-            <div className="flex items-center gap-2">
-              {ticket.status === 'OPEN' && (
-                <button
-                  onClick={() => setActionModal('ASSIGN')}
-                  className="flex items-center gap-1.5 bg-teal-600 hover:bg-teal-500 text-white px-3 py-1.5 rounded-lg text-xs font-semibold shadow transition"
-                >
-                  <User className="w-3.5 h-3.5" />
-                  <span>Assign Staff</span>
-                </button>
-              )}
-
-              {(ticket.status === 'OPEN' || ticket.status === 'ASSIGNED') && (
-                <button
-                  onClick={() => executeAction('start')}
-                  disabled={isProcessingAction}
-                  className="flex items-center gap-1.5 bg-amber-600 hover:bg-amber-500 text-white px-3 py-1.5 rounded-lg text-xs font-semibold shadow transition"
-                >
-                  <Play className="w-3.5 h-3.5" />
-                  <span>Start Work</span>
-                </button>
-              )}
-
-              {(ticket.status === 'IN_PROGRESS' || ticket.status === 'ASSIGNED') && (
-                <button
-                  onClick={() => setActionModal('COMPLETE')}
-                  className="flex items-center gap-1.5 bg-purple-600 hover:bg-purple-500 text-white px-3 py-1.5 rounded-lg text-xs font-semibold shadow transition"
-                >
-                  <Check className="w-3.5 h-3.5" />
-                  <span>Complete Work</span>
-                </button>
-              )}
-
-              {ticket.status === 'COMPLETED' && (
-                <button
-                  onClick={() => executeAction('verify')}
-                  disabled={isProcessingAction}
-                  className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-1.5 rounded-lg text-xs font-semibold shadow transition"
-                >
-                  <ShieldCheck className="w-3.5 h-3.5" />
-                  <span>Verify Work</span>
-                </button>
-              )}
-
-              {(ticket.status === 'VERIFIED' || ticket.status === 'COMPLETED') && (
-                <button
-                  onClick={() => executeAction('close')}
-                  disabled={isProcessingAction}
-                  className="flex items-center gap-1.5 bg-slate-700 hover:bg-slate-600 text-white px-3 py-1.5 rounded-lg text-xs font-semibold shadow transition"
-                >
-                  <CheckCircle2 className="w-3.5 h-3.5" />
-                  <span>Close Ticket</span>
-                </button>
-              )}
-
-              {ticket.status !== 'CLOSED' && ticket.status !== 'CANCELLED' && (
-                <button
-                  onClick={() => setActionModal('CANCEL')}
-                  className="flex items-center gap-1.5 bg-rose-600/20 text-rose-300 hover:bg-rose-600/30 px-3 py-1.5 rounded-lg text-xs font-semibold border border-rose-500/30 transition"
-                >
-                  <Ban className="w-3.5 h-3.5" />
-                  <span>Cancel</span>
-                </button>
-              )}
-            </div>
-          )}
-        </header>
+    <AppShell activePath="/maintenance">
+      <div className="space-y-6 max-w-7xl mx-auto pb-16">
+        {/* Back Link & Page Header */}
+        <div className="flex items-center gap-2 mb-1">
+          <Link
+            href="/maintenance"
+            className="inline-flex items-center gap-1.5 text-xs font-semibold text-surface-textSecondary hover:text-brand-navy transition-colors"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            <span>Back to Maintenance Tickets</span>
+          </Link>
+        </div>
 
         {loading ? (
-          <div className="p-16 text-center text-slate-400">
-            <RefreshCw className="w-8 h-8 animate-spin mx-auto text-teal-400 mb-3" />
-            <p className="text-sm">Loading ticket details...</p>
+          <div className="bg-brand-white border border-surface-border rounded-xl p-16 text-center text-surface-textSecondary space-y-3">
+            <RefreshCw className="w-7 h-7 animate-spin mx-auto text-brand-teal" />
+            <p className="text-xs font-medium">Loading ticket details...</p>
           </div>
         ) : !ticket ? (
-          <div className="p-16 text-center text-slate-400">
-            <AlertTriangle className="w-12 h-12 text-rose-500 mx-auto mb-3" />
-            <h3 className="text-base font-semibold text-white">Ticket Not Found</h3>
-            <p className="text-xs text-slate-400 mt-1">The requested ticket does not exist or you do not have permission to view it.</p>
-          </div>
+          <EmptyState
+            icon={AlertTriangle}
+            title="Ticket Not Found"
+            description="The requested maintenance ticket does not exist or you do not have permission to access it."
+            actionLabel="Return to Tickets"
+            actionHref="/maintenance"
+          />
         ) : (
-          <div className="p-8 space-y-6 max-w-7xl mx-auto w-full">
-            {/* State Machine Progress Bar */}
-            <div className="bg-slate-800/40 border border-slate-800 rounded-2xl p-6 shadow-xl">
-              <div className="flex items-center justify-between text-xs font-semibold text-slate-400 mb-4">
+          <>
+            {/* Header with Title and Actions */}
+            <PageHeader
+              title={ticket.title}
+              subtitle={`${ticket.property?.name} • ${ticket.category.replace('_', ' ')} • Created ${new Date(ticket.createdAt).toLocaleDateString()}`}
+              icon={Wrench}
+              badge={
+                <div className="flex items-center gap-2 ml-2 flex-wrap">
+                  <span className="font-mono text-xs font-bold text-brand-teal px-2 py-0.5 rounded bg-teal-50 border border-teal-200">
+                    {ticket.ticketNumber}
+                  </span>
+                  <StatusBadge status={ticket.priority} />
+                  <StatusBadge status={ticket.status} />
+                </div>
+              }
+              actions={
+                <div className="flex flex-wrap items-center gap-2">
+                  {ticket.status === 'OPEN' && (
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      onClick={() => {
+                        setActionError(null);
+                        setActionModal('ASSIGN');
+                      }}
+                      className="gap-1.5"
+                    >
+                      <User className="w-3.5 h-3.5" />
+                      <span>Assign Staff</span>
+                    </Button>
+                  )}
+
+                  {(ticket.status === 'OPEN' || ticket.status === 'ASSIGNED') && (
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => executeAction('start')}
+                      isLoading={isProcessingAction}
+                      className="gap-1.5"
+                    >
+                      <Play className="w-3.5 h-3.5" />
+                      <span>Start Work</span>
+                    </Button>
+                  )}
+
+                  {(ticket.status === 'IN_PROGRESS' || ticket.status === 'ASSIGNED') && (
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      onClick={() => {
+                        setActionError(null);
+                        setActionModal('COMPLETE');
+                      }}
+                      className="gap-1.5"
+                    >
+                      <Check className="w-3.5 h-3.5" />
+                      <span>Complete Work</span>
+                    </Button>
+                  )}
+
+                  {ticket.status === 'COMPLETED' && (
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      onClick={() => executeAction('verify')}
+                      isLoading={isProcessingAction}
+                      className="gap-1.5"
+                    >
+                      <ShieldCheck className="w-3.5 h-3.5" />
+                      <span>Verify Work</span>
+                    </Button>
+                  )}
+
+                  {(ticket.status === 'VERIFIED' || ticket.status === 'COMPLETED') && (
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => executeAction('close')}
+                      isLoading={isProcessingAction}
+                      className="gap-1.5"
+                    >
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      <span>Close Ticket</span>
+                    </Button>
+                  )}
+
+                  {ticket.status !== 'CLOSED' && ticket.status !== 'CANCELLED' && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setActionError(null);
+                        setActionModal('CANCEL');
+                      }}
+                      className="text-rose-600 hover:text-rose-700 hover:bg-rose-50 border-rose-200 gap-1.5"
+                    >
+                      <Ban className="w-3.5 h-3.5" />
+                      <span>Cancel</span>
+                    </Button>
+                  )}
+                </div>
+              }
+            />
+
+            {/* State Machine Progress Stepper */}
+            <div className="bg-brand-white border border-surface-border rounded-xl p-5 shadow-sm space-y-3">
+              <div className="flex items-center justify-between text-xs font-semibold text-surface-textSecondary">
                 <span>Workflow Progression</span>
-                <span className="uppercase font-bold text-teal-400">Current: {ticket.status}</span>
+                <span className="uppercase font-bold text-brand-teal">Current Status: {ticket.status}</span>
               </div>
-              <div className="grid grid-cols-6 gap-2">
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2 pt-1">
                 {STEPS.map((st, idx) => {
                   const isCompleted = currentStepIndex > idx || ticket.status === 'CLOSED';
                   const isCurrent = ticket.status === st;
                   const isCancelled = ticket.status === 'CANCELLED';
 
                   return (
-                    <div key={st} className="flex flex-col items-center gap-2 text-center">
+                    <div key={st} className="flex flex-col items-center gap-1.5 text-center">
                       <div
-                        className={`w-full h-2 rounded-full transition ${
+                        className={`w-full h-2 rounded-full transition-colors ${
                           isCancelled
-                            ? 'bg-rose-500/40'
+                            ? 'bg-rose-200'
                             : isCompleted
-                            ? 'bg-teal-500'
+                            ? 'bg-brand-teal'
                             : isCurrent
                             ? 'bg-amber-400 animate-pulse'
-                            : 'bg-slate-800'
+                            : 'bg-slate-100'
                         }`}
                       />
                       <span
                         className={`text-[10px] uppercase font-bold tracking-wider ${
-                          isCurrent ? 'text-amber-400' : isCompleted ? 'text-teal-400' : 'text-slate-500'
+                          isCurrent
+                            ? 'text-amber-700'
+                            : isCompleted
+                            ? 'text-brand-teal'
+                            : 'text-surface-disabled'
                         }`}
                       >
-                        {st}
+                        {st.replace('_', ' ')}
                       </span>
                     </div>
                   );
@@ -301,109 +331,122 @@ export default function MaintenanceTicketDetailPage({ params }: { params: Promis
               {/* Left 2 Cols: Main Info, Comments, Attachments */}
               <div className="lg:col-span-2 space-y-6">
                 {/* Issue Details Card */}
-                <div className="bg-slate-800/40 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4">
-                  <div className="flex items-center justify-between">
+                <div className="bg-brand-white border border-surface-border rounded-xl p-6 shadow-sm space-y-4">
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
                     <div className="flex items-center gap-2">
-                      <span className="px-3 py-1 rounded-full text-xs font-bold uppercase bg-teal-500/10 text-teal-400 border border-teal-500/20">
-                        {ticket.category}
+                      <span className="px-2.5 py-0.5 rounded-md text-xs font-bold uppercase bg-slate-100 text-slate-700 border border-slate-200">
+                        {ticket.category.replace('_', ' ')}
                       </span>
-                      <span
-                        className={`px-3 py-1 rounded-full text-xs font-bold uppercase ${
-                          ticket.priority === 'URGENT'
-                            ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
-                            : ticket.priority === 'HIGH'
-                            ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
-                            : 'bg-blue-500/10 text-blue-400 border border-blue-500/20'
-                        }`}
-                      >
-                        {ticket.priority} Priority
-                      </span>
+                      <StatusBadge status={ticket.priority} />
                     </div>
-                    <span className="text-xs text-slate-400">Created: {new Date(ticket.createdAt).toLocaleString()}</span>
+                    <span className="text-xs text-surface-textSecondary">
+                      Logged: {new Date(ticket.createdAt).toLocaleString()}
+                    </span>
                   </div>
 
                   <div>
-                    <h3 className="text-lg font-bold text-white mb-2">{ticket.title}</h3>
-                    <p className="text-sm text-slate-300 whitespace-pre-wrap leading-relaxed">{ticket.description}</p>
+                    <h3 className="text-base font-bold text-brand-navy mb-2">{ticket.title}</h3>
+                    <p className="text-xs text-brand-navy whitespace-pre-wrap leading-relaxed">
+                      {ticket.description}
+                    </p>
                   </div>
 
                   {ticket.resolutionNotes && (
-                    <div className="bg-slate-900/80 border border-slate-700/60 rounded-xl p-4 mt-4">
-                      <span className="text-xs font-bold text-purple-400 uppercase tracking-wider">Resolution Notes</span>
-                      <p className="text-xs text-slate-300 mt-1">{ticket.resolutionNotes}</p>
+                    <div className="bg-surface-subtle border border-surface-border rounded-lg p-4 mt-3">
+                      <span className="text-xs font-bold text-brand-teal uppercase tracking-wider block">
+                        Resolution Notes
+                      </span>
+                      <p className="text-xs text-brand-navy mt-1">{ticket.resolutionNotes}</p>
                     </div>
                   )}
                 </div>
 
-                {/* Comments & Activity Stream */}
-                <div className="bg-slate-800/40 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-5">
-                  <div className="flex items-center gap-2 text-white font-bold text-sm">
-                    <MessageSquare className="w-4 h-4 text-teal-400" />
-                    <span>Internal Comments & Discussion ({ticket.comments?.length || 0})</span>
+                {/* Comments & Discussion */}
+                <div className="bg-brand-white border border-surface-border rounded-xl p-6 shadow-sm space-y-4">
+                  <div className="flex items-center gap-2 text-brand-navy font-bold text-sm">
+                    <MessageSquare className="w-4 h-4 text-brand-teal" />
+                    <span>Discussion & Updates ({ticket.comments?.length || 0})</span>
                   </div>
 
                   {/* Comments List */}
-                  <div className="space-y-3 max-h-96 overflow-y-auto pr-2">
+                  <div className="space-y-3 max-h-96 overflow-y-auto pr-1">
                     {ticket.comments?.length === 0 ? (
-                      <p className="text-xs text-slate-500 italic">No comments on this ticket yet.</p>
+                      <p className="text-xs text-surface-textSecondary italic py-3 text-center">
+                        No comments recorded on this ticket yet.
+                      </p>
                     ) : (
                       ticket.comments?.map((comment: any) => (
-                        <div key={comment.id} className="bg-slate-900/60 border border-slate-800 rounded-xl p-3.5 space-y-1">
+                        <div
+                          key={comment.id}
+                          className="bg-surface-subtle border border-surface-border rounded-lg p-3.5 space-y-1"
+                        >
                           <div className="flex items-center justify-between text-xs">
-                            <span className="font-semibold text-teal-300">
+                            <span className="font-semibold text-brand-navy">
                               {comment.author?.firstName} {comment.author?.lastName}
                             </span>
-                            <span className="text-[10px] text-slate-500">{new Date(comment.createdAt).toLocaleString()}</span>
+                            <span className="text-[10px] text-surface-textSecondary">
+                              {new Date(comment.createdAt).toLocaleString()}
+                            </span>
                           </div>
-                          <p className="text-xs text-slate-300 leading-relaxed">{comment.body}</p>
+                          <p className="text-xs text-brand-navy leading-relaxed">{comment.body}</p>
                         </div>
                       ))
                     )}
                   </div>
 
                   {/* Comment Composer */}
-                  <form onSubmit={handleAddComment} className="flex gap-2 pt-3 border-t border-slate-800">
+                  <form onSubmit={handleAddComment} className="flex gap-2 pt-3 border-t border-surface-border">
                     <input
                       type="text"
                       placeholder="Add an update or internal note..."
                       value={newComment}
                       onChange={(e) => setNewComment(e.target.value)}
-                      className="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-teal-500"
+                      className="flex-1 bg-surface-subtle border border-surface-border rounded-lg px-3 py-2 text-xs text-brand-navy placeholder-surface-disabled focus:outline-none focus:ring-2 focus:ring-brand-teal/20 focus:border-brand-teal"
                     />
-                    <button
+                    <Button
                       type="submit"
-                      disabled={submittingComment || !newComment.trim()}
-                      className="bg-teal-600 hover:bg-teal-500 text-white px-4 py-2 rounded-lg text-xs font-semibold transition disabled:opacity-50 flex items-center gap-1.5"
+                      variant="primary"
+                      size="sm"
+                      isLoading={submittingComment}
+                      disabled={!newComment.trim()}
+                      className="gap-1.5 shrink-0"
                     >
                       <Send className="w-3.5 h-3.5" />
                       <span>Post</span>
-                    </button>
+                    </Button>
                   </form>
                 </div>
 
                 {/* Attachments Section */}
-                <div className="bg-slate-800/40 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2 text-white font-bold text-sm">
-                      <Paperclip className="w-4 h-4 text-teal-400" />
-                      <span>Evidence & Attachments ({ticket.attachments?.length || 0})</span>
-                    </div>
+                <div className="bg-brand-white border border-surface-border rounded-xl p-6 shadow-sm space-y-4">
+                  <div className="flex items-center gap-2 text-brand-navy font-bold text-sm">
+                    <Paperclip className="w-4 h-4 text-brand-teal" />
+                    <span>Evidence & Attachments ({ticket.attachments?.length || 0})</span>
                   </div>
 
                   {ticket.attachments?.length === 0 ? (
-                    <p className="text-xs text-slate-500 italic">No attachments uploaded.</p>
+                    <p className="text-xs text-surface-textSecondary italic py-3 text-center">
+                      No attachments uploaded for this ticket.
+                    </p>
                   ) : (
                     <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                       {ticket.attachments?.map((att: any) => (
-                        <div key={att.id} className="bg-slate-900 border border-slate-800 rounded-xl p-3 text-xs space-y-1">
+                        <div
+                          key={att.id}
+                          className="bg-surface-subtle border border-surface-border rounded-xl p-3 text-xs space-y-1"
+                        >
                           <div className="flex items-center justify-between">
-                            <span className="px-2 py-0.5 rounded bg-slate-800 text-[10px] font-bold text-teal-300">
+                            <span className="px-2 py-0.5 rounded bg-white text-[10px] font-bold text-brand-teal border border-surface-border">
                               {att.type}
                             </span>
-                            <span className="text-[10px] text-slate-500">{(att.fileSize / 1024).toFixed(0)} KB</span>
+                            <span className="text-[10px] text-surface-textSecondary">
+                              {(att.fileSize / 1024).toFixed(0)} KB
+                            </span>
                           </div>
-                          <p className="font-semibold text-slate-200 truncate">{att.fileName}</p>
-                          <p className="text-[10px] text-slate-400">By: {att.uploadedBy?.firstName}</p>
+                          <p className="font-semibold text-brand-navy truncate">{att.fileName}</p>
+                          <p className="text-[10px] text-surface-textSecondary">
+                            By: {att.uploadedBy?.firstName}
+                          </p>
                         </div>
                       ))}
                     </div>
@@ -414,71 +457,81 @@ export default function MaintenanceTicketDetailPage({ params }: { params: Promis
               {/* Right Col: Metadata, Assigned Staff, Timeline */}
               <div className="space-y-6">
                 {/* Location & Property Card */}
-                <div className="bg-slate-800/40 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-3">
-                  <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Target & Location</span>
+                <div className="bg-brand-white border border-surface-border rounded-xl p-5 shadow-sm space-y-3">
+                  <span className="text-xs font-bold text-surface-textSecondary uppercase tracking-wider block">
+                    Target & Location
+                  </span>
                   <div className="space-y-2 text-xs">
-                    <div className="flex justify-between py-1 border-b border-slate-800/60">
-                      <span className="text-slate-400">Property:</span>
-                      <span className="font-semibold text-white">{ticket.property?.name}</span>
+                    <div className="flex justify-between py-1 border-b border-surface-border">
+                      <span className="text-surface-textSecondary">Property:</span>
+                      <span className="font-semibold text-brand-navy">{ticket.property?.name}</span>
                     </div>
                     {ticket.room && (
-                      <div className="flex justify-between py-1 border-b border-slate-800/60">
-                        <span className="text-slate-400">Room:</span>
-                        <span className="font-semibold text-white">Room {ticket.room.roomNumber}</span>
+                      <div className="flex justify-between py-1 border-b border-surface-border">
+                        <span className="text-surface-textSecondary">Room:</span>
+                        <span className="font-semibold text-brand-navy">Room {ticket.room.roomNumber}</span>
                       </div>
                     )}
                     {ticket.bed && (
-                      <div className="flex justify-between py-1 border-b border-slate-800/60">
-                        <span className="text-slate-400">Bed:</span>
-                        <span className="font-semibold text-white">Bed {ticket.bed.bedNumber}</span>
+                      <div className="flex justify-between py-1 border-b border-surface-border">
+                        <span className="text-surface-textSecondary">Bed:</span>
+                        <span className="font-semibold text-brand-navy">Bed {ticket.bed.bedNumber}</span>
                       </div>
                     )}
                     {ticket.rentalUnit && (
-                      <div className="flex justify-between py-1 border-b border-slate-800/60">
-                        <span className="text-slate-400">Rental Unit:</span>
-                        <span className="font-semibold text-white">Unit {ticket.rentalUnit.unitNumber}</span>
+                      <div className="flex justify-between py-1 border-b border-surface-border">
+                        <span className="text-surface-textSecondary">Rental Unit:</span>
+                        <span className="font-semibold text-brand-navy">Unit {ticket.rentalUnit.unitNumber}</span>
                       </div>
                     )}
                     {ticket.locationDetails && (
-                      <div className="flex justify-between py-1 border-b border-slate-800/60">
-                        <span className="text-slate-400">Details:</span>
-                        <span className="font-semibold text-white">{ticket.locationDetails}</span>
+                      <div className="flex justify-between py-1 border-b border-surface-border">
+                        <span className="text-surface-textSecondary">Details:</span>
+                        <span className="font-semibold text-brand-navy">{ticket.locationDetails}</span>
                       </div>
                     )}
                     {ticket.tenant && (
                       <div className="flex justify-between py-1">
-                        <span className="text-slate-400">Tenant:</span>
-                        <span className="font-semibold text-white">{ticket.tenant.firstName} {ticket.tenant.lastName}</span>
+                        <span className="text-surface-textSecondary">Tenant:</span>
+                        <span className="font-semibold text-brand-navy">
+                          {ticket.tenant.firstName} {ticket.tenant.lastName}
+                        </span>
                       </div>
                     )}
                   </div>
                 </div>
 
                 {/* Assigned Staff & Vendor Card */}
-                <div className="bg-slate-800/40 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-3">
-                  <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Staff & Handling</span>
+                <div className="bg-brand-white border border-surface-border rounded-xl p-5 shadow-sm space-y-3">
+                  <span className="text-xs font-bold text-surface-textSecondary uppercase tracking-wider block">
+                    Staff & Financials
+                  </span>
                   <div className="space-y-2 text-xs">
-                    <div className="flex justify-between py-1 border-b border-slate-800/60">
-                      <span className="text-slate-400">Assigned Staff:</span>
-                      <span className="font-semibold text-teal-300">
-                        {ticket.assignedTo ? `${ticket.assignedTo.firstName} ${ticket.assignedTo.lastName}` : 'Unassigned'}
+                    <div className="flex justify-between py-1 border-b border-surface-border">
+                      <span className="text-surface-textSecondary">Assigned Staff:</span>
+                      <span className="font-semibold text-brand-teal">
+                        {ticket.assignedTo
+                          ? `${ticket.assignedTo.firstName} ${ticket.assignedTo.lastName}`
+                          : 'Unassigned'}
                       </span>
                     </div>
                     {ticket.vendor && (
-                      <div className="flex justify-between py-1 border-b border-slate-800/60">
-                        <span className="text-slate-400">Vendor:</span>
-                        <span className="font-semibold text-white">{ticket.vendor.name} ({ticket.vendor.phone})</span>
+                      <div className="flex justify-between py-1 border-b border-surface-border">
+                        <span className="text-surface-textSecondary">Vendor:</span>
+                        <span className="font-semibold text-brand-navy">
+                          {ticket.vendor.name} ({ticket.vendor.phone})
+                        </span>
                       </div>
                     )}
-                    <div className="flex justify-between py-1 border-b border-slate-800/60">
-                      <span className="text-slate-400">Est Cost:</span>
-                      <span className="font-semibold text-slate-300">
+                    <div className="flex justify-between py-1 border-b border-surface-border">
+                      <span className="text-surface-textSecondary">Est Cost:</span>
+                      <span className="font-semibold text-brand-navy">
                         {ticket.estimatedCost ? `₹${ticket.estimatedCost}` : '—'}
                       </span>
                     </div>
                     <div className="flex justify-between py-1">
-                      <span className="text-slate-400">Actual Cost:</span>
-                      <span className="font-bold text-emerald-400">
+                      <span className="text-surface-textSecondary">Actual Cost:</span>
+                      <span className="font-bold text-emerald-700">
                         {ticket.actualCost ? `₹${ticket.actualCost}` : '—'}
                       </span>
                     </div>
@@ -486,163 +539,197 @@ export default function MaintenanceTicketDetailPage({ params }: { params: Promis
                 </div>
 
                 {/* Status Transition History Trail */}
-                <div className="bg-slate-800/40 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-3">
-                  <div className="flex items-center gap-1.5 text-xs font-bold text-slate-400 uppercase tracking-wider">
-                    <History className="w-3.5 h-3.5 text-teal-400" />
-                    <span>Audit Trail</span>
+                <div className="bg-brand-white border border-surface-border rounded-xl p-5 shadow-sm space-y-3">
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-surface-textSecondary uppercase tracking-wider">
+                    <History className="w-3.5 h-3.5 text-brand-teal" />
+                    <span>Status History Audit</span>
                   </div>
                   <div className="space-y-3 max-h-64 overflow-y-auto pr-1 text-xs">
                     {ticket.statusHistory?.map((h: any, idx: number) => (
-                      <div key={h.id || idx} className="border-l-2 border-teal-500 pl-3 space-y-0.5">
+                      <div key={h.id || idx} className="border-l-2 border-brand-teal pl-3 space-y-0.5">
                         <div className="flex items-center justify-between">
-                          <span className="font-bold text-white text-[11px]">
+                          <span className="font-bold text-brand-navy text-[11px]">
                             {h.fromStatus} → {h.toStatus}
                           </span>
-                          <span className="text-[10px] text-slate-500">{new Date(h.createdAt).toLocaleDateString()}</span>
+                          <span className="text-[10px] text-surface-textSecondary">
+                            {new Date(h.createdAt).toLocaleDateString()}
+                          </span>
                         </div>
-                        {h.reason && <p className="text-[11px] text-slate-400">{h.reason}</p>}
-                        <p className="text-[10px] text-slate-500">By: {h.changedBy?.firstName || 'System'}</p>
+                        {h.reason && <p className="text-[11px] text-surface-textSecondary">{h.reason}</p>}
+                        <p className="text-[10px] text-surface-disabled">
+                          By: {h.changedBy?.firstName || 'System'}
+                        </p>
                       </div>
                     ))}
                   </div>
                 </div>
               </div>
             </div>
-          </div>
+          </>
         )}
-      </main>
+      </div>
 
-      {/* Action Modals */}
-      {actionModal === 'ASSIGN' && (
-        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-700 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
-            <h3 className="text-base font-bold text-white">Assign Staff Member</h3>
-            <div>
-              <label className="block text-xs text-slate-300 font-semibold mb-1">Staff User</label>
-              <select
-                value={selectedStaffId}
-                onChange={(e) => setSelectedStaffId(e.target.value)}
-                className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white"
-              >
-                <option value="">Select Team Member</option>
-                {staffUsers.map((u) => (
-                  <option key={u.id} value={u.id}>
-                    {u.firstName} {u.lastName} ({u.email})
-                  </option>
-                ))}
-              </select>
+      {/* Assign Modal */}
+      <Modal
+        isOpen={actionModal === 'ASSIGN'}
+        onClose={() => setActionModal(null)}
+        title="Assign Staff Member"
+        subtitle="Assign a team member to take ownership of this ticket"
+        maxWidth="md"
+        footer={
+          <>
+            <Button variant="outline" size="sm" onClick={() => setActionModal(null)}>
+              Cancel
+            </Button>
+            <Button
+              variant="primary"
+              size="sm"
+              disabled={!selectedStaffId}
+              isLoading={isProcessingAction}
+              onClick={() =>
+                executeAction('assign', 'POST', { assignedToId: selectedStaffId, notes: assignNotes })
+              }
+            >
+              Assign
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-4 text-xs">
+          {actionError && (
+            <div className="p-3 rounded-lg bg-rose-50 border border-rose-200 text-rose-700 text-xs">
+              {actionError}
             </div>
-            <div>
-              <label className="block text-xs text-slate-300 font-semibold mb-1">Assignment Notes</label>
-              <textarea
-                rows={2}
-                value={assignNotes}
-                onChange={(e) => setAssignNotes(e.target.value)}
-                placeholder="Instructions for staff member..."
-                className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white"
-              />
-            </div>
-            <div className="flex justify-end gap-2 pt-2">
-              <button
-                onClick={() => setActionModal(null)}
-                className="px-3 py-1.5 rounded-lg text-xs text-slate-400 hover:text-white"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => executeAction('assign', 'POST', { assignedToId: selectedStaffId, notes: assignNotes })}
-                disabled={!selectedStaffId || isProcessingAction}
-                className="bg-teal-600 hover:bg-teal-500 text-white text-xs font-semibold px-4 py-1.5 rounded-lg disabled:opacity-50"
-              >
-                Assign
-              </button>
-            </div>
+          )}
+          <div>
+            <label className="block text-brand-navy font-semibold mb-1">Staff Member *</label>
+            <select
+              value={selectedStaffId}
+              onChange={(e) => setSelectedStaffId(e.target.value)}
+              className="w-full bg-surface-subtle border border-surface-border rounded-lg px-3 py-2 text-xs text-brand-navy focus:outline-none focus:ring-2 focus:ring-brand-teal/20 focus:border-brand-teal"
+            >
+              <option value="">Select Team Member</option>
+              {staffUsers.map((u) => (
+                <option key={u.id} value={u.id}>
+                  {u.firstName} {u.lastName} ({u.email})
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-brand-navy font-semibold mb-1">Assignment Notes</label>
+            <textarea
+              rows={2}
+              value={assignNotes}
+              onChange={(e) => setAssignNotes(e.target.value)}
+              placeholder="Instructions for staff member..."
+              className="w-full bg-surface-subtle border border-surface-border rounded-lg px-3 py-2 text-xs text-brand-navy placeholder-surface-disabled focus:outline-none focus:ring-2 focus:ring-brand-teal/20 focus:border-brand-teal"
+            />
           </div>
         </div>
-      )}
+      </Modal>
 
-      {actionModal === 'COMPLETE' && (
-        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-700 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
-            <h3 className="text-base font-bold text-white">Complete Maintenance Work</h3>
-            <div>
-              <label className="block text-xs text-slate-300 font-semibold mb-1">Actual Cost Incurred (₹)</label>
-              <input
-                type="number"
-                step="0.01"
-                placeholder="e.g. 750.00"
-                value={actualCostInput}
-                onChange={(e) => setActualCostInput(e.target.value)}
-                className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white"
-              />
+      {/* Complete Modal */}
+      <Modal
+        isOpen={actionModal === 'COMPLETE'}
+        onClose={() => setActionModal(null)}
+        title="Complete Maintenance Work"
+        subtitle="Record resolution details and actual cost incurred"
+        maxWidth="md"
+        footer={
+          <>
+            <Button variant="outline" size="sm" onClick={() => setActionModal(null)}>
+              Cancel
+            </Button>
+            <Button
+              variant="primary"
+              size="sm"
+              isLoading={isProcessingAction}
+              onClick={() =>
+                executeAction('complete', 'POST', {
+                  actualCost: actualCostInput ? parseFloat(actualCostInput) : undefined,
+                  resolutionNotes: resolutionNotesInput,
+                })
+              }
+            >
+              Complete Work
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-4 text-xs">
+          {actionError && (
+            <div className="p-3 rounded-lg bg-rose-50 border border-rose-200 text-rose-700 text-xs">
+              {actionError}
             </div>
-            <div>
-              <label className="block text-xs text-slate-300 font-semibold mb-1">Resolution Summary</label>
-              <textarea
-                rows={3}
-                placeholder="Detail what repairs were conducted..."
-                value={resolutionNotesInput}
-                onChange={(e) => setResolutionNotesInput(e.target.value)}
-                className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white"
-              />
-            </div>
-            <div className="flex justify-end gap-2 pt-2">
-              <button
-                onClick={() => setActionModal(null)}
-                className="px-3 py-1.5 rounded-lg text-xs text-slate-400 hover:text-white"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() =>
-                  executeAction('complete', 'POST', {
-                    actualCost: actualCostInput ? parseFloat(actualCostInput) : undefined,
-                    resolutionNotes: resolutionNotesInput,
-                  })
-                }
-                disabled={isProcessingAction}
-                className="bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold px-4 py-1.5 rounded-lg disabled:opacity-50"
-              >
-                Complete Work
-              </button>
-            </div>
+          )}
+          <div>
+            <label className="block text-brand-navy font-semibold mb-1">Actual Cost Incurred (₹)</label>
+            <input
+              type="number"
+              step="0.01"
+              placeholder="e.g. 750.00"
+              value={actualCostInput}
+              onChange={(e) => setActualCostInput(e.target.value)}
+              className="w-full bg-surface-subtle border border-surface-border rounded-lg px-3 py-2 text-xs text-brand-navy placeholder-surface-disabled focus:outline-none focus:ring-2 focus:ring-brand-teal/20 focus:border-brand-teal"
+            />
+          </div>
+          <div>
+            <label className="block text-brand-navy font-semibold mb-1">Resolution Summary</label>
+            <textarea
+              rows={3}
+              placeholder="Detail what repairs or replacements were conducted..."
+              value={resolutionNotesInput}
+              onChange={(e) => setResolutionNotesInput(e.target.value)}
+              className="w-full bg-surface-subtle border border-surface-border rounded-lg px-3 py-2 text-xs text-brand-navy placeholder-surface-disabled focus:outline-none focus:ring-2 focus:ring-brand-teal/20 focus:border-brand-teal"
+            />
           </div>
         </div>
-      )}
+      </Modal>
 
-      {actionModal === 'CANCEL' && (
-        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-700 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
-            <h3 className="text-base font-bold text-white">Cancel Maintenance Request</h3>
-            <div>
-              <label className="block text-xs text-slate-300 font-semibold mb-1">Cancellation Reason *</label>
-              <textarea
-                required
-                rows={3}
-                placeholder="State why this ticket is being cancelled..."
-                value={cancelReasonInput}
-                onChange={(e) => setCancelReasonInput(e.target.value)}
-                className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white"
-              />
+      {/* Cancel Modal */}
+      <Modal
+        isOpen={actionModal === 'CANCEL'}
+        onClose={() => setActionModal(null)}
+        title="Cancel Maintenance Request"
+        subtitle="State why this ticket is being cancelled"
+        maxWidth="md"
+        footer={
+          <>
+            <Button variant="outline" size="sm" onClick={() => setActionModal(null)}>
+              Back
+            </Button>
+            <Button
+              variant="danger"
+              size="sm"
+              disabled={!cancelReasonInput.trim()}
+              isLoading={isProcessingAction}
+              onClick={() => executeAction('cancel', 'POST', { reason: cancelReasonInput })}
+            >
+              Confirm Cancellation
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-4 text-xs">
+          {actionError && (
+            <div className="p-3 rounded-lg bg-rose-50 border border-rose-200 text-rose-700 text-xs">
+              {actionError}
             </div>
-            <div className="flex justify-end gap-2 pt-2">
-              <button
-                onClick={() => setActionModal(null)}
-                className="px-3 py-1.5 rounded-lg text-xs text-slate-400 hover:text-white"
-              >
-                Back
-              </button>
-              <button
-                onClick={() => executeAction('cancel', 'POST', { reason: cancelReasonInput })}
-                disabled={!cancelReasonInput.trim() || isProcessingAction}
-                className="bg-rose-600 hover:bg-rose-500 text-white text-xs font-semibold px-4 py-1.5 rounded-lg disabled:opacity-50"
-              >
-                Confirm Cancellation
-              </button>
-            </div>
+          )}
+          <div>
+            <label className="block text-brand-navy font-semibold mb-1">Cancellation Reason *</label>
+            <textarea
+              required
+              rows={3}
+              placeholder="State why this ticket is being cancelled..."
+              value={cancelReasonInput}
+              onChange={(e) => setCancelReasonInput(e.target.value)}
+              className="w-full bg-surface-subtle border border-surface-border rounded-lg px-3 py-2 text-xs text-brand-navy placeholder-surface-disabled focus:outline-none focus:ring-2 focus:ring-brand-teal/20 focus:border-brand-teal"
+            />
           </div>
         </div>
-      )}
-    </div>
+      </Modal>
+    </AppShell>
   );
 }

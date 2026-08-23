@@ -448,14 +448,14 @@ export default function MealsManagementPage() {
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-emerald-500/10 text-emerald-600 rounded-lg">
+              <div className="p-2 bg-teal-50 text-brand-teal border border-teal-200 rounded-xl">
                 <UtensilsCrossed className="w-6 h-6" />
               </div>
               <div>
-                <h1 className="text-2xl font-bold tracking-tight text-slate-900">
+                <h1 className="text-2xl font-bold tracking-tight text-brand-navy">
                   PG Meal Management
                 </h1>
-                <p className="text-sm text-slate-500">
+                <p className="text-sm text-surface-textSecondary">
                   Mess plans, tenant subscriptions, live daily attendance matrix & automated billing
                 </p>
               </div>

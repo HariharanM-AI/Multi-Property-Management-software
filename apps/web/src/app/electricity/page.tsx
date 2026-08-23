@@ -362,10 +362,10 @@ export default function ElectricityManagementPage() {
                 <Zap className="w-6 h-6" />
               </div>
               <div>
-                <h1 className="text-2xl font-bold tracking-tight text-slate-900">
+                <h1 className="text-2xl font-bold tracking-tight text-brand-navy">
                   Electricity Management
                 </h1>
-                <p className="text-sm text-slate-500">
+                <p className="text-sm text-surface-textSecondary">
                   Meter readings, deterministic room occupant allocation, rate configuration & billing
                 </p>
               </div>

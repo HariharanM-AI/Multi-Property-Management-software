@@ -3,6 +3,25 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { AppShell } from '@/components/layout/AppShell';
+import { PageHeader } from '@/components/ui/PageHeader';
+import { StatCard } from '@/components/ui/StatCard';
+import { FilterBar } from '@/components/ui/FilterBar';
+import { StatusBadge } from '@/components/ui/StatusBadge';
+import { Button } from '@/components/ui/Button';
+import { Modal } from '@/components/ui/Modal';
+import { EmptyState } from '@/components/ui/EmptyState';
+import {
+  LogIn,
+  CheckCircle2,
+  Clock,
+  Ban,
+  Building2,
+  User,
+  Plus,
+  RefreshCw,
+  Calendar,
+  AlertTriangle,
+} from 'lucide-react';
 
 interface Property {
   id: string;
@@ -130,7 +149,6 @@ export default function CheckInsPage() {
 
   // Wizard State
   const [isWizardOpen, setIsWizardOpen] = useState(false);
-  const [wizardStep, setWizardStep] = useState(1);
   const [wizardTenantId, setWizardTenantId] = useState('');
   const [wizardPropertyId, setWizardPropertyId] = useState('');
   const [wizardBedId, setWizardBedId] = useState('');
@@ -181,15 +199,15 @@ export default function CheckInsPage() {
       setPropertyFloors([]);
       setPropertyLeases([]);
     }
-  }, [wizardPropertyId]);
+  }, [wizardPropertyId, properties]);
 
   const fetchInitialData = async () => {
     setLoading(true);
     try {
       const [checkInsRes, propsRes, tenantsRes] = await Promise.all([
-        fetch('/api/v1/check-ins').then((r) => r.json()).catch(() => ({ data: [] })),
-        fetch('/api/v1/properties').then((r) => r.json()).catch(() => ({ data: [] })),
-        fetch('/api/v1/tenants').then((r) => r.json()).catch(() => ({ data: [] })),
+        fetch('/api/v1/check-ins', { credentials: 'include' }).then((r) => r.json()).catch(() => ({ data: [] })),
+        fetch('/api/v1/properties', { credentials: 'include' }).then((r) => r.json()).catch(() => ({ data: [] })),
+        fetch('/api/v1/tenants', { credentials: 'include' }).then((r) => r.json()).catch(() => ({ data: [] })),
       ]);
 
       setCheckIns(checkInsRes.data || []);
@@ -208,7 +226,7 @@ export default function CheckInsPage() {
       const url = propertyId
         ? `/api/v1/tenants/${tenantId}/onboarding-status?propertyId=${propertyId}`
         : `/api/v1/tenants/${tenantId}/onboarding-status`;
-      const res = await fetch(url);
+      const res = await fetch(url, { credentials: 'include' });
       const data = await res.json();
       if (data.success) {
         setOnboardingStatus(data.data);
@@ -222,7 +240,7 @@ export default function CheckInsPage() {
 
   const fetchFloors = async (propertyId: string) => {
     try {
-      const res = await fetch(`/api/v1/properties/${propertyId}/floors`);
+      const res = await fetch(`/api/v1/properties/${propertyId}/floors`, { credentials: 'include' });
       const data = await res.json();
       if (data.success) {
         setPropertyFloors(data.data || []);
@@ -234,7 +252,7 @@ export default function CheckInsPage() {
 
   const fetchLeases = async (propertyId: string) => {
     try {
-      const res = await fetch(`/api/v1/properties/${propertyId}/leases`);
+      const res = await fetch(`/api/v1/properties/${propertyId}/leases`, { credentials: 'include' });
       const data = await res.json();
       if (data.success) {
         setPropertyLeases(data.data || []);
@@ -278,6 +296,7 @@ export default function CheckInsPage() {
       const res = await fetch(`/api/v1/properties/${wizardPropertyId}/check-ins`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify(payload),
       });
 
@@ -304,6 +323,7 @@ export default function CheckInsPage() {
     try {
       const res = await fetch(`/api/v1/check-ins/${checkInId}/ready`, {
         method: 'POST',
+        credentials: 'include',
       });
       const data = await res.json();
       if (!res.ok || !data.success) {
@@ -324,6 +344,7 @@ export default function CheckInsPage() {
     try {
       const res = await fetch(`/api/v1/check-ins/${checkInId}/complete`, {
         method: 'POST',
+        credentials: 'include',
       });
       const data = await res.json();
       if (!res.ok || !data.success) {
@@ -347,6 +368,7 @@ export default function CheckInsPage() {
       const res = await fetch(`/api/v1/check-ins/${checkInId}/cancel`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({ reason: reason.trim() || undefined }),
       });
       const data = await res.json();
@@ -363,7 +385,6 @@ export default function CheckInsPage() {
   };
 
   const resetWizard = () => {
-    setWizardStep(1);
     setWizardTenantId('');
     setWizardPropertyId('');
     setWizardBedId('');
@@ -403,696 +424,494 @@ export default function CheckInsPage() {
   const selectedRoom = selectedFloor?.rooms.find((r) => r.id === selectedRoomId);
   const availableBeds = selectedRoom?.beds.filter((b) => b.status === 'AVAILABLE') || [];
 
+  const filterTabs = [
+    { id: 'ALL', label: 'All' },
+    { id: 'INITIATED', label: 'Initiated' },
+    { id: 'READY', label: 'Ready' },
+    { id: 'CHECKED_IN', label: 'Checked In' },
+    { id: 'CANCELLED', label: 'Cancelled' },
+  ];
+
   return (
     <AppShell activePath="/check-ins">
-      <div style={{ padding: '32px', maxWidth: '1400px', margin: '0 auto', color: '#1e293b' }}>
-        {/* Header */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '28px' }}>
-          <div>
-            <h1 style={{ fontSize: '28px', fontWeight: '700', color: '#0f172a', margin: '0 0 6px 0' }}>
-            Digital Check-In & Onboarding
-          </h1>
-          <p style={{ fontSize: '14px', color: '#64748b', margin: 0 }}>
-            Manage digital tenant check-in workflows, PG bed assignments, lease occupancy, and onboarding readiness.
-          </p>
-        </div>
-        <button
-          onClick={() => {
-            resetWizard();
-            setIsWizardOpen(true);
-          }}
-          style={{
-            backgroundColor: '#2563eb',
-            color: '#ffffff',
-            border: 'none',
-            borderRadius: '8px',
-            padding: '10px 20px',
-            fontSize: '14px',
-            fontWeight: '600',
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
-            boxShadow: '0 2px 4px rgba(37,99,235,0.2)',
-          }}
-        >
-          <span style={{ fontSize: '18px' }}>+</span> Start Digital Check-In
-        </button>
-      </div>
+      <div className="space-y-6 max-w-7xl mx-auto pb-16">
+        {/* Page Header */}
+        <PageHeader
+          title="Digital Check-In & Onboarding"
+          subtitle="Manage digital tenant check-in workflows, space allocation, and onboarding verification"
+          icon={LogIn}
+          actions={
+            <div className="flex items-center gap-2.5">
+              <Button
+                variant="primary"
+                size="md"
+                onClick={() => {
+                  resetWizard();
+                  setIsWizardOpen(true);
+                }}
+                className="gap-2 font-semibold shadow-sm"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Start Digital Check-In</span>
+              </Button>
+            </div>
+          }
+        />
 
-      {actionMessage && (
-        <div
-          style={{
-            padding: '12px 16px',
-            backgroundColor: '#ecfdf5',
-            color: '#065f46',
-            borderRadius: '8px',
-            marginBottom: '20px',
-            fontSize: '14px',
-            fontWeight: '500',
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-          }}
-        >
-          <span>✓ {actionMessage}</span>
-          <button
-            onClick={() => setActionMessage(null)}
-            style={{ background: 'none', border: 'none', color: '#065f46', cursor: 'pointer', fontWeight: 'bold' }}
-          >
-            ✕
-          </button>
-        </div>
-      )}
-
-      {/* KPI Summary Cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px', marginBottom: '28px' }}>
-        <div style={{ background: '#ffffff', padding: '20px', borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
-          <div style={{ fontSize: '13px', color: '#64748b', fontWeight: '600', textTransform: 'uppercase' }}>Total Check-Ins</div>
-          <div style={{ fontSize: '32px', fontWeight: '700', color: '#0f172a', marginTop: '6px' }}>{totalCount}</div>
-        </div>
-        <div style={{ background: '#ffffff', padding: '20px', borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
-          <div style={{ fontSize: '13px', color: '#10b981', fontWeight: '600', textTransform: 'uppercase' }}>Checked In</div>
-          <div style={{ fontSize: '32px', fontWeight: '700', color: '#10b981', marginTop: '6px' }}>{checkedInCount}</div>
-        </div>
-        <div style={{ background: '#ffffff', padding: '20px', borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
-          <div style={{ fontSize: '13px', color: '#3b82f6', fontWeight: '600', textTransform: 'uppercase' }}>Ready to Check In</div>
-          <div style={{ fontSize: '32px', fontWeight: '700', color: '#3b82f6', marginTop: '6px' }}>{readyCount}</div>
-        </div>
-        <div style={{ background: '#ffffff', padding: '20px', borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
-          <div style={{ fontSize: '13px', color: '#f59e0b', fontWeight: '600', textTransform: 'uppercase' }}>Initiated / Pending</div>
-          <div style={{ fontSize: '32px', fontWeight: '700', color: '#f59e0b', marginTop: '6px' }}>{initiatedCount}</div>
-        </div>
-        <div style={{ background: '#ffffff', padding: '20px', borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
-          <div style={{ fontSize: '13px', color: '#ef4444', fontWeight: '600', textTransform: 'uppercase' }}>Cancelled</div>
-          <div style={{ fontSize: '32px', fontWeight: '700', color: '#64748b', marginTop: '6px' }}>{cancelledCount}</div>
-        </div>
-      </div>
-
-      {/* Filter Tabs and Search Bar */}
-      <div style={{ background: '#ffffff', padding: '16px 20px', borderRadius: '12px', border: '1px solid #e2e8f0', marginBottom: '20px', display: 'flex', flexWrap: 'wrap', gap: '16px', alignItems: 'center', justifyContent: 'space-between' }}>
-        {/* Status Tabs */}
-        <div style={{ display: 'flex', gap: '8px' }}>
-          {[
-            { label: 'All', value: 'ALL' },
-            { label: 'Initiated', value: 'INITIATED' },
-            { label: 'Ready', value: 'READY' },
-            { label: 'Checked In', value: 'CHECKED_IN' },
-            { label: 'Cancelled', value: 'CANCELLED' },
-          ].map((tab) => (
+        {/* Action Message Alert */}
+        {actionMessage && (
+          <div className="p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-medium flex items-center justify-between shadow-xs">
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+              <span>{actionMessage}</span>
+            </div>
             <button
-              key={tab.value}
-              onClick={() => setFilterStatus(tab.value)}
-              style={{
-                padding: '6px 14px',
-                borderRadius: '6px',
-                fontSize: '13px',
-                fontWeight: '600',
-                border: 'none',
-                cursor: 'pointer',
-                backgroundColor: filterStatus === tab.value ? '#2563eb' : '#f1f5f9',
-                color: filterStatus === tab.value ? '#ffffff' : '#64748b',
-                transition: 'all 0.15s ease',
-              }}
+              onClick={() => setActionMessage(null)}
+              className="text-emerald-700 hover:text-emerald-900 font-bold p-1 rounded-md"
             >
-              {tab.label}
+              ✕
             </button>
-          ))}
-        </div>
+          </div>
+        )}
 
-        {/* Search & Property Filter */}
-        <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-          <select
-            value={selectedPropertyId}
-            onChange={(e) => setSelectedPropertyId(e.target.value)}
-            style={{
-              padding: '8px 12px',
-              borderRadius: '6px',
-              border: '1px solid #cbd5e1',
-              fontSize: '13px',
-              backgroundColor: '#ffffff',
-              color: '#334155',
-            }}
-          >
-            <option value="">All Properties</option>
-            {properties.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name} ({p.propertyType})
-              </option>
-            ))}
-          </select>
-
-          <input
-            type="text"
-            placeholder="Search tenant or property..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            style={{
-              padding: '8px 14px',
-              borderRadius: '6px',
-              border: '1px solid #cbd5e1',
-              fontSize: '13px',
-              width: '240px',
-            }}
+        {/* KPI Metrics */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3.5">
+          <StatCard
+            label="Total Check-Ins"
+            value={totalCount}
+            subtext="All recorded records"
+            icon={LogIn}
+            variant="default"
+          />
+          <StatCard
+            label="Checked In"
+            value={checkedInCount}
+            subtext="Active tenant stays"
+            icon={CheckCircle2}
+            variant="teal"
+          />
+          <StatCard
+            label="Ready to Check In"
+            value={readyCount}
+            subtext="Verified for move-in"
+            icon={Clock}
+            variant="blue"
+          />
+          <StatCard
+            label="Initiated / Pending"
+            value={initiatedCount}
+            subtext="Awaiting KYC/docs"
+            icon={AlertTriangle}
+            variant="amber"
+          />
+          <StatCard
+            label="Cancelled"
+            value={cancelledCount}
+            subtext="Revoked workflows"
+            icon={Ban}
+            variant="rose"
           />
         </div>
-      </div>
 
-      {/* Check-In Table */}
-      <div style={{ background: '#ffffff', borderRadius: '12px', border: '1px solid #e2e8f0', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '14px' }}>
-          <thead>
-            <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
-              <th style={{ padding: '14px 20px', fontWeight: '600', color: '#475569' }}>Tenant</th>
-              <th style={{ padding: '14px 20px', fontWeight: '600', color: '#475569' }}>Property</th>
-              <th style={{ padding: '14px 20px', fontWeight: '600', color: '#475569' }}>Assigned Space</th>
-              <th style={{ padding: '14px 20px', fontWeight: '600', color: '#475569' }}>Check-In Date</th>
-              <th style={{ padding: '14px 20px', fontWeight: '600', color: '#475569' }}>Status</th>
-              <th style={{ padding: '14px 20px', fontWeight: '600', color: '#475569', textAlign: 'right' }}>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading ? (
-              <tr>
-                <td colSpan={6} style={{ padding: '32px', textAlign: 'center', color: '#64748b' }}>
-                  Loading check-in records...
-                </td>
-              </tr>
-            ) : filteredCheckIns.length === 0 ? (
-              <tr>
-                <td colSpan={6} style={{ padding: '40px', textAlign: 'center', color: '#64748b' }}>
-                  No check-in records found matching the selected filters.
-                </td>
-              </tr>
-            ) : (
-              filteredCheckIns.map((item) => {
-                const isPg = item.property?.propertyType === 'PG';
-                return (
-                  <tr key={item.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                    <td style={{ padding: '14px 20px' }}>
-                      <Link
-                        href={`/tenants/${item.tenantId}`}
-                        style={{ color: '#2563eb', fontWeight: '600', textDecoration: 'none' }}
-                      >
-                        {item.tenant ? `${item.tenant.firstName} ${item.tenant.lastName}` : item.tenantId}
-                      </Link>
-                      <div style={{ fontSize: '12px', color: '#64748b', marginTop: '2px' }}>
-                        {item.tenant?.phone}
-                      </div>
-                    </td>
-                    <td style={{ padding: '14px 20px' }}>
-                      <div style={{ fontWeight: '500', color: '#1e293b' }}>{item.property?.name || '—'}</div>
-                      <div style={{ fontSize: '11px', color: '#64748b', textTransform: 'uppercase' }}>
-                        {item.property?.propertyType}
-                      </div>
-                    </td>
-                    <td style={{ padding: '14px 20px' }}>
-                      {isPg ? (
-                        item.bed ? (
-                          <div>
-                            <span style={{ fontWeight: '600', color: '#0f172a' }}>Bed {item.bed.bedNumber}</span>
-                            <span style={{ fontSize: '12px', color: '#64748b', marginLeft: '6px' }}>
-                              (Room {item.bed.room?.roomNumber || '—'}, Fl. {item.bed.room?.floor?.floorNumber ?? '—'})
-                            </span>
-                          </div>
-                        ) : (
-                          <span style={{ color: '#94a3b8' }}>Unassigned Bed</span>
-                        )
-                      ) : (
-                        <div>
-                          <span style={{ fontWeight: '600', color: '#0f172a' }}>
-                            {item.rentalUnit?.unitNumber || 'Whole Unit'}
-                          </span>
-                          {item.lease && (
-                            <span style={{ fontSize: '12px', color: '#64748b', marginLeft: '6px' }}>
-                              (₹{item.lease.monthlyRent.toLocaleString('en-IN')}/mo)
-                            </span>
-                          )}
-                        </div>
-                      )}
-                    </td>
-                    <td style={{ padding: '14px 20px' }}>
-                      <div style={{ color: '#334155', fontWeight: '500' }}>
-                        {new Date(item.checkInDate).toLocaleDateString()}
-                      </div>
-                      {item.expectedCheckoutDate && (
-                        <div style={{ fontSize: '11px', color: '#64748b' }}>
-                          Exp: {new Date(item.expectedCheckoutDate).toLocaleDateString()}
-                        </div>
-                      )}
-                    </td>
-                    <td style={{ padding: '14px 20px' }}>
-                      <span
-                        style={{
-                          display: 'inline-block',
-                          padding: '4px 10px',
-                          borderRadius: '12px',
-                          fontSize: '12px',
-                          fontWeight: '600',
-                          backgroundColor:
-                            item.status === 'CHECKED_IN'
-                              ? '#dcfce7'
-                              : item.status === 'READY'
-                              ? '#dbeafe'
-                              : item.status === 'INITIATED'
-                              ? '#fef3c7'
-                              : '#f1f5f9',
-                          color:
-                            item.status === 'CHECKED_IN'
-                              ? '#15803d'
-                              : item.status === 'READY'
-                              ? '#1d4ed8'
-                              : item.status === 'INITIATED'
-                              ? '#b45309'
-                              : '#64748b',
-                        }}
-                      >
-                        {item.status}
-                      </span>
-                    </td>
-                    <td style={{ padding: '14px 20px', textAlign: 'right' }}>
-                      <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
-                        {item.status === 'INITIATED' && (
-                          <button
-                            onClick={() => handleMarkReady(item.id)}
-                            disabled={actionLoading === item.id}
-                            style={{
-                              padding: '6px 12px',
-                              backgroundColor: '#3b82f6',
-                              color: '#ffffff',
-                              border: 'none',
-                              borderRadius: '6px',
-                              fontSize: '12px',
-                              fontWeight: '600',
-                              cursor: 'pointer',
-                            }}
-                          >
-                            Mark Ready
-                          </button>
-                        )}
-                        {item.status === 'READY' && (
-                          <button
-                            onClick={() => handleCompleteCheckIn(item.id)}
-                            disabled={actionLoading === item.id}
-                            style={{
-                              padding: '6px 12px',
-                              backgroundColor: '#10b981',
-                              color: '#ffffff',
-                              border: 'none',
-                              borderRadius: '6px',
-                              fontSize: '12px',
-                              fontWeight: '600',
-                              cursor: 'pointer',
-                            }}
-                          >
-                            Complete Check-In
-                          </button>
-                        )}
-                        {(item.status === 'INITIATED' || item.status === 'READY') && (
-                          <button
-                            onClick={() => handleCancelCheckIn(item.id)}
-                            disabled={actionLoading === item.id}
-                            style={{
-                              padding: '6px 12px',
-                              backgroundColor: '#fee2e2',
-                              color: '#b91c1c',
-                              border: 'none',
-                              borderRadius: '6px',
-                              fontSize: '12px',
-                              fontWeight: '600',
-                              cursor: 'pointer',
-                            }}
-                          >
-                            Cancel
-                          </button>
-                        )}
-                        {item.status === 'CHECKED_IN' && (
-                          <span style={{ fontSize: '12px', color: '#10b981', fontWeight: '500' }}>
-                            ✓ Active Stay
-                          </span>
-                        )}
-                      </div>
-                    </td>
+        {/* Filter Bar */}
+        <FilterBar
+          tabs={filterTabs}
+          activeTab={filterStatus}
+          onTabChange={setFilterStatus}
+          searchQuery={searchQuery}
+          onSearchChange={setSearchQuery}
+          searchPlaceholder="Search tenant, property, phone..."
+        >
+          <div className="flex items-center gap-2">
+            <Building2 className="w-4 h-4 text-surface-textSecondary shrink-0" />
+            <select
+              aria-label="Filter by Property"
+              value={selectedPropertyId}
+              onChange={(e) => setSelectedPropertyId(e.target.value)}
+              className="bg-surface-subtle border border-surface-border rounded-lg px-2.5 py-1.5 text-xs text-brand-navy focus:outline-none focus:ring-2 focus:ring-brand-teal/20 focus:border-brand-teal cursor-pointer"
+            >
+              <option value="">All Properties</option>
+              {properties.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name} ({p.propertyType})
+                </option>
+              ))}
+            </select>
+          </div>
+        </FilterBar>
+
+        {/* Check-In Table */}
+        <div className="bg-brand-white border border-surface-border rounded-xl overflow-hidden shadow-sm">
+          {loading ? (
+            <div className="p-12 text-center text-surface-textSecondary space-y-3">
+              <RefreshCw className="w-7 h-7 animate-spin mx-auto text-brand-teal" />
+              <p className="text-xs font-medium">Loading check-in records...</p>
+            </div>
+          ) : filteredCheckIns.length === 0 ? (
+            <EmptyState
+              icon={LogIn}
+              title="No check-in records found"
+              description="There are no check-in records matching the selected filter criteria. Start a new digital check-in workflow or clear active filters."
+              actionLabel="Start Digital Check-In"
+              onAction={() => {
+                resetWizard();
+                setIsWizardOpen(true);
+              }}
+            />
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs text-brand-navy">
+                <thead className="bg-surface-subtle text-[11px] uppercase text-surface-textSecondary font-semibold border-b border-surface-border">
+                  <tr>
+                    <th className="px-5 py-3">Tenant</th>
+                    <th className="px-5 py-3">Property</th>
+                    <th className="px-5 py-3">Assigned Space</th>
+                    <th className="px-5 py-3">Check-In Date</th>
+                    <th className="px-5 py-3">Status</th>
+                    <th className="px-5 py-3 text-right">Actions</th>
                   </tr>
-                );
-              })
-            )}
-          </tbody>
-        </table>
+                </thead>
+                <tbody className="divide-y divide-surface-border">
+                  {filteredCheckIns.map((item) => {
+                    const isPg = item.property?.propertyType === 'PG';
+                    return (
+                      <tr key={item.id} className="hover:bg-surface-subtle/70 transition-colors">
+                        <td className="px-5 py-3.5">
+                          <Link
+                            href={`/tenants/${item.tenantId}`}
+                            className="font-semibold text-brand-teal hover:underline"
+                          >
+                            {item.tenant ? `${item.tenant.firstName} ${item.tenant.lastName}` : item.tenantId}
+                          </Link>
+                          <div className="text-[11px] text-surface-textSecondary mt-0.5">
+                            {item.tenant?.phone}
+                          </div>
+                        </td>
+                        <td className="px-5 py-3.5">
+                          <div className="font-medium text-brand-navy">{item.property?.name || '—'}</div>
+                          <div className="text-[10px] uppercase font-semibold text-surface-textSecondary mt-0.5">
+                            {item.property?.propertyType}
+                          </div>
+                        </td>
+                        <td className="px-5 py-3.5">
+                          {isPg ? (
+                            item.bed ? (
+                              <div>
+                                <span className="font-semibold text-brand-navy">Bed {item.bed.bedNumber}</span>
+                                <span className="text-surface-textSecondary text-[11px] ml-1.5">
+                                  (Room {item.bed.room?.roomNumber || '—'}, Fl. {item.bed.room?.floor?.floorNumber ?? '—'})
+                                </span>
+                              </div>
+                            ) : (
+                              <span className="text-surface-disabled italic">Unassigned Bed</span>
+                            )
+                          ) : (
+                            <div>
+                              <span className="font-semibold text-brand-navy">
+                                {item.rentalUnit?.unitNumber || 'Whole Unit'}
+                              </span>
+                              {item.lease && (
+                                <span className="text-surface-textSecondary text-[11px] ml-1.5">
+                                  (₹{item.lease.monthlyRent.toLocaleString('en-IN')}/mo)
+                                </span>
+                              )}
+                            </div>
+                          )}
+                        </td>
+                        <td className="px-5 py-3.5">
+                          <div className="font-medium text-brand-navy">
+                            {new Date(item.checkInDate).toLocaleDateString()}
+                          </div>
+                          {item.expectedCheckoutDate && (
+                            <div className="text-[10px] text-surface-textSecondary mt-0.5">
+                              Exp: {new Date(item.expectedCheckoutDate).toLocaleDateString()}
+                            </div>
+                          )}
+                        </td>
+                        <td className="px-5 py-3.5">
+                          <StatusBadge status={item.status} />
+                        </td>
+                        <td className="px-5 py-3.5 text-right">
+                          <div className="flex items-center justify-end gap-2">
+                            {item.status === 'INITIATED' && (
+                              <Button
+                                variant="secondary"
+                                size="sm"
+                                onClick={() => handleMarkReady(item.id)}
+                                isLoading={actionLoading === item.id}
+                              >
+                                Mark Ready
+                              </Button>
+                            )}
+                            {item.status === 'READY' && (
+                              <Button
+                                variant="primary"
+                                size="sm"
+                                onClick={() => handleCompleteCheckIn(item.id)}
+                                isLoading={actionLoading === item.id}
+                              >
+                                Complete Check-In
+                              </Button>
+                            )}
+                            {(item.status === 'INITIATED' || item.status === 'READY') && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleCancelCheckIn(item.id)}
+                                isLoading={actionLoading === item.id}
+                                className="text-rose-600 hover:text-rose-700 hover:bg-rose-50 border-rose-200"
+                              >
+                                Cancel
+                              </Button>
+                            )}
+                            {item.status === 'CHECKED_IN' && (
+                              <span className="text-xs text-brand-teal font-semibold flex items-center gap-1">
+                                <CheckCircle2 className="w-3.5 h-3.5" />
+                                <span>Active Stay</span>
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Digital Check-In Wizard Modal */}
-      {isWizardOpen && (
-        <div
-          style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            backgroundColor: 'rgba(15, 23, 42, 0.6)',
-            backdropFilter: 'blur(4px)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 1000,
-            padding: '20px',
-          }}
-        >
-          <div
-            style={{
-              background: '#ffffff',
-              borderRadius: '16px',
-              width: '100%',
-              maxWidth: '640px',
-              padding: '28px',
-              boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
-              maxHeight: '90vh',
-              overflowY: 'auto',
-            }}
-          >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-              <div>
-                <h2 style={{ fontSize: '20px', fontWeight: '700', color: '#0f172a', margin: '0 0 4px 0' }}>
-                  Start Digital Check-In
-                </h2>
-                <p style={{ fontSize: '13px', color: '#64748b', margin: 0 }}>
-                  Assign space, verify onboarding readiness, and initiate tenant stay.
-                </p>
-              </div>
-              <button
-                onClick={() => setIsWizardOpen(false)}
-                style={{
-                  background: '#f1f5f9',
-                  border: 'none',
-                  borderRadius: '50%',
-                  width: '32px',
-                  height: '32px',
-                  fontSize: '16px',
-                  color: '#64748b',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}
-              >
-                ✕
-              </button>
+      <Modal
+        isOpen={isWizardOpen}
+        onClose={() => setIsWizardOpen(false)}
+        title="Start Digital Check-In"
+        subtitle="Assign space, verify onboarding readiness, and initiate tenant stay"
+        maxWidth="2xl"
+        footer={
+          <>
+            <Button variant="outline" size="sm" onClick={() => setIsWizardOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={handleCreateCheckIn}
+              isLoading={wizardLoading}
+              disabled={onboardingStatus ? !onboardingStatus.readyForCheckIn : false}
+            >
+              Initiate Check-In
+            </Button>
+          </>
+        }
+      >
+        <form onSubmit={handleCreateCheckIn} className="space-y-4 text-xs">
+          {wizardError && (
+            <div className="p-3 rounded-lg bg-rose-50 border border-rose-200 text-rose-700 text-xs">
+              {wizardError}
             </div>
+          )}
 
-            {wizardError && (
-              <div
-                style={{
-                  padding: '12px',
-                  backgroundColor: '#fef2f2',
-                  color: '#991b1b',
-                  borderRadius: '8px',
-                  fontSize: '13px',
-                  marginBottom: '16px',
-                }}
-              >
-                {wizardError}
+          {/* Select Tenant */}
+          <div>
+            <label className="block text-brand-navy font-semibold mb-1">Select Tenant *</label>
+            <select
+              required
+              value={wizardTenantId}
+              onChange={(e) => setWizardTenantId(e.target.value)}
+              className="w-full bg-surface-subtle border border-surface-border rounded-lg px-3 py-2 text-xs text-brand-navy focus:outline-none focus:ring-2 focus:ring-brand-teal/20 focus:border-brand-teal"
+            >
+              <option value="">-- Choose Tenant --</option>
+              {tenants.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.firstName} {t.lastName} ({t.phone}) - {t.status}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Onboarding Readiness Visualizer */}
+          {wizardTenantId && (
+            <div className="bg-surface-subtle p-4 rounded-xl border border-surface-border space-y-2">
+              <div className="font-semibold text-brand-navy text-xs">
+                Onboarding Readiness Checklist:
               </div>
-            )}
-
-            <form onSubmit={handleCreateCheckIn}>
-              {/* Step 1: Select Tenant */}
-              <div style={{ marginBottom: '18px' }}>
-                <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#334155', marginBottom: '6px' }}>
-                  Select Tenant *
-                </label>
-                <select
-                  required
-                  value={wizardTenantId}
-                  onChange={(e) => setWizardTenantId(e.target.value)}
-                  style={{
-                    width: '100%',
-                    padding: '10px 12px',
-                    borderRadius: '8px',
-                    border: '1px solid #cbd5e1',
-                    fontSize: '14px',
-                    backgroundColor: '#ffffff',
-                  }}
-                >
-                  <option value="">-- Choose Tenant --</option>
-                  {tenants.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.firstName} {t.lastName} ({t.phone}) - {t.status}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Onboarding Readiness Visualizer */}
-              {wizardTenantId && (
-                <div
-                  style={{
-                    background: '#f8fafc',
-                    padding: '14px 16px',
-                    borderRadius: '10px',
-                    border: '1px solid #e2e8f0',
-                    marginBottom: '18px',
-                    fontSize: '13px',
-                  }}
-                >
-                  <div style={{ fontWeight: '600', color: '#1e293b', marginBottom: '8px' }}>
-                    Onboarding Readiness Checklist:
-                  </div>
-                  {evaluatingReadiness ? (
-                    <div style={{ color: '#64748b' }}>Evaluating tenant profile and KYC status...</div>
-                  ) : onboardingStatus ? (
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-                      <div style={{ color: onboardingStatus.tenantProfileComplete ? '#15803d' : '#b91c1c' }}>
-                        {onboardingStatus.tenantProfileComplete ? '✓ Profile Complete' : '✕ Incomplete Profile'}
-                      </div>
-                      <div style={{ color: onboardingStatus.emergencyContactComplete ? '#15803d' : '#b91c1c' }}>
-                        {onboardingStatus.emergencyContactComplete ? '✓ Emergency Contact' : '✕ Missing Emergency Info'}
-                      </div>
-                      <div style={{ color: onboardingStatus.kycVerified ? '#15803d' : '#b91c1c' }}>
-                        {onboardingStatus.kycVerified ? '✓ KYC Verified' : '✕ KYC Pending/Missing'}
-                      </div>
-                      <div style={{ color: !onboardingStatus.activePgStayPresent ? '#15803d' : '#b91c1c' }}>
-                        {!onboardingStatus.activePgStayPresent ? '✓ No Active PG Stay' : '✕ Active Stay Exists'}
-                      </div>
-                    </div>
-                  ) : null}
+              {evaluatingReadiness ? (
+                <div className="text-surface-textSecondary text-xs">
+                  Evaluating tenant profile and KYC status...
                 </div>
-              )}
-
-              {/* Step 2: Select Property */}
-              <div style={{ marginBottom: '18px' }}>
-                <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#334155', marginBottom: '6px' }}>
-                  Select Property *
-                </label>
-                <select
-                  required
-                  value={wizardPropertyId}
-                  onChange={(e) => {
-                    setWizardPropertyId(e.target.value);
-                    setWizardBedId('');
-                    setWizardLeaseId('');
-                    setSelectedFloorId('');
-                    setSelectedRoomId('');
-                  }}
-                  style={{
-                    width: '100%',
-                    padding: '10px 12px',
-                    borderRadius: '8px',
-                    border: '1px solid #cbd5e1',
-                    fontSize: '14px',
-                    backgroundColor: '#ffffff',
-                  }}
-                >
-                  <option value="">-- Choose Property --</option>
-                  {properties.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name} ({p.propertyType === 'PG' ? 'Co-Living / PG' : 'Whole-Unit Rental'})
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Step 3 (PG): Cascading Floor -> Room -> Bed Selection */}
-              {selectedProp?.propertyType === 'PG' && (
-                <div style={{ background: '#eff6ff', padding: '16px', borderRadius: '10px', marginBottom: '18px' }}>
-                  <div style={{ fontWeight: '600', color: '#1e40af', marginBottom: '12px', fontSize: '13px' }}>
-                    Select PG Space (Floor → Room → Available Bed)
+              ) : onboardingStatus ? (
+                <div className="grid grid-cols-2 gap-2 text-xs pt-1">
+                  <div className={onboardingStatus.tenantProfileComplete ? 'text-emerald-700' : 'text-rose-700'}>
+                    {onboardingStatus.tenantProfileComplete ? '✓ Profile Complete' : '✕ Incomplete Profile'}
                   </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px' }}>
-                    <div>
-                      <label style={{ display: 'block', fontSize: '12px', fontWeight: '600', color: '#334155', marginBottom: '4px' }}>
-                        Floor *
-                      </label>
-                      <select
-                        required
-                        value={selectedFloorId}
-                        onChange={(e) => {
-                          setSelectedFloorId(e.target.value);
-                          setSelectedRoomId('');
-                          setWizardBedId('');
-                        }}
-                        style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '13px' }}
-                      >
-                        <option value="">Floor</option>
-                        {propertyFloors.map((f) => (
-                          <option key={f.id} value={f.id}>
-                            Floor {f.floorNumber}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div>
-                      <label style={{ display: 'block', fontSize: '12px', fontWeight: '600', color: '#334155', marginBottom: '4px' }}>
-                        Room *
-                      </label>
-                      <select
-                        required
-                        value={selectedRoomId}
-                        onChange={(e) => {
-                          setSelectedRoomId(e.target.value);
-                          setWizardBedId('');
-                        }}
-                        disabled={!selectedFloorId}
-                        style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '13px' }}
-                      >
-                        <option value="">Room</option>
-                        {selectedFloor?.rooms.map((r) => (
-                          <option key={r.id} value={r.id}>
-                            Room {r.roomNumber}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div>
-                      <label style={{ display: 'block', fontSize: '12px', fontWeight: '600', color: '#334155', marginBottom: '4px' }}>
-                        Bed *
-                      </label>
-                      <select
-                        required
-                        value={wizardBedId}
-                        onChange={(e) => setWizardBedId(e.target.value)}
-                        disabled={!selectedRoomId || availableBeds.length === 0}
-                        style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '13px' }}
-                      >
-                        <option value="">Bed</option>
-                        {availableBeds.map((b) => (
-                          <option key={b.id} value={b.id}>
-                            {b.bedNumber} (₹{Number(b.monthlyRent).toLocaleString('en-IN')})
-                          </option>
-                        ))}
-                      </select>
-                    </div>
+                  <div className={onboardingStatus.emergencyContactComplete ? 'text-emerald-700' : 'text-rose-700'}>
+                    {onboardingStatus.emergencyContactComplete ? '✓ Emergency Contact' : '✕ Missing Emergency Info'}
+                  </div>
+                  <div className={onboardingStatus.kycVerified ? 'text-emerald-700' : 'text-rose-700'}>
+                    {onboardingStatus.kycVerified ? '✓ KYC Verified' : '✕ KYC Pending/Missing'}
+                  </div>
+                  <div className={!onboardingStatus.activePgStayPresent ? 'text-emerald-700' : 'text-rose-700'}>
+                    {!onboardingStatus.activePgStayPresent ? '✓ No Active PG Stay' : '✕ Active Stay Exists'}
                   </div>
                 </div>
-              )}
+              ) : null}
+            </div>
+          )}
 
-              {/* Step 3 (Whole-Unit): Select Active Lease */}
-              {selectedProp?.propertyType === 'RENTAL_HOUSE' && (
-                <div style={{ background: '#f0fdf4', padding: '16px', borderRadius: '10px', marginBottom: '18px' }}>
-                  <div style={{ fontWeight: '600', color: '#166534', marginBottom: '10px', fontSize: '13px' }}>
-                    Select Active Lease (CORE-006)
-                  </div>
+          {/* Select Property */}
+          <div>
+            <label className="block text-brand-navy font-semibold mb-1">Select Property *</label>
+            <select
+              required
+              value={wizardPropertyId}
+              onChange={(e) => {
+                setWizardPropertyId(e.target.value);
+                setWizardBedId('');
+                setWizardLeaseId('');
+                setSelectedFloorId('');
+                setSelectedRoomId('');
+              }}
+              className="w-full bg-surface-subtle border border-surface-border rounded-lg px-3 py-2 text-xs text-brand-navy focus:outline-none focus:ring-2 focus:ring-brand-teal/20 focus:border-brand-teal"
+            >
+              <option value="">-- Choose Property --</option>
+              {properties.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name} ({p.propertyType === 'PG' ? 'Co-Living / PG' : 'Whole-Unit Rental'})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Cascading Floor -> Room -> Bed Selection (PG) */}
+          {selectedProp?.propertyType === 'PG' && (
+            <div className="bg-teal-50/50 p-4 rounded-xl border border-teal-200/60 space-y-3">
+              <div className="font-semibold text-brand-teal text-xs">
+                Select PG Space (Floor → Room → Available Bed)
+              </div>
+              <div className="grid grid-cols-3 gap-2.5">
+                <div>
+                  <label className="block text-xs font-semibold text-brand-navy mb-1">Floor *</label>
                   <select
                     required
-                    value={wizardLeaseId}
-                    onChange={(e) => setWizardLeaseId(e.target.value)}
-                    style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '14px' }}
+                    value={selectedFloorId}
+                    onChange={(e) => {
+                      setSelectedFloorId(e.target.value);
+                      setSelectedRoomId('');
+                      setWizardBedId('');
+                    }}
+                    className="w-full bg-brand-white border border-surface-border rounded-lg px-2.5 py-1.5 text-xs text-brand-navy focus:outline-none focus:border-brand-teal"
                   >
-                    <option value="">-- Choose Active Lease --</option>
-                    {propertyLeases
-                      .filter((l) => l.status === 'ACTIVE')
-                      .map((l) => (
-                        <option key={l.id} value={l.id}>
-                          Unit {l.rentalUnit?.unitNumber || 'Whole Unit'} — ₹{Number(l.monthlyRent).toLocaleString('en-IN')}/mo ({new Date(l.startDate).toLocaleDateString()} to {new Date(l.endDate).toLocaleDateString()})
-                        </option>
-                      ))}
+                    <option value="">Floor</option>
+                    {propertyFloors.map((f) => (
+                      <option key={f.id} value={f.id}>
+                        Floor {f.floorNumber}
+                      </option>
+                    ))}
                   </select>
                 </div>
-              )}
-
-              {/* Dates */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '18px' }}>
                 <div>
-                  <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#334155', marginBottom: '6px' }}>
-                    Check-In Date *
-                  </label>
-                  <input
-                    type="date"
+                  <label className="block text-xs font-semibold text-brand-navy mb-1">Room *</label>
+                  <select
                     required
-                    value={wizardCheckInDate}
-                    onChange={(e) => setWizardCheckInDate(e.target.value)}
-                    style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '14px' }}
-                  />
+                    value={selectedRoomId}
+                    onChange={(e) => {
+                      setSelectedRoomId(e.target.value);
+                      setWizardBedId('');
+                    }}
+                    disabled={!selectedFloorId}
+                    className="w-full bg-brand-white border border-surface-border rounded-lg px-2.5 py-1.5 text-xs text-brand-navy focus:outline-none focus:border-brand-teal disabled:opacity-50"
+                  >
+                    <option value="">Room</option>
+                    {selectedFloor?.rooms.map((r) => (
+                      <option key={r.id} value={r.id}>
+                        Room {r.roomNumber}
+                      </option>
+                    ))}
+                  </select>
                 </div>
                 <div>
-                  <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#334155', marginBottom: '6px' }}>
-                    Expected Checkout Date
-                  </label>
-                  <input
-                    type="date"
-                    value={wizardExpectedCheckoutDate}
-                    onChange={(e) => setWizardExpectedCheckoutDate(e.target.value)}
-                    style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '14px' }}
-                  />
+                  <label className="block text-xs font-semibold text-brand-navy mb-1">Bed *</label>
+                  <select
+                    required
+                    value={wizardBedId}
+                    onChange={(e) => setWizardBedId(e.target.value)}
+                    disabled={!selectedRoomId || availableBeds.length === 0}
+                    className="w-full bg-brand-white border border-surface-border rounded-lg px-2.5 py-1.5 text-xs text-brand-navy focus:outline-none focus:border-brand-teal disabled:opacity-50"
+                  >
+                    <option value="">Bed</option>
+                    {availableBeds.map((b) => (
+                      <option key={b.id} value={b.id}>
+                        {b.bedNumber} (₹{Number(b.monthlyRent).toLocaleString('en-IN')})
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </div>
+            </div>
+          )}
 
-              {/* Notes */}
-              <div style={{ marginBottom: '24px' }}>
-                <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#334155', marginBottom: '6px' }}>
-                  Notes & Special Instructions
-                </label>
-                <textarea
-                  rows={2}
-                  placeholder="e.g. Key handover, parking sticker issued..."
-                  value={wizardNotes}
-                  onChange={(e) => setWizardNotes(e.target.value)}
-                  style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '14px', resize: 'vertical' }}
-                />
+          {/* Select Active Lease (Rental House) */}
+          {selectedProp?.propertyType === 'RENTAL_HOUSE' && (
+            <div className="bg-teal-50/50 p-4 rounded-xl border border-teal-200/60 space-y-2">
+              <div className="font-semibold text-brand-teal text-xs">
+                Select Active Lease
               </div>
+              <select
+                required
+                value={wizardLeaseId}
+                onChange={(e) => setWizardLeaseId(e.target.value)}
+                className="w-full bg-brand-white border border-surface-border rounded-lg px-3 py-2 text-xs text-brand-navy focus:outline-none focus:border-brand-teal"
+              >
+                <option value="">-- Choose Active Lease --</option>
+                {propertyLeases
+                  .filter((l) => l.status === 'ACTIVE')
+                  .map((l) => (
+                    <option key={l.id} value={l.id}>
+                      Unit {l.rentalUnit?.unitNumber || 'Whole Unit'} — ₹{Number(l.monthlyRent).toLocaleString('en-IN')}/mo ({new Date(l.startDate).toLocaleDateString()} to {new Date(l.endDate).toLocaleDateString()})
+                    </option>
+                  ))}
+              </select>
+            </div>
+          )}
 
-              {/* Modal Actions */}
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
-                <button
-                  type="button"
-                  onClick={() => setIsWizardOpen(false)}
-                  style={{
-                    padding: '10px 18px',
-                    borderRadius: '8px',
-                    border: '1px solid #cbd5e1',
-                    backgroundColor: '#ffffff',
-                    color: '#475569',
-                    fontSize: '14px',
-                    fontWeight: '600',
-                    cursor: 'pointer',
-                  }}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={wizardLoading || (onboardingStatus ? !onboardingStatus.readyForCheckIn : false)}
-                  style={{
-                    padding: '10px 22px',
-                    borderRadius: '8px',
-                    border: 'none',
-                    backgroundColor:
-                      onboardingStatus && !onboardingStatus.readyForCheckIn ? '#94a3b8' : '#2563eb',
-                    color: '#ffffff',
-                    fontSize: '14px',
-                    fontWeight: '600',
-                    cursor:
-                      onboardingStatus && !onboardingStatus.readyForCheckIn ? 'not-allowed' : 'pointer',
-                  }}
-                >
-                  {wizardLoading ? 'Initiating...' : 'Initiate Check-In'}
-                </button>
-              </div>
-            </form>
+          {/* Dates */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-brand-navy font-semibold mb-1">Check-In Date *</label>
+              <input
+                type="date"
+                required
+                value={wizardCheckInDate}
+                onChange={(e) => setWizardCheckInDate(e.target.value)}
+                className="w-full bg-surface-subtle border border-surface-border rounded-lg px-3 py-2 text-xs text-brand-navy focus:outline-none focus:ring-2 focus:ring-brand-teal/20 focus:border-brand-teal"
+              />
+            </div>
+            <div>
+              <label className="block text-brand-navy font-semibold mb-1">Expected Checkout Date</label>
+              <input
+                type="date"
+                value={wizardExpectedCheckoutDate}
+                onChange={(e) => setWizardExpectedCheckoutDate(e.target.value)}
+                className="w-full bg-surface-subtle border border-surface-border rounded-lg px-3 py-2 text-xs text-brand-navy focus:outline-none focus:ring-2 focus:ring-brand-teal/20 focus:border-brand-teal"
+              />
+            </div>
           </div>
-        </div>
-      )}
-    </div>
-  </AppShell>
+
+          {/* Notes */}
+          <div>
+            <label className="block text-brand-navy font-semibold mb-1">Notes & Special Instructions</label>
+            <textarea
+              rows={2}
+              placeholder="e.g. Key handover, parking sticker issued..."
+              value={wizardNotes}
+              onChange={(e) => setWizardNotes(e.target.value)}
+              className="w-full bg-surface-subtle border border-surface-border rounded-lg px-3 py-2 text-xs text-brand-navy placeholder-surface-disabled focus:outline-none focus:ring-2 focus:ring-brand-teal/20 focus:border-brand-teal"
+            />
+          </div>
+        </form>
+      </Modal>
+    </AppShell>
   );
 }
