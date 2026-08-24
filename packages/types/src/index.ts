@@ -20,3 +20,4 @@ export * from './staff.js';
 export * from './visitors.js';
 export * from './inventory.js';
 export * from './expenses.js';
+export * from './reports.js';

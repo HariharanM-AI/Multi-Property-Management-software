@@ -219,3 +219,25 @@ If a user possesses a permission (e.g. `property.read`) but requests a property 
   - `TENANT`, `SECURITY`, `MAINTENANCE_STAFF`: Strictly blocked from all expense endpoints (`403 Forbidden`).
 - **Immutable Snapshot Audit Logging**: Every expense lifecycle event (`EXPENSE_CREATED`, `EXPENSE_UPDATED`, `EXPENSE_DELETED`, `EXPENSE_RECEIPT_UPLOADED`) records the actor user ID, organization ID, action name, resource ID, IP address, user agent, and a structured metadata snapshot. Deletion writes a complete resource snapshot to the audit log prior to record deletion.
 
+---
+
+## 17. Reports & Financial Analytics Security & Invariants (CORE-021)
+- **Deterministic Transaction-Derived Invariants**:
+  - Analytics are derived directly from authoritative transactional records (`invoices`, `invoice_lines`, `payments`, `expense_records`, `beds`, `rental_units`) in real time without synthetic projections or ungrounded estimates.
+  - Financial Decimal Precision: All revenue aggregations, expense totals, operating profit (Cash & Accrual NOI), and outstanding receivables use pure `Prisma.Decimal` arithmetic to ensure zero floating-point loss.
+  - Safe Division & Zero Protections: Profit margin calculations (`(Operating Profit / Total Revenue) * 100`) and occupancy percentages safely handle zero denominators, returning `0.00%` without `NaN`, `Infinity`, or uncaught division-by-zero exceptions.
+- **Formula Injection (CSV Injection) Sanitization**:
+  - Exported CSV fields are strictly sanitized against spreadsheet formula execution. Any cell content starting with dangerous formula triggers (`=`, `+`, `-`, `@`) is prepended with a single quote (`'`) to neutralize cell formula execution in Microsoft Excel, Google Sheets, and LibreOffice Calc.
+  - Output complies strictly with RFC 4180 (double-quoted strings, escaped inner quotes).
+- **Multi-Tenant Fail-Closed Scoping**:
+  - All report endpoints (`/api/v1/reports/*`) are scoped strictly to the authenticated caller's `organizationId`.
+  - When filtering by `propertyId`, the property is validated against the caller's organization. Queries for nonexistent or cross-organization property IDs immediately fail closed with `404 Not Found`.
+- **RBAC Matrix Enforcement**:
+  - `OWNER`: Full analytics access (`reports.read`).
+  - `PROPERTY_MANAGER`: Full analytics access (`reports.read`).
+  - `ACCOUNTANT`: Full analytics access (`reports.read`).
+  - `WARDEN`, `SECURITY`, `MAINTENANCE_STAFF`, `TENANT`: Strictly blocked with `403 Forbidden`.
+  - Unauthenticated requests: Rejected with `401 Unauthorized`.
+- **Immutable Export Audit Logging**:
+  - Every CSV export (`GET /api/v1/reports/export`) generates an immutable `REPORT_EXPORTED` audit log entry capturing the report type, filter parameters, caller user ID, organization ID, client IP address, and user agent.
+
