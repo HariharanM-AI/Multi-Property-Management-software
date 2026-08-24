@@ -105,6 +105,14 @@ export class MealsService {
       throw new BadRequestException('Meal plan price must be strictly greater than zero');
     }
 
+    const hasBreakfast = dto.hasBreakfast !== undefined ? dto.hasBreakfast : true;
+    const hasLunch = dto.hasLunch !== undefined ? dto.hasLunch : true;
+    const hasDinner = dto.hasDinner !== undefined ? dto.hasDinner : true;
+
+    if (!hasBreakfast && !hasLunch && !hasDinner) {
+      throw new BadRequestException('At least one meal (Breakfast, Lunch, or Dinner) must be included in the meal plan');
+    }
+
     const effectiveFrom = dto.effectiveFrom ? new Date(dto.effectiveFrom) : null;
     const effectiveTo = dto.effectiveTo ? new Date(dto.effectiveTo) : null;
 
@@ -113,6 +121,21 @@ export class MealsService {
     }
 
     const plan = await this.prisma.$transaction(async (tx) => {
+      // Transaction-level advisory lock to serialize plan creation by name in property
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${'meal_plan_' + organizationId + '_' + propertyId + '_' + dto.name.trim().toLowerCase()}))`;
+
+      const existing = await tx.mealPlan.findFirst({
+        where: {
+          organizationId,
+          propertyId,
+          name: { equals: dto.name.trim(), mode: 'insensitive' },
+          status: { in: [MealPlanStatus.ACTIVE, MealPlanStatus.INACTIVE] },
+        },
+      });
+      if (existing) {
+        throw new ConflictException(`Meal plan with name "${dto.name.trim()}" already exists in this property`);
+      }
+
       const created = await tx.mealPlan.create({
         data: {
           organizationId,
@@ -122,9 +145,9 @@ export class MealsService {
           price,
           billingFrequency: dto.billingFrequency || BillingFrequency.MONTHLY,
           status: MealPlanStatus.ACTIVE,
-          hasBreakfast: dto.hasBreakfast !== undefined ? dto.hasBreakfast : true,
-          hasLunch: dto.hasLunch !== undefined ? dto.hasLunch : true,
-          hasDinner: dto.hasDinner !== undefined ? dto.hasDinner : true,
+          hasBreakfast,
+          hasLunch,
+          hasDinner,
           effectiveFrom,
           effectiveTo,
         },
@@ -218,6 +241,14 @@ export class MealsService {
       }
     }
 
+    const newBreakfast = dto.hasBreakfast !== undefined ? dto.hasBreakfast : plan.hasBreakfast;
+    const newLunch = dto.hasLunch !== undefined ? dto.hasLunch : plan.hasLunch;
+    const newDinner = dto.hasDinner !== undefined ? dto.hasDinner : plan.hasDinner;
+
+    if (!newBreakfast && !newLunch && !newDinner) {
+      throw new BadRequestException('At least one meal (Breakfast, Lunch, or Dinner) must be included in the meal plan');
+    }
+
     const updated = await this.prisma.$transaction(async (tx) => {
       const res = await tx.mealPlan.update({
         where: { id: planId },
@@ -286,7 +317,7 @@ export class MealsService {
       throw new BadRequestException(`Tenant ${dto.tenantId} is not actively checked into this PG property`);
     }
 
-    // Validate meal plan exists, belongs to property, and is active
+    // Validate meal plan exists, belongs to property, and is active (not ARCHIVED or INACTIVE)
     const plan = await this.prisma.mealPlan.findFirst({
       where: { id: dto.mealPlanId, propertyId, organizationId, status: MealPlanStatus.ACTIVE },
     });
@@ -301,22 +332,32 @@ export class MealsService {
       throw new BadRequestException('Subscription endDate cannot be earlier than startDate');
     }
 
-    // Prevent conflicting active subscriptions for the same tenant
-    const existingActiveSub = await this.prisma.mealSubscription.findFirst({
-      where: {
-        tenantId: dto.tenantId,
-        propertyId,
-        organizationId,
-        status: MealSubscriptionStatus.ACTIVE,
-      },
-    });
-    if (existingActiveSub) {
-      throw new ConflictException(
-        `Tenant already has an active meal subscription (ID: ${existingActiveSub.id}). Please cancel or end it before creating a new one.`
-      );
-    }
-
     const sub = await this.prisma.$transaction(async (tx) => {
+      // Advisory lock to serialize subscription creations for this tenant in property
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${'meal_sub_' + organizationId + '_' + propertyId + '_' + dto.tenantId}))`;
+
+      // Prevent conflicting active subscriptions for the same tenant overlapping the date range
+      const existingActiveSubs = await tx.mealSubscription.findMany({
+        where: {
+          tenantId: dto.tenantId,
+          propertyId,
+          organizationId,
+          status: MealSubscriptionStatus.ACTIVE,
+        },
+      });
+
+      for (const existing of existingActiveSubs) {
+        const existingEnd = existing.endDate ? new Date(existing.endDate) : new Date('2099-12-31');
+        const newEnd = endDate ? new Date(endDate) : new Date('2099-12-31');
+
+        // Check if date ranges overlap: [startDate, newEnd] and [existing.startDate, existingEnd]
+        if (startDate <= existingEnd && newEnd >= existing.startDate) {
+          throw new ConflictException(
+            `Tenant already has an active meal subscription (ID: ${existing.id}) overlapping this period.`
+          );
+        }
+      }
+
       const created = await tx.mealSubscription.create({
         data: {
           organizationId,
@@ -440,8 +481,19 @@ export class MealsService {
       throw new NotFoundException(`Tenant ${dto.tenantId} not found`);
     }
 
+    const activeCheckIn = await this.prisma.checkIn.findFirst({
+      where: {
+        tenantId: dto.tenantId,
+        propertyId,
+        organizationId,
+        status: CheckInStatus.CHECKED_IN,
+      },
+    });
+    if (!activeCheckIn) {
+      throw new BadRequestException(`Tenant ${dto.tenantId} is not actively checked into this PG property`);
+    }
+
     const mealDate = new Date(dto.mealDate);
-    // Normalize date to YYYY-MM-DD (start of day UTC)
     const normalizedDate = new Date(Date.UTC(mealDate.getUTCFullYear(), mealDate.getUTCMonth(), mealDate.getUTCDate()));
 
     const record = await this.prisma.$transaction(async (tx) => {
@@ -520,6 +572,19 @@ export class MealsService {
 
     await this.prisma.$transaction(async (tx) => {
       for (const entry of dto.records) {
+        // Validate tenant is checked in
+        const activeCheckIn = await tx.checkIn.findFirst({
+          where: {
+            tenantId: entry.tenantId,
+            propertyId,
+            organizationId,
+            status: CheckInStatus.CHECKED_IN,
+          },
+        });
+        if (!activeCheckIn) {
+          throw new BadRequestException(`Tenant ${entry.tenantId} is not actively checked into this PG property`);
+        }
+
         await tx.mealRecord.upsert({
           where: {
             tenantId_mealDate_mealType: {
@@ -663,15 +728,15 @@ export class MealsService {
   async getRecords(
     organizationId: string,
     propertyId: string,
-    dateString?: string,
+    date?: string,
     mealType?: MealType,
     tenantId?: string
   ): Promise<MealRecordDto[]> {
     await this.validateProperty(organizationId, propertyId);
 
     let normalizedDate: Date | undefined;
-    if (dateString) {
-      const d = new Date(dateString);
+    if (date) {
+      const d = new Date(date);
       normalizedDate = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
     }
 
@@ -688,14 +753,14 @@ export class MealsService {
       include: {
         tenant: { select: { id: true, firstName: true, lastName: true, phone: true } },
       },
-      orderBy: [{ mealDate: 'desc' }, { createdAt: 'desc' }],
+      orderBy: { mealDate: 'desc' },
     });
 
     return records.map((r) => this.mapRecordToDto(r));
   }
 
   // ----------------------------------------------------------------------------
-  // MEAL CHARGE GENERATION & INVOICING
+  // MEAL CHARGES & INVOICING INTEGRATION
   // ----------------------------------------------------------------------------
 
   async generateCharges(
@@ -711,10 +776,13 @@ export class MealsService {
     const billingMode = dto.billingMode || MealBillingMode.SUBSCRIPTION;
 
     return this.prisma.$transaction(async (tx) => {
+      // 1. Transaction-level advisory lock to serialize charge generation runs for this property and period
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${'meal_charge_' + organizationId + '_' + propertyId + '_' + periodStart.toISOString() + '_' + periodEnd.toISOString() + '_' + billingMode}))`;
+
       const createdCharges: any[] = [];
 
       if (billingMode === MealBillingMode.SUBSCRIPTION) {
-        // Query active subscriptions in the property
+        // Query active subscriptions in the property overlapping the billing period
         const activeSubs = await tx.mealSubscription.findMany({
           where: {
             organizationId,
@@ -732,8 +800,8 @@ export class MealsService {
           },
         });
 
+        // 2. Check if all active subscriptions already have charges generated for this period (Idempotency)
         for (const sub of activeSubs) {
-          // Idempotency: Check if charge already exists for tenant & sub in this exact period
           const existing = await tx.mealCharge.findFirst({
             where: {
               organizationId,
@@ -742,6 +810,11 @@ export class MealsService {
               mealPlanId: sub.mealPlanId,
               periodStart,
               periodEnd,
+            },
+            include: {
+              tenant: { select: { id: true, firstName: true, lastName: true, phone: true } },
+              mealPlan: { select: { id: true, name: true, price: true } },
+              invoice: { select: { id: true, invoiceNumber: true, status: true, totalAmount: true } },
             },
           });
 
@@ -768,14 +841,17 @@ export class MealsService {
               },
             });
             createdCharges.push(charge);
+          } else {
+            createdCharges.push(existing);
           }
         }
       }
 
-      // Auto-invoicing integration if requested
+      // 3. Auto-invoicing integration using single-transaction client propagation (tx)
       if (dto.autoInvoice) {
         for (const charge of createdCharges) {
-          if (charge.amount.greaterThan(0)) {
+          // Only create invoice if charge is still PENDING
+          if (charge.status === MealChargeStatus.PENDING && charge.amount.greaterThan(0)) {
             const dueDate = new Date();
             dueDate.setDate(dueDate.getDate() + 7);
 
@@ -796,11 +872,12 @@ export class MealsService {
                   },
                 ],
               },
-              userId
+              userId,
+              tx
             );
 
-            // Issue invoice to trigger double-entry balanced ledger entries
-            await this.invoicesService.issueInvoice(organizationId, invoiceDto.id, userId);
+            // Issue invoice to trigger double-entry balanced ledger entries on the SAME tx
+            await this.invoicesService.issueInvoice(organizationId, invoiceDto.id, userId, tx);
 
             // Update charge with invoice link
             await tx.mealCharge.update({
@@ -989,6 +1066,20 @@ export class MealsService {
   // DTO MAPPERS
   // ----------------------------------------------------------------------------
 
+  private toIso(val: any): string {
+    if (!val) return new Date().toISOString();
+    if (typeof val === 'string') return val;
+    if (val instanceof Date) return val.toISOString();
+    return new Date(val).toISOString();
+  }
+
+  private toIsoOrNull(val: any): string | null {
+    if (!val) return null;
+    if (typeof val === 'string') return val;
+    if (val instanceof Date) return val.toISOString();
+    return new Date(val).toISOString();
+  }
+
   private mapPlanToDto(plan: any): MealPlanDto {
     return {
       id: plan.id,
@@ -1002,10 +1093,10 @@ export class MealsService {
       hasBreakfast: plan.hasBreakfast,
       hasLunch: plan.hasLunch,
       hasDinner: plan.hasDinner,
-      effectiveFrom: plan.effectiveFrom ? plan.effectiveFrom.toISOString() : null,
-      effectiveTo: plan.effectiveTo ? plan.effectiveTo.toISOString() : null,
-      createdAt: plan.createdAt.toISOString(),
-      updatedAt: plan.updatedAt.toISOString(),
+      effectiveFrom: this.toIsoOrNull(plan.effectiveFrom),
+      effectiveTo: this.toIsoOrNull(plan.effectiveTo),
+      createdAt: this.toIso(plan.createdAt),
+      updatedAt: this.toIso(plan.updatedAt),
       _count: plan._count,
     };
   }
@@ -1017,11 +1108,11 @@ export class MealsService {
       propertyId: sub.propertyId,
       tenantId: sub.tenantId,
       mealPlanId: sub.mealPlanId,
-      startDate: sub.startDate.toISOString(),
-      endDate: sub.endDate ? sub.endDate.toISOString() : null,
+      startDate: this.toIso(sub.startDate),
+      endDate: this.toIsoOrNull(sub.endDate),
       status: sub.status,
-      createdAt: sub.createdAt.toISOString(),
-      updatedAt: sub.updatedAt.toISOString(),
+      createdAt: this.toIso(sub.createdAt),
+      updatedAt: this.toIso(sub.updatedAt),
       tenant: sub.tenant,
       mealPlan: sub.mealPlan ? {
         id: sub.mealPlan.id,
@@ -1038,14 +1129,14 @@ export class MealsService {
       organizationId: record.organizationId,
       propertyId: record.propertyId,
       tenantId: record.tenantId,
-      mealDate: record.mealDate.toISOString(),
+      mealDate: this.toIso(record.mealDate),
       mealType: record.mealType,
       status: record.status,
-      recordedAt: record.recordedAt.toISOString(),
+      recordedAt: this.toIso(record.recordedAt),
       recordedBy: record.recordedBy,
       notes: record.notes,
-      createdAt: record.createdAt.toISOString(),
-      updatedAt: record.updatedAt.toISOString(),
+      createdAt: this.toIso(record.createdAt),
+      updatedAt: this.toIso(record.updatedAt),
       tenant: record.tenant,
     };
   }
@@ -1058,15 +1149,15 @@ export class MealsService {
       tenantId: charge.tenantId,
       mealPlanId: charge.mealPlanId,
       mealRecordId: charge.mealRecordId,
-      periodStart: charge.periodStart.toISOString(),
-      periodEnd: charge.periodEnd.toISOString(),
+      periodStart: this.toIso(charge.periodStart),
+      periodEnd: this.toIso(charge.periodEnd),
       billingMode: charge.billingMode,
       amount: charge.amount instanceof Prisma.Decimal ? charge.amount.toNumber() : Number(charge.amount),
       status: charge.status,
       invoiceId: charge.invoiceId,
       invoiceLineId: charge.invoiceLineId,
-      createdAt: charge.createdAt.toISOString(),
-      updatedAt: charge.updatedAt.toISOString(),
+      createdAt: this.toIso(charge.createdAt),
+      updatedAt: this.toIso(charge.updatedAt),
       tenant: charge.tenant,
       mealPlan: charge.mealPlan ? {
         id: charge.mealPlan.id,
