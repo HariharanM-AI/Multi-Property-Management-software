@@ -121,6 +121,12 @@ export enum Permission {
   ATTENDANCE_RECORD = 'attendance.record',
   ATTENDANCE_UPDATE = 'attendance.update',
 
+  // Visitor & Gatepass Management (CORE-018)
+  VISITOR_READ = 'visitor.read',
+  VISITOR_CREATE = 'visitor.create',
+  VISITOR_UPDATE = 'visitor.update',
+  VISITOR_DELETE = 'visitor.delete',
+
   // Reporting & Analytics Foundation
   REPORTS_READ = 'reports.read',
 }
@@ -137,6 +143,10 @@ export const ROLE_PERMISSIONS_MAP: Record<UserRole, readonly Permission[]> = {
     Permission.ATTENDANCE_READ,
     Permission.ATTENDANCE_RECORD,
     Permission.ATTENDANCE_UPDATE,
+    Permission.VISITOR_READ,
+    Permission.VISITOR_CREATE,
+    Permission.VISITOR_UPDATE,
+    Permission.VISITOR_DELETE,
     Permission.ORGANIZATION_READ,
     Permission.ORGANIZATION_UPDATE,
     Permission.TEAM_READ,
@@ -225,6 +235,10 @@ export const ROLE_PERMISSIONS_MAP: Record<UserRole, readonly Permission[]> = {
     Permission.ATTENDANCE_READ,
     Permission.ATTENDANCE_RECORD,
     Permission.ATTENDANCE_UPDATE,
+    Permission.VISITOR_READ,
+    Permission.VISITOR_CREATE,
+    Permission.VISITOR_UPDATE,
+    Permission.VISITOR_DELETE,
     Permission.ORGANIZATION_READ,
     Permission.TEAM_READ,
     Permission.PROPERTY_READ,
@@ -300,6 +314,7 @@ export const ROLE_PERMISSIONS_MAP: Record<UserRole, readonly Permission[]> = {
   [UserRole.ACCOUNTANT]: [
     Permission.STAFF_READ,
     Permission.ATTENDANCE_READ,
+    Permission.VISITOR_READ,
     Permission.ORGANIZATION_READ,
     Permission.TEAM_READ,
     Permission.PROPERTY_READ,
@@ -339,6 +354,9 @@ export const ROLE_PERMISSIONS_MAP: Record<UserRole, readonly Permission[]> = {
     Permission.STAFF_READ,
     Permission.ATTENDANCE_READ,
     Permission.ATTENDANCE_RECORD,
+    Permission.VISITOR_READ,
+    Permission.VISITOR_CREATE,
+    Permission.VISITOR_UPDATE,
     Permission.ORGANIZATION_READ,
     Permission.TEAM_READ,
     Permission.PROPERTY_READ,
@@ -378,6 +396,9 @@ export const ROLE_PERMISSIONS_MAP: Record<UserRole, readonly Permission[]> = {
     Permission.STAFF_READ,
     Permission.ATTENDANCE_READ,
     Permission.ATTENDANCE_RECORD,
+    Permission.VISITOR_READ,
+    Permission.VISITOR_CREATE,
+    Permission.VISITOR_UPDATE,
     Permission.ORGANIZATION_READ,
     Permission.PROPERTY_READ,
     Permission.TENANT_READ,
@@ -393,6 +414,7 @@ export const ROLE_PERMISSIONS_MAP: Record<UserRole, readonly Permission[]> = {
   [UserRole.MAINTENANCE_STAFF]: [
     Permission.STAFF_READ,
     Permission.ATTENDANCE_READ,
+    Permission.VISITOR_READ,
     Permission.ORGANIZATION_READ,
     Permission.PROPERTY_READ,
     Permission.MAINTENANCE_READ,
@@ -403,6 +425,9 @@ export const ROLE_PERMISSIONS_MAP: Record<UserRole, readonly Permission[]> = {
   ],
 
   [UserRole.TENANT]: [
+    Permission.VISITOR_READ,
+    Permission.VISITOR_CREATE,
+    Permission.VISITOR_UPDATE,
     Permission.PROPERTY_READ,
     Permission.LEASE_READ,
     Permission.AGREEMENT_READ,

@@ -24,6 +24,7 @@ import { ElectricityModule } from './modules/electricity/electricity.module';
 import { MealsModule } from './modules/meals/meals.module';
 import { MaintenanceModule } from './modules/maintenance/maintenance.module';
 import { StaffModule } from './modules/staff/staff.module';
+import { VisitorsModule } from './modules/visitors/visitors.module';
 import { AuthGuard } from './common/guards/auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
 import { PermissionsGuard } from './common/guards/permissions.guard';
@@ -70,6 +71,7 @@ import { GlobalHttpExceptionFilter } from './common/filters/http-exception.filte
     MealsModule,
     MaintenanceModule,
     StaffModule,
+    VisitorsModule,
   ],
   providers: [
     {

@@ -159,3 +159,20 @@ If a user possesses a permission (e.g. `property.read`) but requests a property 
 - **Multi-Tenant Fail-Closed Scoping**: Linking User accounts or assigning Properties from foreign organizations fails closed with `404 Not Found`. Cross-organization staff access is strictly blocked (`404 Not Found`).
 - **RBAC & Security Boundaries**: Full staff management (`staff.create`, `staff.update`, `staff.delete`) is restricted to Owner and Property Manager roles. Accountants have read-only access (`staff.read`, `attendance.read`). Wardens and Security have attendance logging access (`attendance.record`). Tenant accounts are strictly forbidden from all staff and attendance endpoints (`403 Forbidden`).
 - **Zero Sensitive Data Leaks in Audit Logs**: Passwords, auth tokens, and session secrets are never captured in audit log metadata. All staff events (`STAFF_CREATED`, `STAFF_UPDATED`, `STAFF_DELETED`, `STAFF_CHECKED_IN`, `STAFF_CHECKED_OUT`, `STAFF_ATTENDANCE_RECORDED`) are logged with sanitized metadata.
+
+---
+
+## 14. Visitor & Gatepass Management Security & Concurrency Safeguards (CORE-018)
+- **Gatepass Code Generation Advisory Locking**: Uses `SELECT pg_advisory_xact_lock(hashtext('visitor_gp_' || gatePassCode))` with collision-safe generation (`GP-YYYYMMDD-XXXX`) to ensure absolute gatepass code uniqueness across concurrent registrations.
+- **Physical Entry & Exit Advisory Locking**: Check-in and check-out workflows acquire transaction-scoped locks (`SELECT pg_advisory_xact_lock(hashtext('visitor_checkin_' || id))` and `SELECT pg_advisory_xact_lock(hashtext('visitor_checkout_' || id))`). Under parallel concurrent checkout requests (e.g. 5 simultaneous calls), exactly 1 succeeds and 4 return clean `409 Conflict`, with exactly 1 audit log created.
+- **Strict Host Tenant Verification & Caller Scoping**: When a tenant user invokes visitor registration, view, approval, or rejection endpoints, `VisitorsController` enforces `tenantId === callerTenantId` matching the caller's verified `Tenant` record. Impersonation or unauthorized cross-tenant visitor manipulation is blocked with `403 Forbidden`.
+- **Operating Model Status State Machine**:
+  - `CHECKED_IN`: `isApproved === true` and `exitTime === null`.
+  - `CHECKED_OUT`: `exitTime !== null`.
+  - `REJECTED`: `isApproved === false`.
+  - `APPROVED`: Pre-registered future visitor approved for entry.
+  - `PENDING`: Walk-in or invited visitor awaiting host resident approval.
+- **Exit Time Chronological Validation**: `exitTime` must be greater than or equal to `entryTime`. Supplying an earlier exit time is rejected with `400 Bad Request`.
+- **Duplicate Check-Out & State Transition Protection**: Checking out an already checked-out visitor returns `409 Conflict`. Approving or rejecting a visitor who has already checked out returns `409 Conflict`.
+- **Multi-Tenant Fail-Closed Isolation**: Guard console gatepass lookup (`GET /api/v1/visitors/gatepass/:code`) and visitor queries enforce organization-level scoping and return `404 Not Found` without disclosing visitor data to foreign organizations.
+- **Audit Logging**: All visitor events (`VISITOR_REGISTERED`, `VISITOR_CHECKED_IN`, `VISITOR_CHECKED_OUT`, `VISITOR_APPROVED`, `VISITOR_REJECTED`, `VISITOR_DELETED`) record the actor, timestamp, organization, and sanitized metadata snapshot.
