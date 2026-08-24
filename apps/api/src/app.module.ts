@@ -25,6 +25,7 @@ import { MealsModule } from './modules/meals/meals.module';
 import { MaintenanceModule } from './modules/maintenance/maintenance.module';
 import { StaffModule } from './modules/staff/staff.module';
 import { VisitorsModule } from './modules/visitors/visitors.module';
+import { InventoryModule } from './modules/inventory/inventory.module';
 import { AuthGuard } from './common/guards/auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
 import { PermissionsGuard } from './common/guards/permissions.guard';
@@ -72,6 +73,7 @@ import { GlobalHttpExceptionFilter } from './common/filters/http-exception.filte
     MaintenanceModule,
     StaffModule,
     VisitorsModule,
+    InventoryModule,
   ],
   providers: [
     {

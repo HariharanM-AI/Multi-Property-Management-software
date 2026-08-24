@@ -176,3 +176,27 @@ If a user possesses a permission (e.g. `property.read`) but requests a property 
 - **Duplicate Check-Out & State Transition Protection**: Checking out an already checked-out visitor returns `409 Conflict`. Approving or rejecting a visitor who has already checked out returns `409 Conflict`.
 - **Multi-Tenant Fail-Closed Isolation**: Guard console gatepass lookup (`GET /api/v1/visitors/gatepass/:code`) and visitor queries enforce organization-level scoping and return `404 Not Found` without disclosing visitor data to foreign organizations.
 - **Audit Logging**: All visitor events (`VISITOR_REGISTERED`, `VISITOR_CHECKED_IN`, `VISITOR_CHECKED_OUT`, `VISITOR_APPROVED`, `VISITOR_REJECTED`, `VISITOR_DELETED`) record the actor, timestamp, organization, and sanitized metadata snapshot.
+
+---
+
+## 15. Property & Room Inventory Security & Concurrency Safeguards (CORE-019)
+- **Serial Number Concurrency Advisory Locking**: Uses `SELECT pg_advisory_xact_lock(hashtext('inventory_serial_' || propertyId || '_' || lower(normalizedSerialNumber)))` to serialize concurrent asset creation with the same serial number within a property. Under parallel concurrent creation attempts (e.g. 5 simultaneous calls), exactly 1 succeeds with `201 Created` and 4 return clean `409 Conflict`.
+- **Asset Assignment Advisory Locking**: Uses `SELECT pg_advisory_xact_lock(hashtext('inventory_assign_' || id))` to serialize concurrent assignment, unassignment, and status mutation workflows on individual inventory items.
+- **Operating Model Boundary Enforcement**:
+  - `PG` Properties: Reject rental unit inventory assignment (`rentalUnitId`) with `400 Bad Request`. Enforce room existence in the specific PG property (`404 Not Found` if room does not belong to property or organization).
+  - `RENTAL_HOUSE` Properties: Reject room inventory assignment (`roomId`) with `400 Bad Request`. Enforce rental unit existence in the specific rental property (`404 Not Found` if unit does not belong to property or organization).
+  - Common Property Stock: Handled when both `roomId === null && rentalUnitId === null`.
+- **Status Transition Safeguards**:
+  - Assets marked `DISPOSED` or `UNDER_REPAIR` cannot be assigned to resident rooms or units (`400 Bad Request`).
+  - Transitioning an asset to `DISPOSED` automatically unassigns the asset from any room or rental unit (`roomId: null, rentalUnitId: null`).
+  - Unassigning an asset returns status to `AVAILABLE` (unless currently `UNDER_REPAIR` or `DISPOSED`).
+- **Non-Negative Decimal Purchase Valuation**: Asset `purchasePrice` is validated to be non-negative (`purchasePrice >= 0`). Portfolio asset valuation in summary KPIs uses `Prisma.Decimal` summation across non-disposed items with purchase prices to ensure exact currency calculations.
+- **Multi-Tenant Fail-Closed Scoping**: All inventory queries and mutations strictly scope to `property: { organizationId }` and return `404 Not Found` without disclosing resource existence if accessed across organization boundaries.
+- **RBAC Matrix**:
+  - `OWNER`, `PROPERTY_MANAGER`: Full management (`inventory.read`, `inventory.create`, `inventory.update`, `inventory.delete`).
+  - `WARDEN`: Operational room assignment & condition grading (`inventory.read`, `inventory.create`, `inventory.update`).
+  - `MAINTENANCE_STAFF`: Condition & repair updates (`inventory.read`, `inventory.update`).
+  - `ACCOUNTANT`: Asset valuation audit access (`inventory.read`).
+  - `TENANT`: Strictly blocked from inventory management (`403 Forbidden`).
+- **Audit Logging**: All inventory events (`INVENTORY_CREATED`, `INVENTORY_UPDATED`, `INVENTORY_ASSIGNED`, `INVENTORY_UNASSIGNED`, `INVENTORY_CONDITION_CHANGED`, `INVENTORY_STATUS_CHANGED`, `INVENTORY_DELETED`) write immutable audit logs with sanitized item metadata snapshots.
+
