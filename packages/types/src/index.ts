@@ -16,3 +16,4 @@ export * from './billing.js';
 export * from './electricity.js';
 export * from './meals.js';
 export * from './maintenance.js';
+export * from './staff.js';

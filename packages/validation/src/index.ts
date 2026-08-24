@@ -11,3 +11,4 @@ export * from './agreement.schema.js';
 export * from './electricity.schema.js';
 export * from './meal.schema.js';
 export * from './maintenance.schema.js';
+export * from './staff.schema.js';

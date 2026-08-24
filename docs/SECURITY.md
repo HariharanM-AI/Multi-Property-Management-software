@@ -149,5 +149,13 @@ If a user possesses a permission (e.g. `property.read`) but requests a property 
 - **Immutable Terminal State Safeguards**: Once a ticket reaches `CLOSED`, it cannot be transitioned to `IN_PROGRESS`, `COMPLETED`, `VERIFIED`, or `CANCELLED` (`409 Conflict`).
 - **Multi-Tenant Fail-Closed Isolation**: All maintenance ticket, comment, attachment, and vendor endpoints enforce organization-level scoping and return `404 Not Found` without disclosing resource existence if accessed by an unauthorized organization.
 
+---
 
-
+## 13. Staff & Attendance Management Security & Concurrency Safeguards (CORE-017)
+- **Staff Registration Advisory Locking**: Uses `SELECT pg_advisory_xact_lock(hashtext('staff_create_' || organizationId || '_' || normalizedPhone))` to serialize concurrent staff registrations on duplicate phone numbers. Prevents concurrent duplicate active staff creation with clean `409 Conflict`.
+- **Attendance Logging Advisory Locking**: Uses `SELECT pg_advisory_xact_lock(hashtext('staff_att_' || staffMemberId || '_' || YYYY-MM-DD))` to serialize concurrent check-in and attendance recording per staff member per calendar date. Competing check-in calls return clean `409 Conflict`.
+- **Safe Deactivation Pattern**: Staff deletion via `DELETE /api/v1/staff/:id` performs safe deactivation (`isActive = false`). It preserves the staff profile, complete historical attendance logs, and audit trail without physical database deletion.
+- **Non-Negative Decimal Salary Validation**: Staff salaries must be non-negative (`salaryMonthly >= 0` Decimal(10,2)). Zero monthly salary is valid (volunteers/interns), while negative numbers are strictly rejected with `400 Bad Request`.
+- **Multi-Tenant Fail-Closed Scoping**: Linking User accounts or assigning Properties from foreign organizations fails closed with `404 Not Found`. Cross-organization staff access is strictly blocked (`404 Not Found`).
+- **RBAC & Security Boundaries**: Full staff management (`staff.create`, `staff.update`, `staff.delete`) is restricted to Owner and Property Manager roles. Accountants have read-only access (`staff.read`, `attendance.read`). Wardens and Security have attendance logging access (`attendance.record`). Tenant accounts are strictly forbidden from all staff and attendance endpoints (`403 Forbidden`).
+- **Zero Sensitive Data Leaks in Audit Logs**: Passwords, auth tokens, and session secrets are never captured in audit log metadata. All staff events (`STAFF_CREATED`, `STAFF_UPDATED`, `STAFF_DELETED`, `STAFF_CHECKED_IN`, `STAFF_CHECKED_OUT`, `STAFF_ATTENDANCE_RECORDED`) are logged with sanitized metadata.

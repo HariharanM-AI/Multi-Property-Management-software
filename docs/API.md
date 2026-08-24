@@ -321,3 +321,16 @@ All structure endpoints operate within a scoped property context.
 - `GET /api/v1/properties/:propertyId/maintenance/summary` (Permission: `maintenance.read`) — Property-specific maintenance KPIs and cost totals.
 - `GET /api/v1/tenants/:tenantId/maintenance/summary` (Permission: `maintenance.read`) — Tenant-specific maintenance requests summary.
 
+---
+
+## 16. Staff & Attendance Management (`/api/v1/staff`) (CORE-017)
+- `POST /api/v1/staff` (Permission: `staff.create`) — Register new staff member (warden, guard, cleaner, cook, maintenance, etc.). Supports optional User account linking, optional Property assignment, non-negative monthly salary validation (`salaryMonthly >= 0` Decimal(10,2), zero salary allowed), and concurrency-protected phone deduplication serialized via `SELECT pg_advisory_xact_lock(hashtext('staff_create_' || organizationId || '_' || normalizedPhone))`. Duplicate active phone returns `409 Conflict`.
+- `GET /api/v1/staff` (Permission: `staff.read`) — List staff members scoped to caller organization with filters (`propertyId`, `isActive`, `search`) and pagination (`page`, `limit`).
+- `GET /api/v1/staff/:id` (Permission: `staff.read`) — Get staff member details by ID with assigned property and user information. Fails closed (`404 Not Found`) on cross-organization access.
+- `PATCH /api/v1/staff/:id` (Permission: `staff.update`) — Update staff member profile, role title, phone, salary (non-negative Decimal validation), property assignment, or active status.
+- `DELETE /api/v1/staff/:id` (Permission: `staff.delete`) — Safe deactivation endpoint (`isActive = false`). Strictly preserves StaffMember record, attendance history, and audit trail without physical database deletion.
+- `GET /api/v1/staff/summary` (Permission: `staff.read`) — Fetch real-time aggregated staff KPIs (`totalStaff`, `activeStaff`, `inactiveStaff`, `presentToday`, `absentToday`, `onLeaveToday`) and authoritative monthly payroll total calculated using `Prisma.Decimal` summation.
+- `POST /api/v1/staff/attendance/check-in` (Permission: `attendance.record`) — Record daily check-in for active staff member. Serialized via `SELECT pg_advisory_xact_lock(hashtext('staff_att_' || staffMemberId || '_' || YYYY-MM-DD))`. Sets `status: PRESENT` and `checkInTime`. Duplicate check-in on same calendar date returns clean `409 Conflict`. Inactive staff check-in rejected with `400 Bad Request`.
+- `POST /api/v1/staff/attendance/check-out` (Permission: `attendance.record`) — Record daily check-out time on existing attendance record for date. Check-out without check-in returns `404 Not Found`.
+- `POST /api/v1/staff/attendance/record` (Permission: `attendance.update`) — Manual attendance upsert for staff member on specified date with status (`PRESENT`, `ABSENT`, `HALF_DAY`, `LEAVE`) and optional check-in/out times. Serialized via advisory lock.
+- `GET /api/v1/staff/attendance/records` (Permission: `attendance.read`) — Query attendance records scoped to organization with filters (`propertyId`, `staffMemberId`, `date`, `startDate`, `endDate`, `status`) and pagination.
