@@ -46,6 +46,7 @@ graph TD
 | **CORE-013** | Maintenance & Work Order Management | `scratch/verify-maintenance-e2e.js` | `maintenance.service.spec.ts` | Deterministic lifecycle, PG & Rental targeting, Cost protection, Status history, Vendor CRUD | **VERIFIED (PASS)** |
 | **CORE-014** | Sub-Metered Electricity Billing Hardening | `scratch/verify-electricity-hardening-e2e.js` | `electricity.service.spec.ts` (16 tests) | Atomic invoice tx propagation, Advisory locks on charge & rate creation, Reset RBAC, P2002 409 conflict normalization, Rollback test | **VERIFIED (PASS)** |
 | **CORE-015** | Meal & Mess Management Concurrency & Hardening | `scratch/verify-meals-hardening-e2e.js` | `meals.service.spec.ts` (20 tests) | Price validation, Meal flags check, Active checkin requirement, Overlap 409 protection, Atomic bulk attendance, Advisory locked charge generation, Single-transaction invoice/ledger propagation ($DR \equiv CR$), Controlled rollback test | **VERIFIED (PASS)** |
+| **CORE-016** | Maintenance Ticketing System Hardening | `scratch/verify-maintenance-hardening-e2e.js` | `maintenance.service.spec.ts` (28 tests) | Concurrency advisory locking (`ticket_seq_`, `ticket_transition_`, `vendor_`), Operating model target validation, Non-negative Decimal costs, Tenant role cost sanitization, Kanban & List view | **VERIFIED (PASS)** |
 
 ---
 

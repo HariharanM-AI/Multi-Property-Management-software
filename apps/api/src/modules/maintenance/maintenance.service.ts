@@ -38,6 +38,29 @@ export class MaintenanceService {
   constructor(private readonly prisma: PrismaService) {}
 
   // ============================================================================
+  // DATE / DECIMAL SERIALIZATION HELPERS
+  // ============================================================================
+
+  private toIso(val: Date | string): string {
+    if (val instanceof Date) return val.toISOString();
+    if (typeof val === 'string') {
+      const d = new Date(val);
+      return isNaN(d.getTime()) ? val : d.toISOString();
+    }
+    return new Date().toISOString();
+  }
+
+  private toIsoOrNull(val: Date | string | null | undefined): string | null {
+    if (!val) return null;
+    if (val instanceof Date) return val.toISOString();
+    if (typeof val === 'string') {
+      const d = new Date(val);
+      return isNaN(d.getTime()) ? val : d.toISOString();
+    }
+    return null;
+  }
+
+  // ============================================================================
   // AUDIT LOGGING HELPER
   // ============================================================================
 
@@ -66,15 +89,17 @@ export class MaintenanceService {
   }
 
   // ============================================================================
-  // TICKET NUMBER GENERATOR
+  // TICKET NUMBER GENERATOR (CONCURRENCY HARDENED)
   // ============================================================================
 
   private async generateTicketNumber(
     tx: Prisma.TransactionClient,
-    _organizationId: string
+    organizationId: string
   ): Promise<string> {
     const year = new Date().getFullYear();
-    const count = await tx.maintenanceTicket.count();
+    const count = await tx.maintenanceTicket.count({
+      where: { organizationId },
+    });
     let seq = count + 1;
     let ticketNum = `TKT-${year}-${seq.toString().padStart(6, '0')}`;
     while (await tx.maintenanceTicket.findUnique({ where: { ticketNumber: ticketNum } })) {
@@ -102,7 +127,10 @@ export class MaintenanceService {
       throw new NotFoundException(`Property with ID ${dto.propertyId} not found in organization`);
     }
 
-    const isTenant = userRoles.includes(UserRole.TENANT) && !userRoles.includes(UserRole.OWNER) && !userRoles.includes(UserRole.PROPERTY_MANAGER);
+    const isTenant =
+      userRoles.includes(UserRole.TENANT) &&
+      !userRoles.includes(UserRole.OWNER) &&
+      !userRoles.includes(UserRole.PROPERTY_MANAGER);
     let resolvedTenantId = dto.tenantId || null;
 
     if (isTenant) {
@@ -159,17 +187,26 @@ export class MaintenanceService {
       }
     }
 
-    // 3. Handle Cost permissions
+    // 3. Handle Cost permissions and validation
     let estimatedCostDecimal: Prisma.Decimal | null = null;
     if (dto.estimatedCost !== undefined && dto.estimatedCost !== null && dto.estimatedCost !== '') {
-      if (!userRoles.includes(UserRole.OWNER) && !userRoles.includes(UserRole.PROPERTY_MANAGER) && !userRoles.includes(UserRole.ACCOUNTANT)) {
+      if (
+        !userRoles.includes(UserRole.OWNER) &&
+        !userRoles.includes(UserRole.PROPERTY_MANAGER) &&
+        !userRoles.includes(UserRole.ACCOUNTANT)
+      ) {
         throw new ForbiddenException('You do not have permission to set maintenance estimated costs');
+      }
+      const numCost = Number(dto.estimatedCost);
+      if (isNaN(numCost) || numCost < 0) {
+        throw new BadRequestException('Estimated cost must be a non-negative number');
       }
       estimatedCostDecimal = new Prisma.Decimal(dto.estimatedCost.toString());
     }
 
-    // 4. Atomic Ticket Creation in Transaction
+    // 4. Atomic Ticket Creation in Transaction with Advisory Locking
     return this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('ticket_seq_' || ${organizationId}))`;
       const ticketNumber = await this.generateTicketNumber(tx, organizationId);
 
       const ticket = await tx.maintenanceTicket.create({
@@ -238,7 +275,15 @@ export class MaintenanceService {
     userRoles: UserRole[],
     query: MaintenanceListQueryDto
   ) {
-    const isTenant = userRoles.includes(UserRole.TENANT) && !userRoles.includes(UserRole.OWNER) && !userRoles.includes(UserRole.PROPERTY_MANAGER);
+    const isTenant =
+      userRoles.includes(UserRole.TENANT) &&
+      !userRoles.includes(UserRole.OWNER) &&
+      !userRoles.includes(UserRole.PROPERTY_MANAGER);
+    const isMaintenanceStaff =
+      userRoles.includes(UserRole.MAINTENANCE_STAFF) &&
+      !userRoles.includes(UserRole.OWNER) &&
+      !userRoles.includes(UserRole.PROPERTY_MANAGER);
+
     const whereClause: Prisma.MaintenanceTicketWhereInput = {
       organizationId,
     };
@@ -269,6 +314,12 @@ export class MaintenanceService {
       whereClause.OR = [
         { createdById: userId },
         { tenant: { organizationId, id: query.tenantId || undefined } },
+      ];
+    } else if (isMaintenanceStaff) {
+      // Maintenance staff see tickets assigned to them or open tickets in their properties
+      whereClause.OR = [
+        { assignedToId: userId },
+        { status: MaintenanceStatus.OPEN as any },
       ];
     }
 
@@ -315,8 +366,17 @@ export class MaintenanceService {
       }),
     ]);
 
+    // Role-based field sanitization (Tenants should not view internal costs)
+    const sanitizedData = isTenant
+      ? data.map((t) => ({
+          ...t,
+          estimatedCost: null,
+          actualCost: null,
+        }))
+      : data;
+
     return {
-      data,
+      data: sanitizedData,
       meta: {
         total,
         page,
@@ -336,6 +396,11 @@ export class MaintenanceService {
     userRoles: UserRole[],
     ticketId: string
   ) {
+    const isTenant =
+      userRoles.includes(UserRole.TENANT) &&
+      !userRoles.includes(UserRole.OWNER) &&
+      !userRoles.includes(UserRole.PROPERTY_MANAGER);
+
     const ticket = await this.prisma.maintenanceTicket.findFirst({
       where: { id: ticketId, organizationId },
       include: {
@@ -349,40 +414,47 @@ export class MaintenanceService {
         assignedTo: { select: { id: true, firstName: true, lastName: true, email: true } },
         vendor: true,
         comments: {
+          orderBy: { createdAt: 'asc' },
           include: {
             author: { select: { id: true, firstName: true, lastName: true, email: true } },
           },
-          orderBy: { createdAt: 'asc' },
         },
         attachments: {
+          orderBy: { createdAt: 'asc' },
           include: {
             uploadedBy: { select: { id: true, firstName: true, lastName: true } },
           },
-          orderBy: { createdAt: 'asc' },
         },
         assignments: {
+          orderBy: { assignedAt: 'desc' },
           include: {
             assignedTo: { select: { id: true, firstName: true, lastName: true, email: true } },
             assignedBy: { select: { id: true, firstName: true, lastName: true } },
           },
-          orderBy: { assignedAt: 'desc' },
         },
         statusHistory: {
+          orderBy: { createdAt: 'desc' },
           include: {
             changedBy: { select: { id: true, firstName: true, lastName: true } },
           },
-          orderBy: { createdAt: 'asc' },
         },
       },
     });
 
     if (!ticket) {
+      throw new NotFoundException(`Maintenance ticket with ID ${ticketId} not found in organization`);
+    }
+
+    if (isTenant && ticket.createdById !== userId && ticket.tenantId !== userId) {
       throw new NotFoundException(`Maintenance ticket with ID ${ticketId} not found`);
     }
 
-    const isTenant = userRoles.includes(UserRole.TENANT) && !userRoles.includes(UserRole.OWNER) && !userRoles.includes(UserRole.PROPERTY_MANAGER);
-    if (isTenant && ticket.createdById !== userId && ticket.tenantId !== userId) {
-      throw new NotFoundException(`Maintenance ticket with ID ${ticketId} not found`);
+    if (isTenant) {
+      return {
+        ...ticket,
+        estimatedCost: null,
+        actualCost: null,
+      };
     }
 
     return ticket;
@@ -403,7 +475,7 @@ export class MaintenanceService {
       where: { id: ticketId, organizationId },
     });
     if (!ticket) {
-      throw new NotFoundException(`Maintenance ticket with ID ${ticketId} not found`);
+      throw new NotFoundException(`Maintenance ticket with ID ${ticketId} not found in organization`);
     }
 
     if (ticket.status === MaintenanceStatus.CLOSED || ticket.status === MaintenanceStatus.CANCELLED) {
@@ -413,8 +485,16 @@ export class MaintenanceService {
     let estimatedCostDecimal: Prisma.Decimal | undefined = undefined;
     if (dto.estimatedCost !== undefined) {
       if (dto.estimatedCost !== null && dto.estimatedCost !== '') {
-        if (!userRoles.includes(UserRole.OWNER) && !userRoles.includes(UserRole.PROPERTY_MANAGER) && !userRoles.includes(UserRole.ACCOUNTANT)) {
+        if (
+          !userRoles.includes(UserRole.OWNER) &&
+          !userRoles.includes(UserRole.PROPERTY_MANAGER) &&
+          !userRoles.includes(UserRole.ACCOUNTANT)
+        ) {
           throw new ForbiddenException('You do not have permission to modify maintenance estimated costs');
+        }
+        const numCost = Number(dto.estimatedCost);
+        if (isNaN(numCost) || numCost < 0) {
+          throw new BadRequestException('Estimated cost must be a non-negative number');
         }
         estimatedCostDecimal = new Prisma.Decimal(dto.estimatedCost.toString());
       } else {
@@ -423,6 +503,8 @@ export class MaintenanceService {
     }
 
     return this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('ticket_transition_' || ${ticketId}))`;
+
       const updated = await tx.maintenanceTicket.update({
         where: { id: ticket.id },
         data: {
@@ -432,7 +514,12 @@ export class MaintenanceService {
           priority: dto.priority as any,
           locationDetails: dto.locationDetails?.trim(),
           estimatedCost: estimatedCostDecimal,
-          scheduledAt: dto.scheduledAt !== undefined ? (dto.scheduledAt ? new Date(dto.scheduledAt) : null) : undefined,
+          scheduledAt:
+            dto.scheduledAt !== undefined
+              ? dto.scheduledAt
+                ? new Date(dto.scheduledAt)
+                : null
+              : undefined,
         },
       });
 
@@ -455,26 +542,28 @@ export class MaintenanceService {
     ticketId: string,
     dto: AssignMaintenanceTicketDto
   ) {
-    const ticket = await this.prisma.maintenanceTicket.findFirst({
-      where: { id: ticketId, organizationId },
-    });
-    if (!ticket) {
-      throw new NotFoundException(`Maintenance ticket with ID ${ticketId} not found`);
-    }
-
-    if (ticket.status === MaintenanceStatus.CLOSED || ticket.status === MaintenanceStatus.CANCELLED) {
-      throw new ConflictException(`Cannot assign staff to a ticket that is ${ticket.status}`);
-    }
-
-    // Verify staff user belongs to organization
-    const staffUser = await this.prisma.user.findFirst({
-      where: { id: dto.assignedToId, organizationId, isActive: true },
-    });
-    if (!staffUser) {
-      throw new NotFoundException(`Staff user with ID ${dto.assignedToId} not found in organization`);
-    }
-
     return this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('ticket_transition_' || ${ticketId}))`;
+
+      const ticket = await tx.maintenanceTicket.findFirst({
+        where: { id: ticketId, organizationId },
+      });
+      if (!ticket) {
+        throw new NotFoundException(`Maintenance ticket with ID ${ticketId} not found in organization`);
+      }
+
+      if (ticket.status === MaintenanceStatus.CLOSED || ticket.status === MaintenanceStatus.CANCELLED) {
+        throw new ConflictException(`Cannot assign staff to a ticket that is ${ticket.status}`);
+      }
+
+      // Verify staff user belongs to organization
+      const staffUser = await tx.user.findFirst({
+        where: { id: dto.assignedToId, organizationId, isActive: true },
+      });
+      if (!staffUser) {
+        throw new NotFoundException(`Staff user with ID ${dto.assignedToId} not found in organization`);
+      }
+
       const fromStatus = ticket.status as MaintenanceStatus;
       const newStatus = ticket.status === MaintenanceStatus.OPEN ? MaintenanceStatus.ASSIGNED : ticket.status;
 
@@ -548,14 +637,20 @@ export class MaintenanceService {
     userId: string,
     ticketId: string
   ) {
-    const ticket = await this.prisma.maintenanceTicket.findFirst({
-      where: { id: ticketId, organizationId },
-    });
-    if (!ticket) {
-      throw new NotFoundException(`Maintenance ticket with ID ${ticketId} not found`);
-    }
-
     return this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('ticket_transition_' || ${ticketId}))`;
+
+      const ticket = await tx.maintenanceTicket.findFirst({
+        where: { id: ticketId, organizationId },
+      });
+      if (!ticket) {
+        throw new NotFoundException(`Maintenance ticket with ID ${ticketId} not found in organization`);
+      }
+
+      if (ticket.status === MaintenanceStatus.CLOSED || ticket.status === MaintenanceStatus.CANCELLED) {
+        throw new ConflictException(`Cannot unassign staff from a ticket that is ${ticket.status}`);
+      }
+
       await tx.maintenanceAssignment.updateMany({
         where: { ticketId: ticket.id, unassignedAt: null },
         data: { unassignedAt: new Date() },
@@ -598,21 +693,23 @@ export class MaintenanceService {
     ticketId: string,
     dto?: StartMaintenanceTicketDto
   ) {
-    const ticket = await this.prisma.maintenanceTicket.findFirst({
-      where: { id: ticketId, organizationId },
-    });
-    if (!ticket) {
-      throw new NotFoundException(`Maintenance ticket with ID ${ticketId} not found`);
-    }
-
-    // State machine: Can start only from OPEN or ASSIGNED
-    if (ticket.status !== MaintenanceStatus.OPEN && ticket.status !== MaintenanceStatus.ASSIGNED) {
-      throw new ConflictException(
-        `Cannot transition ticket from ${ticket.status} to IN_PROGRESS. Valid initial statuses: OPEN, ASSIGNED.`
-      );
-    }
-
     return this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('ticket_transition_' || ${ticketId}))`;
+
+      const ticket = await tx.maintenanceTicket.findFirst({
+        where: { id: ticketId, organizationId },
+      });
+      if (!ticket) {
+        throw new NotFoundException(`Maintenance ticket with ID ${ticketId} not found in organization`);
+      }
+
+      // State machine: Can start only from OPEN or ASSIGNED
+      if (ticket.status !== MaintenanceStatus.OPEN && ticket.status !== MaintenanceStatus.ASSIGNED) {
+        throw new ConflictException(
+          `Cannot transition ticket from ${ticket.status} to IN_PROGRESS. Valid initial statuses: OPEN, ASSIGNED.`
+        );
+      }
+
       const fromStatus = ticket.status as MaintenanceStatus;
       const startedAt = ticket.startedAt || new Date();
 
@@ -648,29 +745,35 @@ export class MaintenanceService {
     ticketId: string,
     dto: CompleteMaintenanceTicketDto
   ) {
-    const ticket = await this.prisma.maintenanceTicket.findFirst({
-      where: { id: ticketId, organizationId },
-    });
-    if (!ticket) {
-      throw new NotFoundException(`Maintenance ticket with ID ${ticketId} not found`);
-    }
-
-    // State machine: Can complete only from IN_PROGRESS or ASSIGNED
-    if (ticket.status !== MaintenanceStatus.IN_PROGRESS && ticket.status !== MaintenanceStatus.ASSIGNED) {
-      throw new ConflictException(
-        `Cannot transition ticket from ${ticket.status} to COMPLETED. Ticket must be IN_PROGRESS or ASSIGNED.`
-      );
-    }
-
     let actualCostDecimal: Prisma.Decimal | undefined = undefined;
     if (dto.actualCost !== undefined && dto.actualCost !== null && dto.actualCost !== '') {
       if (userRoles.includes(UserRole.TENANT)) {
         throw new ForbiddenException('Tenants cannot record maintenance actual costs');
       }
+      const numCost = Number(dto.actualCost);
+      if (isNaN(numCost) || numCost < 0) {
+        throw new BadRequestException('Actual cost must be a non-negative number');
+      }
       actualCostDecimal = new Prisma.Decimal(dto.actualCost.toString());
     }
 
     return this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('ticket_transition_' || ${ticketId}))`;
+
+      const ticket = await tx.maintenanceTicket.findFirst({
+        where: { id: ticketId, organizationId },
+      });
+      if (!ticket) {
+        throw new NotFoundException(`Maintenance ticket with ID ${ticketId} not found in organization`);
+      }
+
+      // State machine: Can complete only from IN_PROGRESS or ASSIGNED
+      if (ticket.status !== MaintenanceStatus.IN_PROGRESS && ticket.status !== MaintenanceStatus.ASSIGNED) {
+        throw new ConflictException(
+          `Cannot transition ticket from ${ticket.status} to COMPLETED. Ticket must be IN_PROGRESS or ASSIGNED.`
+        );
+      }
+
       const fromStatus = ticket.status as MaintenanceStatus;
       const completedAt = new Date();
 
@@ -710,21 +813,23 @@ export class MaintenanceService {
     ticketId: string,
     dto?: VerifyMaintenanceTicketDto
   ) {
-    const ticket = await this.prisma.maintenanceTicket.findFirst({
-      where: { id: ticketId, organizationId },
-    });
-    if (!ticket) {
-      throw new NotFoundException(`Maintenance ticket with ID ${ticketId} not found`);
-    }
-
-    // State machine: Can verify only from COMPLETED
-    if (ticket.status !== MaintenanceStatus.COMPLETED) {
-      throw new ConflictException(
-        `Cannot transition ticket from ${ticket.status} to VERIFIED. Ticket must be COMPLETED.`
-      );
-    }
-
     return this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('ticket_transition_' || ${ticketId}))`;
+
+      const ticket = await tx.maintenanceTicket.findFirst({
+        where: { id: ticketId, organizationId },
+      });
+      if (!ticket) {
+        throw new NotFoundException(`Maintenance ticket with ID ${ticketId} not found in organization`);
+      }
+
+      // State machine: Can verify only from COMPLETED
+      if (ticket.status !== MaintenanceStatus.COMPLETED) {
+        throw new ConflictException(
+          `Cannot transition ticket from ${ticket.status} to VERIFIED. Ticket must be COMPLETED.`
+        );
+      }
+
       const fromStatus = ticket.status as MaintenanceStatus;
       const verifiedAt = new Date();
 
@@ -759,21 +864,23 @@ export class MaintenanceService {
     ticketId: string,
     dto?: CloseMaintenanceTicketDto
   ) {
-    const ticket = await this.prisma.maintenanceTicket.findFirst({
-      where: { id: ticketId, organizationId },
-    });
-    if (!ticket) {
-      throw new NotFoundException(`Maintenance ticket with ID ${ticketId} not found`);
-    }
-
-    // State machine: Can close only from VERIFIED or COMPLETED
-    if (ticket.status !== MaintenanceStatus.VERIFIED && ticket.status !== MaintenanceStatus.COMPLETED) {
-      throw new ConflictException(
-        `Cannot transition ticket from ${ticket.status} to CLOSED. Ticket must be VERIFIED or COMPLETED.`
-      );
-    }
-
     return this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('ticket_transition_' || ${ticketId}))`;
+
+      const ticket = await tx.maintenanceTicket.findFirst({
+        where: { id: ticketId, organizationId },
+      });
+      if (!ticket) {
+        throw new NotFoundException(`Maintenance ticket with ID ${ticketId} not found in organization`);
+      }
+
+      // State machine: Can close only from VERIFIED or COMPLETED
+      if (ticket.status !== MaintenanceStatus.VERIFIED && ticket.status !== MaintenanceStatus.COMPLETED) {
+        throw new ConflictException(
+          `Cannot transition ticket from ${ticket.status} to CLOSED. Ticket must be VERIFIED or COMPLETED.`
+        );
+      }
+
       const fromStatus = ticket.status as MaintenanceStatus;
       const closedAt = new Date();
 
@@ -808,26 +915,26 @@ export class MaintenanceService {
     ticketId: string,
     dto: CancelMaintenanceTicketDto
   ) {
-    const ticket = await this.prisma.maintenanceTicket.findFirst({
-      where: { id: ticketId, organizationId },
-    });
-    if (!ticket) {
-      throw new NotFoundException(`Maintenance ticket with ID ${ticketId} not found`);
-    }
-
-    // State machine: Can cancel only from OPEN, ASSIGNED, or IN_PROGRESS
-    if (
-      ticket.status === MaintenanceStatus.COMPLETED ||
-      ticket.status === MaintenanceStatus.VERIFIED ||
-      ticket.status === MaintenanceStatus.CLOSED ||
-      ticket.status === MaintenanceStatus.CANCELLED
-    ) {
-      throw new ConflictException(
-        `Cannot cancel ticket in ${ticket.status} status.`
-      );
-    }
-
     return this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('ticket_transition_' || ${ticketId}))`;
+
+      const ticket = await tx.maintenanceTicket.findFirst({
+        where: { id: ticketId, organizationId },
+      });
+      if (!ticket) {
+        throw new NotFoundException(`Maintenance ticket with ID ${ticketId} not found in organization`);
+      }
+
+      // State machine: Can cancel only from OPEN, ASSIGNED, or IN_PROGRESS
+      if (
+        ticket.status === MaintenanceStatus.COMPLETED ||
+        ticket.status === MaintenanceStatus.VERIFIED ||
+        ticket.status === MaintenanceStatus.CLOSED ||
+        ticket.status === MaintenanceStatus.CANCELLED
+      ) {
+        throw new ConflictException(`Cannot cancel ticket in ${ticket.status} status.`);
+      }
+
       const fromStatus = ticket.status as MaintenanceStatus;
       const cancelledAt = new Date();
 
@@ -873,7 +980,7 @@ export class MaintenanceService {
       where: { id: ticketId, organizationId },
     });
     if (!ticket) {
-      throw new NotFoundException(`Maintenance ticket with ID ${ticketId} not found`);
+      throw new NotFoundException(`Maintenance ticket with ID ${ticketId} not found in organization`);
     }
 
     return this.prisma.$transaction(async (tx) => {
@@ -902,7 +1009,7 @@ export class MaintenanceService {
       where: { id: ticketId, organizationId },
     });
     if (!ticket) {
-      throw new NotFoundException(`Maintenance ticket with ID ${ticketId} not found`);
+      throw new NotFoundException(`Maintenance ticket with ID ${ticketId} not found in organization`);
     }
 
     return this.prisma.maintenanceComment.findMany({
@@ -928,7 +1035,7 @@ export class MaintenanceService {
       where: { id: ticketId, organizationId },
     });
     if (!ticket) {
-      throw new NotFoundException(`Maintenance ticket with ID ${ticketId} not found`);
+      throw new NotFoundException(`Maintenance ticket with ID ${ticketId} not found in organization`);
     }
 
     return this.prisma.$transaction(async (tx) => {
@@ -962,7 +1069,7 @@ export class MaintenanceService {
       where: { id: ticketId, organizationId },
     });
     if (!ticket) {
-      throw new NotFoundException(`Maintenance ticket with ID ${ticketId} not found`);
+      throw new NotFoundException(`Maintenance ticket with ID ${ticketId} not found in organization`);
     }
 
     return this.prisma.maintenanceAttachment.findMany({
@@ -982,26 +1089,54 @@ export class MaintenanceService {
     organizationId: string,
     userId: string,
     ticketId: string,
-    dto: UpdateMaintenanceCostDto
+    dto: UpdateMaintenanceCostDto,
+    userRoles?: UserRole[]
   ) {
+    const isTenant =
+      userRoles &&
+      userRoles.includes(UserRole.TENANT) &&
+      !userRoles.includes(UserRole.OWNER) &&
+      !userRoles.includes(UserRole.PROPERTY_MANAGER);
+    if (isTenant) {
+      throw new ForbiddenException('Tenants cannot modify maintenance costs');
+    }
+
     const ticket = await this.prisma.maintenanceTicket.findFirst({
       where: { id: ticketId, organizationId },
     });
     if (!ticket) {
-      throw new NotFoundException(`Maintenance ticket with ID ${ticketId} not found`);
+      throw new NotFoundException(`Maintenance ticket with ID ${ticketId} not found in organization`);
     }
 
     let estimatedCostDecimal = ticket.estimatedCost;
     if (dto.estimatedCost !== undefined) {
-      estimatedCostDecimal = dto.estimatedCost ? new Prisma.Decimal(dto.estimatedCost.toString()) : null;
+      if (dto.estimatedCost !== null && dto.estimatedCost !== '') {
+        const numEst = Number(dto.estimatedCost);
+        if (isNaN(numEst) || numEst < 0) {
+          throw new BadRequestException('Estimated cost must be a non-negative number');
+        }
+        estimatedCostDecimal = new Prisma.Decimal(dto.estimatedCost.toString());
+      } else {
+        estimatedCostDecimal = null;
+      }
     }
 
     let actualCostDecimal = ticket.actualCost;
     if (dto.actualCost !== undefined) {
-      actualCostDecimal = dto.actualCost ? new Prisma.Decimal(dto.actualCost.toString()) : null;
+      if (dto.actualCost !== null && dto.actualCost !== '') {
+        const numAct = Number(dto.actualCost);
+        if (isNaN(numAct) || numAct < 0) {
+          throw new BadRequestException('Actual cost must be a non-negative number');
+        }
+        actualCostDecimal = new Prisma.Decimal(dto.actualCost.toString());
+      } else {
+        actualCostDecimal = null;
+      }
     }
 
     return this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('ticket_transition_' || ${ticketId}))`;
+
       const updated = await tx.maintenanceTicket.update({
         where: { id: ticket.id },
         data: {
@@ -1022,7 +1157,7 @@ export class MaintenanceService {
   }
 
   // ============================================================================
-  // VENDORS CRUD
+  // VENDORS CRUD (CONCURRENCY HARDENED)
   // ============================================================================
 
   async createVendor(
@@ -1030,7 +1165,21 @@ export class MaintenanceService {
     userId: string,
     dto: CreateMaintenanceVendorDto
   ) {
+    const normalizedName = dto.name.trim().toLowerCase();
+
     return this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('vendor_' || ${organizationId} || '_' || ${normalizedName}))`;
+
+      const existing = await tx.maintenanceVendor.findFirst({
+        where: {
+          organizationId,
+          name: { equals: dto.name.trim(), mode: 'insensitive' },
+        },
+      });
+      if (existing) {
+        throw new ConflictException(`Vendor with name '${dto.name.trim()}' already exists in this organization`);
+      }
+
       const vendor = await tx.maintenanceVendor.create({
         data: {
           organizationId,
@@ -1067,7 +1216,7 @@ export class MaintenanceService {
       where: { id: vendorId, organizationId },
     });
     if (!vendor) {
-      throw new NotFoundException(`Vendor with ID ${vendorId} not found`);
+      throw new NotFoundException(`Vendor with ID ${vendorId} not found in organization`);
     }
     return vendor;
   }
@@ -1082,7 +1231,7 @@ export class MaintenanceService {
       where: { id: vendorId, organizationId },
     });
     if (!vendor) {
-      throw new NotFoundException(`Vendor with ID ${vendorId} not found`);
+      throw new NotFoundException(`Vendor with ID ${vendorId} not found in organization`);
     }
 
     return this.prisma.$transaction(async (tx) => {
@@ -1140,7 +1289,13 @@ export class MaintenanceService {
         where: {
           ...where,
           priority: MaintenancePriority.URGENT as any,
-          status: { in: [MaintenanceStatus.OPEN as any, MaintenanceStatus.ASSIGNED as any, MaintenanceStatus.IN_PROGRESS as any] },
+          status: {
+            in: [
+              MaintenanceStatus.OPEN as any,
+              MaintenanceStatus.ASSIGNED as any,
+              MaintenanceStatus.IN_PROGRESS as any,
+            ],
+          },
         },
       }),
       this.prisma.maintenanceTicket.count({ where: { ...where, status: MaintenanceStatus.COMPLETED as any } }),

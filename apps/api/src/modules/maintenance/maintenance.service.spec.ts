@@ -13,6 +13,7 @@ import {
   MaintenanceStatus,
   MaintenanceTargetType,
   MaintenanceAttachmentType,
+  MaintenanceVendorStatus,
   UserRole,
 } from '@propertyos/types';
 import { Prisma } from '@prisma/client';
@@ -27,6 +28,7 @@ describe('MaintenanceService', () => {
   const mockPgPropertyId = 'prop-pg-1111-1111-1111-111111111111';
   const mockRentalPropertyId = 'prop-rental-2222-2222-2222-222222222222';
   const mockTicketId = 'tkt-11111111-1111-1111-1111-111111111111';
+  const mockVendorId = 'vendor-11111111-1111-1111-1111-111111111111';
 
   beforeEach(async () => {
     const mockPrismaService: any = {
@@ -85,6 +87,7 @@ describe('MaintenanceService', () => {
       auditLog: {
         create: jest.fn().mockResolvedValue({ id: 'audit-1' }),
       },
+      $executeRaw: jest.fn().mockResolvedValue(1),
       $transaction: jest.fn((callback: (tx: any) => any) => callback(mockPrismaService)),
     };
 
@@ -98,6 +101,10 @@ describe('MaintenanceService', () => {
     service = module.get<MaintenanceService>(MaintenanceService);
     prisma = module.get(PrismaService);
   });
+
+  // ============================================================================
+  // 1. TICKET CREATION & TARGET VALIDATION
+  // ============================================================================
 
   describe('createTicket', () => {
     it('should successfully create a maintenance ticket for a PG room', async () => {
@@ -142,8 +149,22 @@ describe('MaintenanceService', () => {
 
       expect(result.id).toBe(mockTicketId);
       expect(result.ticketNumber).toBe('TKT-2026-000001');
+      expect(prisma.$executeRaw).toHaveBeenCalled();
       expect(prisma.maintenanceTicket.create).toHaveBeenCalled();
       expect(prisma.maintenanceStatusHistory.create).toHaveBeenCalled();
+    });
+
+    it('should reject non-existent property with 404 Not Found', async () => {
+      prisma.property.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.createTicket(mockOrgId, mockUserId, [UserRole.OWNER], {
+          propertyId: 'non-existent-prop',
+          title: 'Broken Light',
+          description: 'Light fixture broken',
+          category: MaintenanceCategory.ELECTRICAL,
+        })
+      ).rejects.toThrow(NotFoundException);
     });
 
     it('should reject rental unit targeting on a PG property with 400 Bad Request', async () => {
@@ -220,9 +241,36 @@ describe('MaintenanceService', () => {
         )
       ).rejects.toThrow(ForbiddenException);
     });
+
+    it('should reject negative estimated cost with 400 Bad Request', async () => {
+      prisma.property.findFirst.mockResolvedValue({
+        id: mockPgPropertyId,
+        organizationId: mockOrgId,
+        propertyType: 'PG',
+      });
+
+      await expect(
+        service.createTicket(
+          mockOrgId,
+          mockUserId,
+          [UserRole.OWNER],
+          {
+            propertyId: mockPgPropertyId,
+            title: 'Broken Chair',
+            description: 'Study chair leg is broken',
+            category: MaintenanceCategory.FURNITURE,
+            estimatedCost: -500,
+          }
+        )
+      ).rejects.toThrow(BadRequestException);
+    });
   });
 
-  describe('assignTicket', () => {
+  // ============================================================================
+  // 2. ASSIGNMENT & REASSIGNMENT
+  // ============================================================================
+
+  describe('assignTicket & unassignTicket', () => {
     it('should assign ticket to staff and transition OPEN status to ASSIGNED', async () => {
       prisma.maintenanceTicket.findFirst.mockResolvedValue({
         id: mockTicketId,
@@ -276,7 +324,49 @@ describe('MaintenanceService', () => {
         )
       ).rejects.toThrow(NotFoundException);
     });
+
+    it('should reject assignment of a CLOSED ticket with 409 Conflict', async () => {
+      prisma.maintenanceTicket.findFirst.mockResolvedValue({
+        id: mockTicketId,
+        organizationId: mockOrgId,
+        status: MaintenanceStatus.CLOSED,
+      });
+
+      await expect(
+        service.assignTicket(
+          mockOrgId,
+          mockUserId,
+          [UserRole.OWNER],
+          mockTicketId,
+          { assignedToId: mockStaffId }
+        )
+      ).rejects.toThrow(ConflictException);
+    });
+
+    it('should unassign staff and transition ASSIGNED ticket back to OPEN', async () => {
+      prisma.maintenanceTicket.findFirst.mockResolvedValue({
+        id: mockTicketId,
+        organizationId: mockOrgId,
+        status: MaintenanceStatus.ASSIGNED,
+        assignedToId: mockStaffId,
+      });
+      prisma.maintenanceAssignment.updateMany.mockResolvedValue({ count: 1 });
+      prisma.maintenanceTicket.update.mockResolvedValue({
+        id: mockTicketId,
+        status: MaintenanceStatus.OPEN,
+        assignedToId: null,
+      });
+
+      const result = await service.unassignTicket(mockOrgId, mockUserId, mockTicketId);
+      expect(result.status).toBe(MaintenanceStatus.OPEN);
+      expect(result.assignedToId).toBeNull();
+      expect(prisma.maintenanceAssignment.updateMany).toHaveBeenCalled();
+    });
   });
+
+  // ============================================================================
+  // 3. STATUS LIFECYCLE & STATE MACHINE
+  // ============================================================================
 
   describe('status transitions', () => {
     it('should start work and transition ASSIGNED to IN_PROGRESS', async () => {
@@ -293,6 +383,7 @@ describe('MaintenanceService', () => {
 
       const result = await service.startTicket(mockOrgId, mockUserId, mockTicketId);
       expect(result.status).toBe(MaintenanceStatus.IN_PROGRESS);
+      expect(prisma.$executeRaw).toHaveBeenCalled();
     });
 
     it('should reject invalid transition from OPEN directly to VERIFIED with 409 Conflict', async () => {
@@ -330,6 +421,18 @@ describe('MaintenanceService', () => {
       );
 
       expect(result.status).toBe(MaintenanceStatus.COMPLETED);
+    });
+
+    it('should reject actual cost recording by TENANT with 403 Forbidden', async () => {
+      await expect(
+        service.completeTicket(
+          mockOrgId,
+          mockUserId,
+          [UserRole.TENANT],
+          mockTicketId,
+          { actualCost: 500, resolutionNotes: 'Work completed' }
+        )
+      ).rejects.toThrow(ForbiddenException);
     });
 
     it('should verify work and transition COMPLETED to VERIFIED', async () => {
@@ -404,6 +507,113 @@ describe('MaintenanceService', () => {
     });
   });
 
+  // ============================================================================
+  // 4. COST MANAGEMENT & DECIMAL PROTECTION
+  // ============================================================================
+
+  describe('updateCost', () => {
+    it('should update estimated and actual cost for authorized manager', async () => {
+      prisma.maintenanceTicket.findFirst.mockResolvedValue({
+        id: mockTicketId,
+        organizationId: mockOrgId,
+        estimatedCost: null,
+        actualCost: null,
+      });
+      prisma.maintenanceTicket.update.mockResolvedValue({
+        id: mockTicketId,
+        estimatedCost: new Prisma.Decimal(1200),
+        actualCost: new Prisma.Decimal(1150),
+      });
+
+      const result = await service.updateCost(
+        mockOrgId,
+        mockUserId,
+        mockTicketId,
+        { estimatedCost: 1200, actualCost: 1150 }
+      );
+
+      expect(result.estimatedCost).toEqual(new Prisma.Decimal(1200));
+      expect(result.actualCost).toEqual(new Prisma.Decimal(1150));
+      expect(prisma.$executeRaw).toHaveBeenCalled();
+    });
+
+    it('should reject negative cost updates with 400 Bad Request', async () => {
+      prisma.maintenanceTicket.findFirst.mockResolvedValue({
+        id: mockTicketId,
+        organizationId: mockOrgId,
+      });
+
+      await expect(
+        service.updateCost(
+          mockOrgId,
+          mockUserId,
+          mockTicketId,
+          { estimatedCost: -100 }
+        )
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('should reject cost update by tenant with 403 Forbidden', async () => {
+      await expect(
+        service.updateCost(
+          mockOrgId,
+          mockUserId,
+          mockTicketId,
+          { estimatedCost: 500 },
+          [UserRole.TENANT]
+        )
+      ).rejects.toThrow(ForbiddenException);
+    });
+  });
+
+  // ============================================================================
+  // 5. VENDORS & ADVISORY LOCKING
+  // ============================================================================
+
+  describe('vendors', () => {
+    it('should create vendor and acquire advisory lock', async () => {
+      prisma.maintenanceVendor.findFirst.mockResolvedValue(null);
+      prisma.maintenanceVendor.create.mockResolvedValue({
+        id: mockVendorId,
+        organizationId: mockOrgId,
+        name: 'Cool Air Services',
+        phone: '9876543210',
+        category: MaintenanceCategory.AC_SERVICE,
+        status: MaintenanceVendorStatus.ACTIVE,
+      });
+
+      const result = await service.createVendor(mockOrgId, mockUserId, {
+        name: 'Cool Air Services',
+        phone: '9876543210',
+        category: MaintenanceCategory.AC_SERVICE,
+      });
+
+      expect(result.id).toBe(mockVendorId);
+      expect(result.name).toBe('Cool Air Services');
+      expect(prisma.$executeRaw).toHaveBeenCalled();
+      expect(prisma.maintenanceVendor.create).toHaveBeenCalled();
+    });
+
+    it('should reject duplicate vendor name in organization with 409 Conflict', async () => {
+      prisma.maintenanceVendor.findFirst.mockResolvedValue({
+        id: 'existing-vendor',
+        name: 'Cool Air Services',
+        organizationId: mockOrgId,
+      });
+
+      await expect(
+        service.createVendor(mockOrgId, mockUserId, {
+          name: 'Cool Air Services',
+          phone: '9876543210',
+        })
+      ).rejects.toThrow(ConflictException);
+    });
+  });
+
+  // ============================================================================
+  // 6. COMMENTS & ATTACHMENTS
+  // ============================================================================
+
   describe('comments & attachments', () => {
     it('should add comment to ticket', async () => {
       prisma.maintenanceTicket.findFirst.mockResolvedValue({
@@ -449,7 +659,11 @@ describe('MaintenanceService', () => {
     });
   });
 
-  describe('multi-tenant isolation', () => {
+  // ============================================================================
+  // 7. MULTI-TENANT ISOLATION & SUMMARIES
+  // ============================================================================
+
+  describe('multi-tenant isolation & summary', () => {
     it('should fail closed with 404 when ticket belongs to another organization', async () => {
       prisma.maintenanceTicket.findFirst.mockResolvedValue(null);
 
@@ -457,5 +671,63 @@ describe('MaintenanceService', () => {
         service.getTicketById('org-2', mockUserId, [UserRole.OWNER], mockTicketId)
       ).rejects.toThrow(NotFoundException);
     });
+
+    it('should sanitize cost fields when tenant queries tickets', async () => {
+      prisma.maintenanceTicket.count.mockResolvedValue(1);
+      prisma.maintenanceTicket.findMany.mockResolvedValue([
+        {
+          id: mockTicketId,
+          title: 'Faucet Leak',
+          estimatedCost: new Prisma.Decimal(500),
+          actualCost: new Prisma.Decimal(450),
+          createdById: mockUserId,
+        },
+      ]);
+
+      const result = await service.getTickets(
+        mockOrgId,
+        mockUserId,
+        [UserRole.TENANT],
+        {}
+      );
+
+      expect(result.data[0].estimatedCost).toBeNull();
+      expect(result.data[0].actualCost).toBeNull();
+    });
+
+    it('should compute organization maintenance summary KPIs correctly', async () => {
+      prisma.maintenanceTicket.count
+        .mockResolvedValueOnce(10) // total
+        .mockResolvedValueOnce(3)  // open
+        .mockResolvedValueOnce(2)  // assigned
+        .mockResolvedValueOnce(2)  // in_progress
+        .mockResolvedValueOnce(1)  // urgent
+        .mockResolvedValueOnce(2)  // completed
+        .mockResolvedValueOnce(1)  // completed today
+        .mockResolvedValueOnce(1); // closed
+
+      prisma.maintenanceTicket.findMany.mockResolvedValue([
+        {
+          createdAt: new Date('2026-08-24T10:00:00Z'),
+          completedAt: new Date('2026-08-24T14:00:00Z'), // 4 hours
+        },
+      ]);
+
+      prisma.maintenanceTicket.aggregate.mockResolvedValue({
+        _sum: {
+          estimatedCost: new Prisma.Decimal(5000),
+          actualCost: new Prisma.Decimal(4800),
+        },
+      });
+
+      const summary = await service.getSummary(mockOrgId);
+
+      expect(summary.totalTickets).toBe(10);
+      expect(summary.openTickets).toBe(3);
+      expect(summary.avgResolutionHours).toBe(4);
+      expect(summary.totalEstimatedCost).toBe('5000');
+      expect(summary.totalActualCost).toBe('4800');
+    });
   });
 });
+

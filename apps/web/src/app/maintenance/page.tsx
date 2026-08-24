@@ -22,6 +22,8 @@ import {
   User,
   IndianRupee,
   RefreshCw,
+  LayoutList,
+  Columns3,
 } from 'lucide-react';
 
 const API_BASE = '/api/v1';
@@ -122,7 +124,8 @@ export default function MaintenancePage() {
 
       if (ticketsRes.ok) {
         const json = await ticketsRes.json();
-        setTickets(json.data || []);
+        const list = Array.isArray(json.data) ? json.data : json.data?.data || [];
+        setTickets(list);
       }
       if (summaryRes.ok) {
         const json = await summaryRes.json();
@@ -238,6 +241,38 @@ export default function MaintenancePage() {
     }
   };
 
+  const [viewMode, setViewMode] = useState<'LIST' | 'KANBAN'>('LIST');
+
+  const KANBAN_COLUMNS = useMemo(
+    () => [
+      { id: 'OPEN', label: 'Open', dotColor: 'bg-blue-500', headerBg: 'bg-blue-50/60 text-blue-900 border-blue-200' },
+      { id: 'ASSIGNED', label: 'Assigned', dotColor: 'bg-purple-500', headerBg: 'bg-purple-50/60 text-purple-900 border-purple-200' },
+      { id: 'IN_PROGRESS', label: 'In Progress', dotColor: 'bg-amber-500', headerBg: 'bg-amber-50/60 text-amber-900 border-amber-200' },
+      { id: 'COMPLETED', label: 'Completed', dotColor: 'bg-teal-500', headerBg: 'bg-teal-50/60 text-teal-900 border-teal-200' },
+      { id: 'VERIFIED', label: 'Verified', dotColor: 'bg-emerald-500', headerBg: 'bg-emerald-50/60 text-emerald-900 border-emerald-200' },
+      { id: 'CLOSED', label: 'Closed', dotColor: 'bg-slate-500', headerBg: 'bg-slate-50/60 text-slate-900 border-slate-200' },
+    ],
+    []
+  );
+
+  const kanbanData = useMemo(() => {
+    const map: Record<string, any[]> = {
+      OPEN: [],
+      ASSIGNED: [],
+      IN_PROGRESS: [],
+      COMPLETED: [],
+      VERIFIED: [],
+      CLOSED: [],
+    };
+    const list = Array.isArray(tickets) ? tickets : (tickets as any)?.data || [];
+    list.forEach((t: any) => {
+      if (t && t.status && map[t.status]) {
+        map[t.status].push(t);
+      }
+    });
+    return map;
+  }, [tickets]);
+
   const statusTabs = [
     { id: 'ALL', label: 'All' },
     { id: 'OPEN', label: 'Open' },
@@ -259,6 +294,38 @@ export default function MaintenancePage() {
           icon={Wrench}
           actions={
             <div className="flex flex-wrap items-center gap-2.5">
+              {/* View Switcher Toggle */}
+              <div className="flex items-center bg-surface-subtle border border-surface-border rounded-lg p-0.5 shadow-xs">
+                <button
+                  type="button"
+                  onClick={() => setViewMode('LIST')}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition ${
+                    viewMode === 'LIST'
+                      ? 'bg-brand-white text-brand-teal shadow-xs border border-surface-border'
+                      : 'text-surface-textSecondary hover:text-brand-navy'
+                  }`}
+                  title="List View"
+                  aria-label="List View"
+                >
+                  <LayoutList className="w-3.5 h-3.5" />
+                  <span>List</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewMode('KANBAN')}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition ${
+                    viewMode === 'KANBAN'
+                      ? 'bg-brand-white text-brand-teal shadow-xs border border-surface-border'
+                      : 'text-surface-textSecondary hover:text-brand-navy'
+                  }`}
+                  title="Kanban Board View"
+                  aria-label="Kanban Board View"
+                >
+                  <Columns3 className="w-3.5 h-3.5" />
+                  <span>Kanban</span>
+                </button>
+              </div>
+
               {/* Property Selector */}
               <div className="flex items-center gap-2 bg-brand-white border border-surface-border rounded-lg px-3 py-1.5 shadow-xs">
                 <Building2 className="w-4 h-4 text-brand-teal shrink-0" />
@@ -397,14 +464,14 @@ export default function MaintenancePage() {
           </div>
         </FilterBar>
 
-        {/* Tickets Data Table */}
-        <div className="bg-brand-white border border-surface-border rounded-xl overflow-hidden shadow-sm">
-          {loading ? (
-            <div className="p-12 text-center text-surface-textSecondary space-y-3">
-              <RefreshCw className="w-7 h-7 animate-spin mx-auto text-brand-teal" />
-              <p className="text-xs font-medium">Loading maintenance work orders...</p>
-            </div>
-          ) : tickets.length === 0 ? (
+        {/* View Mode Content */}
+        {loading ? (
+          <div className="bg-brand-white border border-surface-border rounded-xl p-12 text-center text-surface-textSecondary space-y-3 shadow-sm">
+            <RefreshCw className="w-7 h-7 animate-spin mx-auto text-brand-teal" />
+            <p className="text-xs font-medium">Loading maintenance work orders...</p>
+          </div>
+        ) : tickets.length === 0 ? (
+          <div className="bg-brand-white border border-surface-border rounded-xl overflow-hidden shadow-sm">
             <EmptyState
               icon={Wrench}
               title="No maintenance tickets found"
@@ -416,7 +483,111 @@ export default function MaintenancePage() {
                 setIsCreateOpen(true);
               }}
             />
-          ) : (
+          </div>
+        ) : viewMode === 'KANBAN' ? (
+          /* ================================================================ */
+          /* KANBAN BOARD VIEW                                                */
+          /* ================================================================ */
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 overflow-x-auto pb-4">
+            {KANBAN_COLUMNS.map((col) => {
+              const colTickets = kanbanData[col.id] || [];
+              return (
+                <div
+                  key={col.id}
+                  className="bg-surface-subtle/80 border border-surface-border rounded-xl p-3 flex flex-col min-h-[460px] shadow-xs"
+                >
+                  {/* Column Header */}
+                  <div className="flex items-center justify-between pb-2.5 mb-2.5 border-b border-surface-border">
+                    <div className="flex items-center gap-1.5 font-semibold text-xs text-brand-navy">
+                      <span className={`w-2.5 h-2.5 rounded-full ${col.dotColor}`} />
+                      <span>{col.label}</span>
+                    </div>
+                    <span className="px-2 py-0.5 rounded-full bg-brand-white border border-surface-border text-[11px] font-bold text-brand-navy shadow-2xs">
+                      {colTickets.length}
+                    </span>
+                  </div>
+
+                  {/* Column Tickets */}
+                  <div className="space-y-2.5 flex-1 overflow-y-auto max-h-[calc(100vh-320px)] pr-0.5">
+                    {colTickets.length === 0 ? (
+                      <div className="h-28 flex flex-col items-center justify-center text-center p-3 text-surface-textSecondary text-[11px] border border-dashed border-surface-border rounded-lg bg-brand-white/60">
+                        <span>No tickets in {col.label.toLowerCase()}</span>
+                      </div>
+                    ) : (
+                      colTickets.map((ticket) => {
+                        const locationName =
+                          ticket.room?.roomNumber
+                            ? `Room ${ticket.room.roomNumber}${ticket.bed?.bedNumber ? ` (Bed ${ticket.bed.bedNumber})` : ''}`
+                            : ticket.rentalUnit?.unitNumber
+                            ? `Unit ${ticket.rentalUnit.unitNumber}`
+                            : ticket.floor?.name || ticket.locationDetails || 'Common Area';
+
+                        return (
+                          <div
+                            key={ticket.id}
+                            className="bg-brand-white border border-surface-border rounded-xl p-3 shadow-xs hover:shadow-md hover:border-brand-teal/50 transition-all space-y-2"
+                          >
+                            <div className="flex items-center justify-between gap-1.5">
+                              <span className="font-mono text-[11px] font-bold text-brand-teal">
+                                {ticket.ticketNumber}
+                              </span>
+                              <StatusBadge status={ticket.priority} />
+                            </div>
+
+                            <div>
+                              <h4 className="text-xs font-semibold text-brand-navy line-clamp-2 leading-snug">
+                                {ticket.title}
+                              </h4>
+                              <div className="flex items-center gap-1.5 mt-1 text-[10px] text-surface-textSecondary">
+                                <span className="px-1.5 py-0.2 rounded bg-slate-100 uppercase font-semibold text-slate-700 border border-slate-200">
+                                  {ticket.category}
+                                </span>
+                                <span>•</span>
+                                <span>{new Date(ticket.createdAt).toLocaleDateString()}</span>
+                              </div>
+                            </div>
+
+                            <div className="text-[11px] text-surface-textSecondary space-y-0.5 pt-1.5 border-t border-surface-border/60">
+                              <div className="font-medium text-brand-navy truncate">{ticket.property?.name}</div>
+                              <div className="truncate text-[10px] text-surface-textSecondary">{locationName}</div>
+                            </div>
+
+                            <div className="flex items-center justify-between pt-1 text-[11px]">
+                              <div className="flex items-center gap-1 text-brand-navy truncate max-w-[120px]">
+                                {ticket.assignedTo ? (
+                                  <>
+                                    <User className="w-3 h-3 text-surface-textSecondary shrink-0" />
+                                    <span className="truncate text-[10px]">
+                                      {ticket.assignedTo.firstName} {ticket.assignedTo.lastName}
+                                    </span>
+                                  </>
+                                ) : (
+                                  <span className="text-[10px] text-surface-disabled italic">Unassigned</span>
+                                )}
+                              </div>
+
+                              <Link
+                                href={`/maintenance/${ticket.id}`}
+                                className="inline-flex items-center gap-1 text-[11px] font-semibold text-brand-teal hover:text-teal-800 bg-teal-50 hover:bg-teal-100/80 px-2 py-0.5 rounded-md border border-teal-200 transition-colors shrink-0"
+                              >
+                                <span>Manage</span>
+                                <ArrowRight className="w-2.5 h-2.5" />
+                              </Link>
+                            </div>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          /* ================================================================ */
+          /* LIST / TABLE VIEW                                                */
+          /* ================================================================ */
+          <div className="bg-brand-white border border-surface-border rounded-xl overflow-hidden shadow-sm">
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs text-brand-navy">
                 <thead className="bg-surface-subtle text-[11px] uppercase text-surface-textSecondary font-semibold border-b border-surface-border">
@@ -432,7 +603,7 @@ export default function MaintenancePage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-surface-border">
-                  {tickets.map((ticket) => {
+                  {(Array.isArray(tickets) ? tickets : []).map((ticket) => {
                     const locationName =
                       ticket.room?.roomNumber
                         ? `Room ${ticket.room.roomNumber}${ticket.bed?.bedNumber ? ` (Bed ${ticket.bed.bedNumber})` : ''}`
@@ -499,8 +670,8 @@ export default function MaintenancePage() {
                 </tbody>
               </table>
             </div>
-          )}
-        </div>
+          </div>
+        )}
       </div>
 
       {/* Create Maintenance Request Modal */}
