@@ -241,3 +241,29 @@ If a user possesses a permission (e.g. `property.read`) but requests a property 
 - **Immutable Export Audit Logging**:
   - Every CSV export (`GET /api/v1/reports/export`) generates an immutable `REPORT_EXPORTED` audit log entry capturing the report type, filter parameters, caller user ID, organization ID, client IP address, and user agent.
 
+---
+
+## 18. Multi-Property Dashboard Security & Operational Scoping (CORE-022)
+- **Organization-Level Scoping & Isolation**:
+  - All dashboard endpoints (`/api/v1/dashboard/*`) require authenticated sessions and strictly scope all SQL and Prisma aggregations to the caller's `organizationId`.
+  - Under no circumstances can Organization A view, aggregate, or infer properties, tenants, invoices, tickets, or financials belonging to Organization B.
+- **Dual Operating Model Blended Capacity Security**:
+  - Blended occupancy arithmetic combines PG beds (`OCCUPIED / TOTAL_BEDS`) and rental units (`OCCUPIED / TOTAL_UNITS`).
+  - Zero-capacity portfolios safely evaluate to `0.00%` occupancy without `NaN` or unhandled division errors.
+- **Deterministic Decimal Financial Invariants**:
+  - Invoiced revenue, collections, operational expenses, Cash NOI, and outstanding receivables are computed via pure `Prisma.Decimal` arithmetic to eliminate floating-point precision loss.
+  - Operating margin safely defaults to `0.00%` when collected revenue is zero.
+- **Sensitive Data Redaction**:
+  - Operational activity feeds and action items display only sanitized public identifiers (tenant names, ticket numbers, invoice numbers, property names, non-negative amounts).
+  - Credentials, password hashes, session tokens, and Aadhaar numbers are never exposed in dashboard endpoints.
+- **RBAC Matrix Enforcement**:
+  - `OWNER`: Full dashboard access (`dashboard.read`).
+  - `PROPERTY_MANAGER`: Full operational and property dashboard access (`dashboard.read`).
+  - `ACCOUNTANT`: Full financial and operational dashboard access (`dashboard.read`).
+  - `WARDEN`: Operational and property health dashboard access (`dashboard.read`).
+  - `SECURITY`: Blocked (`403 Forbidden`).
+  - `MAINTENANCE_STAFF`: Blocked (`403 Forbidden`).
+  - `TENANT`: Blocked (`403 Forbidden`).
+  - Unauthenticated requests: Rejected with `401 Unauthorized`.
+
+

@@ -139,8 +139,11 @@ export enum Permission {
   EXPENSE_UPDATE = 'expense.update',
   EXPENSE_DELETE = 'expense.delete',
 
-  // Reporting & Analytics Foundation
+  // Reporting & Analytics Foundation (CORE-021)
   REPORTS_READ = 'reports.read',
+
+  // Dashboard Foundation (CORE-022)
+  DASHBOARD_READ = 'dashboard.read',
 }
 
 /**
@@ -245,6 +248,7 @@ export const ROLE_PERMISSIONS_MAP: Record<UserRole, readonly Permission[]> = {
     Permission.MAINTENANCE_MANAGE_COST,
     Permission.MAINTENANCE_MANAGE_VENDOR,
     Permission.REPORTS_READ,
+    Permission.DASHBOARD_READ,
   ],
 
   [UserRole.PROPERTY_MANAGER]: [
@@ -337,6 +341,7 @@ export const ROLE_PERMISSIONS_MAP: Record<UserRole, readonly Permission[]> = {
     Permission.MAINTENANCE_MANAGE_COST,
     Permission.MAINTENANCE_MANAGE_VENDOR,
     Permission.REPORTS_READ,
+    Permission.DASHBOARD_READ,
   ],
 
   [UserRole.ACCOUNTANT]: [
@@ -380,6 +385,7 @@ export const ROLE_PERMISSIONS_MAP: Record<UserRole, readonly Permission[]> = {
     Permission.MAINTENANCE_READ,
     Permission.MAINTENANCE_MANAGE_COST,
     Permission.REPORTS_READ,
+    Permission.DASHBOARD_READ,
   ],
 
   [UserRole.WARDEN]: [
@@ -427,6 +433,7 @@ export const ROLE_PERMISSIONS_MAP: Record<UserRole, readonly Permission[]> = {
     Permission.MAINTENANCE_CREATE,
     Permission.MAINTENANCE_UPDATE,
     Permission.MAINTENANCE_COMMENT,
+    Permission.DASHBOARD_READ,
   ],
 
   [UserRole.SECURITY]: [

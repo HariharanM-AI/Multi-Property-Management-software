@@ -49,8 +49,12 @@ export class ReportsService {
 
     if (endDate) {
       end = new Date(endDate);
+      if (endDate.length <= 10) {
+        end.setHours(23, 59, 59, 999);
+      }
     } else {
       end = new Date();
+      end.setHours(23, 59, 59, 999);
     }
 
     if (startDate) {

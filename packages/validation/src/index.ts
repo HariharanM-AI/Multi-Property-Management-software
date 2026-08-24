@@ -16,3 +16,4 @@ export * from './visitor.schema.js';
 export * from './inventory.schema.js';
 export * from './expense.schema.js';
 export * from './report.schema.js';
+export * from './dashboard.schema.js';

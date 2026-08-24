@@ -382,3 +382,24 @@ All structure endpoints operate within a scoped property context.
 - `GET /api/v1/reports/cash-flow` (Permission: `reports.read`) — Realized Cash Flow Statement analyzing actual cash movements. Aggregates cash inflows (tenant payments grouped by method `UPI`, `BANK_TRANSFER`, `CASH`, `CARD`, `CHEQUE`, `OTHER`), cash outflows (operational expenses by category), and net cash flow. Supports `propertyId`, `startDate`, `endDate`, and `period` filters.
 - `GET /api/v1/reports/export` (Permission: `reports.read`) — Generates RFC 4180-compliant CSV export for `reportType` (`pnl`, `occupancy`, `property_comparison`, `cash_flow`). Implements spreadsheet formula injection protection (neutralizes leading `=`, `+`, `-`, `@` characters) and writes immutable `REPORT_EXPORTED` audit log with export metadata.
 
+---
+
+## 21. Multi-Property Owner Dashboard (`/api/v1/dashboard`) (CORE-022)
+- `GET /api/v1/dashboard/summary` (Permission: `dashboard.read`) — Executive portfolio mission control aggregating real-time portfolio metrics across PG and Rental House properties:
+  - **KPI StatCards**: `activeProperties` / `totalProperties`, `pgCount`, `rentalCount`, `activeTenantsCount`, and `urgentActionItemsCount`.
+  - **Portfolio Capacity & Occupancy**: `totalBeds`, `occupiedBeds`, `availableBeds`, `totalUnits`, `occupiedUnits`, `availableUnits`, and `blendedOccupancyRate` percentage (safely handles zero capacity with `0.00%`).
+  - **Current Calendar Month Financials**: Real-time `Prisma.Decimal` arithmetic computing `invoicedRevenue` (from current month invoice lines), `collectedRevenue` (from current month recorded payments), `operationalExpenses` (from current month expense records), `netOperatingIncome` (Cash NOI = Collected - Expenses), `outstandingReceivables` (sum of unpaid active invoice balances across org), and `operatingMarginPercentage`.
+  - **Property Performance Cards**: Individual property cards containing capacity counts, occupancy rate %, occupancy status badges (`FULL`, `HIGH_OCCUPANCY`, `NORMAL`, `LOW_OCCUPANCY`, `VACANT`), monthly invoiced/collected/expense/net income, open/in-progress maintenance ticket counts with urgent indicator, and pending invoice totals.
+  - **Filters**: Supports `propertyType` (`ALL`, `PG`, `RENTAL_HOUSE`), `city`, and `status` (`ALL`, `ACTIVE`, `INACTIVE`).
+- `GET /api/v1/dashboard/action-items` (Permission: `dashboard.read`) — Urgent operational triage alerts requiring property management attention:
+  - **Overdue Invoices**: Unpaid active invoices (`dueDate < now && outstandingAmount > 0`), ordered descending by `daysOverdue`. Includes tenant name, phone, property name, invoice number, and outstanding amount.
+  - **Urgent Maintenance Tickets**: Tickets in `OPEN`, `ASSIGNED`, or `IN_PROGRESS` with priority `HIGH` or `URGENT`, ordered ascending by creation date (oldest unresolved first) with room/unit location context.
+  - **Upcoming Lease Renewals**: Active leases on rental units ending within the next 60 days (`endDate >= now && endDate <= now + 60 days`), showing tenant details, unit number, monthly rent, and days remaining.
+  - **Total Count**: `totalActionItemsCount` aggregate.
+- `GET /api/v1/dashboard/activity` (Permission: `dashboard.read`) — Chronological stream of the 10 most recent operational events across the organization:
+  - `PAYMENT_RECEIVED`: Recorded tenant payments with amount and property name.
+  - `MAINTENANCE_CREATED` / `MAINTENANCE_COMPLETED`: Work orders logged or completed with ticket number and cost.
+  - `TENANT_CHECKED_IN`: Digital resident check-in completions.
+  - `EXPENSE_RECORDED`: Operational expenses logged with category and amount.
+
+
