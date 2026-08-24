@@ -200,3 +200,22 @@ If a user possesses a permission (e.g. `property.read`) but requests a property 
   - `TENANT`: Strictly blocked from inventory management (`403 Forbidden`).
 - **Audit Logging**: All inventory events (`INVENTORY_CREATED`, `INVENTORY_UPDATED`, `INVENTORY_ASSIGNED`, `INVENTORY_UNASSIGNED`, `INVENTORY_CONDITION_CHANGED`, `INVENTORY_STATUS_CHANGED`, `INVENTORY_DELETED`) write immutable audit logs with sanitized item metadata snapshots.
 
+---
+
+## 16. Expense Security & Transaction-Scoped Advisory Locking (CORE-020)
+- **Mutation Advisory Locking**: Serializes concurrent updates and deletions on individual expense records via transaction-scoped PostgreSQL advisory lock:
+  ```sql
+  SELECT pg_advisory_xact_lock(hashtext('expense_mutate_' || id))
+  ```
+  Prevents dirty read-modify-write race conditions and ensures consistent audit state transitions.
+- **Strict Positive Amount Validation**: Every operational expense requires `amount > 0`. Zero (`amount = 0`) and negative values (`amount < 0`) are rejected at both Zod validation pipe and service layers with `400 Bad Request`.
+- **Decimal Financial Precision**: Handled using `Prisma.Decimal` without JavaScript floating-point conversions. All aggregate summary KPIs (`totalExpenseAmount`, `currentMonthExpenseAmount`, and category breakdowns) use `Prisma.Decimal` summation.
+- **Multi-Tenant Fail-Closed Isolation**: All expense queries (`GET /expenses`, `GET /expenses/:id`, `PATCH /expenses/:id`, `DELETE /expenses/:id`, `GET /expenses/summary`) strictly enforce caller `organizationId`. Target property existence is verified within caller organization (`404 Not Found` if foreign/nonexistent). Cross-organization access fails closed with `404 Not Found`.
+- **RBAC Matrix Enforcement**:
+  - `OWNER`: Full operational and financial access (`expense.read`, `expense.create`, `expense.update`, `expense.delete`).
+  - `PROPERTY_MANAGER`: Full management access (`expense.read`, `expense.create`, `expense.update`, `expense.delete`).
+  - `ACCOUNTANT`: Financial management and audit access (`expense.read`, `expense.create`, `expense.update`). Blocked from deletion (`403 Forbidden`).
+  - `WARDEN`: Operational outlay logging (`expense.read`, `expense.create`). Blocked from updates and deletion (`403 Forbidden`).
+  - `TENANT`, `SECURITY`, `MAINTENANCE_STAFF`: Strictly blocked from all expense endpoints (`403 Forbidden`).
+- **Immutable Snapshot Audit Logging**: Every expense lifecycle event (`EXPENSE_CREATED`, `EXPENSE_UPDATED`, `EXPENSE_DELETED`, `EXPENSE_RECEIPT_UPLOADED`) records the actor user ID, organization ID, action name, resource ID, IP address, user agent, and a structured metadata snapshot. Deletion writes a complete resource snapshot to the audit log prior to record deletion.
+

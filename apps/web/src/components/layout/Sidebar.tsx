@@ -21,6 +21,7 @@ import {
   BedDouble,
   UtensilsCrossed,
   Zap,
+  Receipt,
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -53,6 +54,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentPropertyType, activePat
     { name: 'Invoices', href: '/invoices', icon: FileSpreadsheet },
     { name: 'Payments', href: '/payments', icon: CircleDollarSign },
     { name: 'Financials', href: '/financials', icon: Zap },
+    { name: 'Expenses', href: '/expenses', icon: Receipt },
     { name: 'Maintenance', href: '/maintenance', icon: Wrench },
     { name: 'Staff & Roster', href: '/staff', icon: UserCheck },
     { name: 'Visitors', href: '/visitors', icon: ShieldCheck },

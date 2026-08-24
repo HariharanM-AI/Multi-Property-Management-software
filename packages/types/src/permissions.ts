@@ -133,6 +133,12 @@ export enum Permission {
   INVENTORY_UPDATE = 'inventory.update',
   INVENTORY_DELETE = 'inventory.delete',
 
+  // Expense Management (CORE-020)
+  EXPENSE_READ = 'expense.read',
+  EXPENSE_CREATE = 'expense.create',
+  EXPENSE_UPDATE = 'expense.update',
+  EXPENSE_DELETE = 'expense.delete',
+
   // Reporting & Analytics Foundation
   REPORTS_READ = 'reports.read',
 }
@@ -142,6 +148,10 @@ export enum Permission {
  */
 export const ROLE_PERMISSIONS_MAP: Record<UserRole, readonly Permission[]> = {
   [UserRole.OWNER]: [
+    Permission.EXPENSE_READ,
+    Permission.EXPENSE_CREATE,
+    Permission.EXPENSE_UPDATE,
+    Permission.EXPENSE_DELETE,
     Permission.INVENTORY_READ,
     Permission.INVENTORY_CREATE,
     Permission.INVENTORY_UPDATE,
@@ -238,6 +248,10 @@ export const ROLE_PERMISSIONS_MAP: Record<UserRole, readonly Permission[]> = {
   ],
 
   [UserRole.PROPERTY_MANAGER]: [
+    Permission.EXPENSE_READ,
+    Permission.EXPENSE_CREATE,
+    Permission.EXPENSE_UPDATE,
+    Permission.EXPENSE_DELETE,
     Permission.INVENTORY_READ,
     Permission.INVENTORY_CREATE,
     Permission.INVENTORY_UPDATE,
@@ -326,6 +340,9 @@ export const ROLE_PERMISSIONS_MAP: Record<UserRole, readonly Permission[]> = {
   ],
 
   [UserRole.ACCOUNTANT]: [
+    Permission.EXPENSE_READ,
+    Permission.EXPENSE_CREATE,
+    Permission.EXPENSE_UPDATE,
     Permission.INVENTORY_READ,
     Permission.STAFF_READ,
     Permission.ATTENDANCE_READ,
@@ -366,6 +383,8 @@ export const ROLE_PERMISSIONS_MAP: Record<UserRole, readonly Permission[]> = {
   ],
 
   [UserRole.WARDEN]: [
+    Permission.EXPENSE_READ,
+    Permission.EXPENSE_CREATE,
     Permission.INVENTORY_READ,
     Permission.INVENTORY_CREATE,
     Permission.INVENTORY_UPDATE,
