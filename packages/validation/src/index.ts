@@ -19,3 +19,4 @@ export * from './report.schema.js';
 export * from './dashboard.schema.js';
 export * from './notification.schema.js';
 export * from './discovery.schema.js';
+export * from './community.schema.js';

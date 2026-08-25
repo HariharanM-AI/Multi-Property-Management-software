@@ -446,4 +446,23 @@ Public, deterministic relational discovery portal for prospective tenants and cl
   - **Fail-Closed Security**: Throws `404 Not Found` for inactive, archived, draft, or soft-deleted properties.
   - **PII Sanitation Invariant**: Zero internal tenant records, tenant phone numbers, or internal accounting journals are ever exposed in public responses.
 
+---
+
+## 24. Tenant Community Notices & Resident Discussion Board (`/api/v1/community`) (CORE-025)
+Multi-tenant notice board and resident discussion stream with multi-property multi-tenant isolation:
+- `GET /api/v1/community/posts` (Permission: `community.read`) — List posts with search, category filtering, pin sorting, and pagination.
+  - **Tenant Scoping Invariant**: For `TENANT` users, the query is automatically scoped to the tenant's assigned property (derived from active `CHECKED_IN` check-in or active `Lease`). Attempting to query foreign properties fails closed with `403 Forbidden`.
+  - **Query Parameters**: `propertyId` (UUID, optional for tenants), `category` (`ANNOUNCEMENT`, `MAINTENANCE`, `EVENT`, `RULE`, `LOST_AND_FOUND`, `GENERAL`), `isPinned` (boolean `true` | `false`), `search` (case-insensitive substring match on `title` or `content`), `page` (default 1), `limit` (default 20, max 50).
+  - **Response Payload**: `{ success: true, data: { data: CommunityPostDto[], meta: { total: number, page: number, limit: number, totalPages: number } } }`.
+- `GET /api/v1/community/summary` (Permission: `community.read`) — Return property-scoped aggregate counters: `activePosts`, `pinnedAnnouncements`, `totalComments`. Requires `propertyId` query param. Tenants querying unassigned properties are rejected with `403 Forbidden`.
+- `GET /api/v1/community/posts/:id` (Permission: `community.read`) — Retrieve single community post detail with all non-deleted threaded comments ordered chronologically (`createdAt: asc`). Fails closed with `404 Not Found` if post does not exist or has been deleted, and `403 Forbidden` if a tenant attempts cross-property access.
+- `POST /api/v1/community/posts` (Permission: `community.post.create`) — Publish a community post or management notice.
+  - **RBAC & Moderation Invariant**: `TENANT` users can only post to their assigned property with an active stay (`CHECKED_IN` status). Tenants cannot set `isPinned: true` or `category = ANNOUNCEMENT` (rejected with `403 Forbidden`). Only `OWNER`, `PROPERTY_MANAGER`, and `WARDEN` can create official announcements and pin posts.
+  - **Audit Logging**: Emits `COMMUNITY_POST_CREATED` structured audit log.
+- `PATCH /api/v1/community/posts/:id` (Permission: `community.post.update`) — Update post title, content, category, or images. Post authors can update their own posts; moderators (`OWNER`, `PROPERTY_MANAGER`, `WARDEN`) can update any post. Tenants cannot elevate category to `ANNOUNCEMENT` or toggle pin status. Emits `COMMUNITY_POST_UPDATED` audit log.
+- `PATCH /api/v1/community/posts/:id/pin` (Permission: `community.moderate` — `OWNER`, `PROPERTY_MANAGER`, `WARDEN`) — Pin or unpin a community post. Serialized via PostgreSQL transaction-scoped advisory lock `SELECT pg_advisory_xact_lock(hashtext('community_pin_' || :postId))`. Emits `COMMUNITY_POST_PINNED` or `COMMUNITY_POST_UNPINNED` audit log.
+- `DELETE /api/v1/community/posts/:id` (Permission: `community.delete`) — Soft-delete a community post (`deletedAt = new Date()`, `status = DELETED`) and cascade soft-delete to all associated comments. Authors can delete their own posts; moderators can delete any post. Emits `COMMUNITY_POST_DELETED` audit log.
+- `POST /api/v1/community/posts/:id/comments` (Permission: `community.comment.create`) — Add a comment to an active community post. Scoped to post's property; tenants cannot comment on foreign properties (`403 Forbidden`) or deleted posts (`404 Not Found`). Emits `COMMUNITY_COMMENT_CREATED` audit log.
+- `DELETE /api/v1/community/comments/:id` (Permission: `community.delete` or `community.moderate`) — Soft-delete a comment (`deletedAt = new Date()`). Authors can delete their own comments; moderators can delete any comment. Emits `COMMUNITY_COMMENT_DELETED` audit log.
+
 

@@ -311,4 +311,27 @@ If a user possesses a permission (e.g. `property.read`) but requests a property 
   - Indian postal codes are validated using 6-digit PIN code regex (`^[1-9][0-9]{5}$`).
   - Strict numeric bounds prevent inverted budgets (`minRent <= maxRent`), negative rents, or integer overflows.
 
+---
+
+## 21. Tenant Community Notices & Resident Discussion Board Security (CORE-025)
+- **Tenant-Property Active Stay Scoping Invariant**:
+  - `TENANT` users are strictly restricted to posts, comments, and summaries for properties where they have an active stay (a verified `CheckIn` record with status `CHECKED_IN` or an active `Lease`).
+  - Any attempt by a tenant to query, post, or comment on a property where they do not reside is blocked with `403 Forbidden`.
+  - Management roles (`OWNER`, `PROPERTY_MANAGER`, `WARDEN`, `ACCOUNTANT`) are scoped to all properties within their authenticated `organizationId`.
+- **Role-Based Moderation & Elevation Prevention**:
+  - Creating official management notices (`category = ANNOUNCEMENT`) or pinning posts (`isPinned: true`) is restricted to `OWNER`, `PROPERTY_MANAGER`, and `WARDEN` roles (`Permission.COMMUNITY_MODERATE`).
+  - Tenants attempting to publish posts with `category = ANNOUNCEMENT` or `isPinned = true` are rejected with `403 Forbidden`.
+  - Tenants cannot elevate their post's category or toggle pin status during edits (`PATCH /api/v1/community/posts/:id`).
+- **Post & Comment Author Ownership vs Moderation**:
+  - Post Authors can update or delete their own posts.
+  - Comment Authors can delete their own comments.
+  - Moderators (`OWNER`, `PROPERTY_MANAGER`, `WARDEN`) can update, moderate, or delete any post or comment within their organization.
+  - Non-moderators attempting to edit or delete content authored by another resident are rejected with `403 Forbidden`.
+- **Advisory Lock Concurrency Protection**:
+  - Pinning and unpinning operations are serialized per post using PostgreSQL transaction-scoped advisory locks: `SELECT pg_advisory_xact_lock(hashtext('community_pin_' || :postId))` to prevent race conditions during concurrent moderation.
+- **Cascade Soft-Deletion**:
+  - Deleting a post performs a soft-delete (`deletedAt = new Date()`, `status = DELETED`) and cascades soft-deletion to all child comments in a single database transaction, ensuring no orphan or dangling comments remain active.
+- **Comprehensive Audit Trail**:
+  - All community actions (`COMMUNITY_POST_CREATED`, `COMMUNITY_POST_UPDATED`, `COMMUNITY_POST_PINNED`, `COMMUNITY_POST_UNPINNED`, `COMMUNITY_POST_DELETED`, `COMMUNITY_COMMENT_CREATED`, `COMMUNITY_COMMENT_DELETED`) generate immutable audit log records with sanitized metadata snapshots.
+
 

@@ -387,6 +387,23 @@ enum NotificationType {
   GENERAL
 }
 
+enum CommunityPostCategory {
+  ANNOUNCEMENT
+  MAINTENANCE
+  EVENT
+  RULE
+  LOST_AND_FOUND
+  GENERAL
+}
+
+enum CommunityPostStatus {
+  ACTIVE
+  PINNED
+  ARCHIVED
+  FLAGGED
+  DELETED
+}
+
 // ------------------------------------------------------------------------------
 // MULTI-TENANCY & IDENTITY
 // ------------------------------------------------------------------------------
@@ -438,6 +455,8 @@ model Organization {
   maintenanceStatusHistories MaintenanceStatusHistory[]
   maintenanceAssignments  MaintenanceAssignment[]
   notifications           Notification[]
+  communityPosts          CommunityPost[]
+  communityComments       CommunityComment[]
 
   @@map("organizations")
 }
@@ -471,6 +490,8 @@ model User {
   maintenanceAssignmentsCreated  MaintenanceAssignment[] @relation("StaffAssignedBy")
   maintenanceStatusChanges MaintenanceStatusHistory[]
   notifications            Notification[]
+  communityPosts          CommunityPost[]
+  communityComments       CommunityComment[]
 
   @@index([organizationId])
   @@index([email])
@@ -895,6 +916,7 @@ model Tenant {
   visitors                VisitorRecord[]
   marketplaceListings     MarketplaceListing[]
   communityPosts          CommunityPost[]
+  communityComments       CommunityComment[]
   checkIns                CheckIn[]
   checkouts               Checkout[]
   settlements             Settlement[]
@@ -1993,32 +2015,55 @@ model Notification {
 }
 
 model CommunityPost {
-  id         String   @id @default(uuid())
-  propertyId String
-  tenantId   String
-  title      String
-  content    String
-  isPinned   Boolean  @default(false)
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id             String                @id @default(uuid())
+  organizationId String
+  propertyId     String
+  authorId       String
+  authorName     String
+  authorRole     UserRoleType
+  tenantId       String?
+  title          String                @db.VarChar(255)
+  content        String                @db.Text
+  category       CommunityPostCategory @default(GENERAL)
+  isPinned       Boolean               @default(false)
+  isOfficial     Boolean               @default(false)
+  status         CommunityPostStatus   @default(ACTIVE)
+  images         String[]              @default([])
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
+  deletedAt      DateTime?
 
-  property Property           @relation(fields: [propertyId], references: [id], onDelete: Cascade)
-  tenant   Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  comments CommunityComment[]
+  organization Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  property     Property           @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  author       User               @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  tenant       Tenant?            @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+  comments     CommunityComment[]
 
-  @@index([propertyId])
+  @@index([organizationId, propertyId, isPinned, createdAt])
+  @@index([propertyId, createdAt])
   @@map("community_posts")
 }
 
 model CommunityComment {
-  id        String   @id @default(uuid())
-  postId    String
-  authorId  String
-  content   String
-  createdAt DateTime @default(now())
+  id             String        @id @default(uuid())
+  organizationId String
+  postId         String
+  authorId       String
+  authorName     String
+  authorRole     UserRoleType
+  tenantId       String?
+  content        String        @db.Text
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  deletedAt      DateTime?
 
-  post CommunityPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  post         CommunityPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  author       User          @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  tenant       Tenant?       @relation(fields: [tenantId], references: [id], onDelete: SetNull)
 
+  @@index([postId, createdAt])
+  @@index([organizationId])
   @@map("community_comments")
 }
 

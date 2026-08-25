@@ -24,3 +24,4 @@ export * from './reports.js';
 export * from './dashboard.js';
 export * from './notifications.js';
 export * from './discovery.js';
+export * from './community.js';

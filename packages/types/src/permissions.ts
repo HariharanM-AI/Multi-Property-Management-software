@@ -150,6 +150,14 @@ export enum Permission {
   NOTIFICATION_CREATE = 'notification.create',
   NOTIFICATION_UPDATE = 'notification.update',
   NOTIFICATION_DELETE = 'notification.delete',
+
+  // Community & Notice Board (CORE-025)
+  COMMUNITY_READ = 'community.read',
+  COMMUNITY_POST_CREATE = 'community.post.create',
+  COMMUNITY_POST_UPDATE = 'community.post.update',
+  COMMUNITY_COMMENT_CREATE = 'community.comment.create',
+  COMMUNITY_MODERATE = 'community.moderate',
+  COMMUNITY_DELETE = 'community.delete',
 }
 
 /**
@@ -259,6 +267,12 @@ export const ROLE_PERMISSIONS_MAP: Record<UserRole, readonly Permission[]> = {
     Permission.NOTIFICATION_CREATE,
     Permission.NOTIFICATION_UPDATE,
     Permission.NOTIFICATION_DELETE,
+    Permission.COMMUNITY_READ,
+    Permission.COMMUNITY_POST_CREATE,
+    Permission.COMMUNITY_POST_UPDATE,
+    Permission.COMMUNITY_COMMENT_CREATE,
+    Permission.COMMUNITY_MODERATE,
+    Permission.COMMUNITY_DELETE,
   ],
 
   [UserRole.PROPERTY_MANAGER]: [
@@ -356,6 +370,12 @@ export const ROLE_PERMISSIONS_MAP: Record<UserRole, readonly Permission[]> = {
     Permission.NOTIFICATION_CREATE,
     Permission.NOTIFICATION_UPDATE,
     Permission.NOTIFICATION_DELETE,
+    Permission.COMMUNITY_READ,
+    Permission.COMMUNITY_POST_CREATE,
+    Permission.COMMUNITY_POST_UPDATE,
+    Permission.COMMUNITY_COMMENT_CREATE,
+    Permission.COMMUNITY_MODERATE,
+    Permission.COMMUNITY_DELETE,
   ],
 
   [UserRole.ACCOUNTANT]: [
@@ -403,6 +423,8 @@ export const ROLE_PERMISSIONS_MAP: Record<UserRole, readonly Permission[]> = {
     Permission.NOTIFICATION_READ,
     Permission.NOTIFICATION_UPDATE,
     Permission.NOTIFICATION_DELETE,
+    Permission.COMMUNITY_READ,
+    Permission.COMMUNITY_COMMENT_CREATE,
   ],
 
   [UserRole.WARDEN]: [
@@ -454,6 +476,12 @@ export const ROLE_PERMISSIONS_MAP: Record<UserRole, readonly Permission[]> = {
     Permission.NOTIFICATION_READ,
     Permission.NOTIFICATION_UPDATE,
     Permission.NOTIFICATION_DELETE,
+    Permission.COMMUNITY_READ,
+    Permission.COMMUNITY_POST_CREATE,
+    Permission.COMMUNITY_POST_UPDATE,
+    Permission.COMMUNITY_COMMENT_CREATE,
+    Permission.COMMUNITY_MODERATE,
+    Permission.COMMUNITY_DELETE,
   ],
 
   [UserRole.SECURITY]: [
@@ -476,6 +504,7 @@ export const ROLE_PERMISSIONS_MAP: Record<UserRole, readonly Permission[]> = {
     Permission.NOTIFICATION_READ,
     Permission.NOTIFICATION_UPDATE,
     Permission.NOTIFICATION_DELETE,
+    Permission.COMMUNITY_READ,
   ],
 
   [UserRole.MAINTENANCE_STAFF]: [
@@ -494,6 +523,8 @@ export const ROLE_PERMISSIONS_MAP: Record<UserRole, readonly Permission[]> = {
     Permission.NOTIFICATION_READ,
     Permission.NOTIFICATION_UPDATE,
     Permission.NOTIFICATION_DELETE,
+    Permission.COMMUNITY_READ,
+    Permission.COMMUNITY_COMMENT_CREATE,
   ],
 
   [UserRole.TENANT]: [
@@ -516,6 +547,11 @@ export const ROLE_PERMISSIONS_MAP: Record<UserRole, readonly Permission[]> = {
     Permission.NOTIFICATION_READ,
     Permission.NOTIFICATION_UPDATE,
     Permission.NOTIFICATION_DELETE,
+    Permission.COMMUNITY_READ,
+    Permission.COMMUNITY_POST_CREATE,
+    Permission.COMMUNITY_POST_UPDATE,
+    Permission.COMMUNITY_COMMENT_CREATE,
+    Permission.COMMUNITY_DELETE,
   ],
 };
 
