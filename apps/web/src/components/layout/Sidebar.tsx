@@ -27,6 +27,7 @@ import {
   MessageSquare,
   ShoppingBag,
   Sparkles,
+  History,
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -70,6 +71,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentPropertyType, activePat
     { name: 'Community', href: '/community', icon: MessageSquare },
     { name: 'Marketplace', href: '/marketplace', icon: ShoppingBag },
     { name: 'Notifications', href: '/notifications', icon: Bell },
+    { name: 'Audit Trail', href: '/audit', icon: History },
     { name: 'Settings', href: '/settings/organization', icon: Settings },
   ];
 

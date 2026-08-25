@@ -173,6 +173,10 @@ export enum Permission {
   SERVICE_REQUEST_ASSIGN = 'service_request.assign',
   SERVICE_REQUEST_CANCEL = 'service_request.cancel',
   SERVICE_REQUEST_DELETE = 'service_request.delete',
+
+  // Audit Trail & Event Logging (CORE-028)
+  AUDIT_READ = 'audit.read',
+  AUDIT_EXPORT = 'audit.export',
 }
 
 /**
@@ -299,6 +303,8 @@ export const ROLE_PERMISSIONS_MAP: Record<UserRole, readonly Permission[]> = {
     Permission.SERVICE_REQUEST_ASSIGN,
     Permission.SERVICE_REQUEST_CANCEL,
     Permission.SERVICE_REQUEST_DELETE,
+    Permission.AUDIT_READ,
+    Permission.AUDIT_EXPORT,
   ],
 
   [UserRole.PROPERTY_MANAGER]: [
@@ -413,6 +419,8 @@ export const ROLE_PERMISSIONS_MAP: Record<UserRole, readonly Permission[]> = {
     Permission.SERVICE_REQUEST_ASSIGN,
     Permission.SERVICE_REQUEST_CANCEL,
     Permission.SERVICE_REQUEST_DELETE,
+    Permission.AUDIT_READ,
+    Permission.AUDIT_EXPORT,
   ],
 
   [UserRole.ACCOUNTANT]: [
@@ -467,6 +475,8 @@ export const ROLE_PERMISSIONS_MAP: Record<UserRole, readonly Permission[]> = {
     Permission.MARKETPLACE_LISTING_UPDATE,
     Permission.MARKETPLACE_LISTING_DELETE,
     Permission.SERVICE_REQUEST_READ,
+    Permission.AUDIT_READ,
+    Permission.AUDIT_EXPORT,
   ],
 
   [UserRole.WARDEN]: [
@@ -534,6 +544,7 @@ export const ROLE_PERMISSIONS_MAP: Record<UserRole, readonly Permission[]> = {
     Permission.SERVICE_REQUEST_UPDATE,
     Permission.SERVICE_REQUEST_ASSIGN,
     Permission.SERVICE_REQUEST_CANCEL,
+    Permission.AUDIT_READ,
   ],
 
   [UserRole.SECURITY]: [

@@ -27,3 +27,4 @@ export * from './discovery.js';
 export * from './community.js';
 export * from './marketplace.js';
 export * from './services.js';
+export * from './audit.js';

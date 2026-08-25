@@ -399,5 +399,36 @@ If a user possesses a permission (e.g. `property.read`) but requests a property 
 - **Comprehensive Audit Trail**:
   - All service desk operations (`SERVICE_REQUEST_CREATED`, `SERVICE_REQUEST_UPDATED`, `SERVICE_REQUEST_ASSIGNED`, `SERVICE_REQUEST_STATUS_CHANGED`, `SERVICE_REQUEST_CANCELLED`, `SERVICE_REQUEST_DELETED`) generate immutable audit log records with sanitized metadata snapshots.
 
+---
+
+## 24. Audit Trail Security & Compliance (CORE-028)
+
+### 1. Append-Only Immutability
+- The `audit_logs` table is strictly append-only. There are no API endpoints or service methods to update (`UPDATE`) or delete (`DELETE`) audit log entries.
+- Log entries record timestamps (`createdAt`), actors (`userId`), system categories, action identifiers, resource types/IDs, client IP addresses (`ipAddress`), and user agent strings (`userAgent`).
+
+### 2. Multi-Tenant Scoping & Fail-Closed Scoping
+- All audit queries enforce strict multi-tenant scoping against the active session's `organizationId`.
+- Cross-tenant log lookups or ID tampering attempt fail closed with `404 Not Found`.
+
+### 3. Automated Sensitive Metadata Redaction
+- All audit log reads (`GET /logs`, `GET /logs/:id`, `GET /export`) pass metadata through recursive sanitization.
+- Metadata keys containing sensitive substrings (`password`, `token`, `secret`, `key`, `bank`, `accountnumber`, `cvv`, `auth`) are automatically scrubbed and replaced with `"[REDACTED]"` to prevent inadvertent credential or PII leaks in compliance logs.
+
+### 4. Spreadsheet Formula Injection (CSV Injection) Neutralization
+- For CSV compliance exports (`GET /api/v1/audit/export?format=CSV`), cell values beginning with formula trigger characters (`=`, `+`, `-`, `@`, `\t`, `\r`) are neutralized per OWASP guidelines by prepending a single quote (`'`).
+- Cell content is quoted and escaped per RFC 4180 to prevent CSV parsing anomalies.
+
+### 5. Automated Compliance Export Tracking
+- Exporting audit logs via `GET /api/v1/audit/export` automatically generates an immutable `AUDIT_LOG_EXPORTED` event in the audit trail, documenting who exported the logs, the format requested, and filters applied.
+
+### 6. Role-Based Access Control (RBAC)
+- Only privileged administrative roles have audit access:
+  - `audit.read`: `OWNER`, `PROPERTY_MANAGER`, `ACCOUNTANT`, `WARDEN`
+  - `audit.summary`: `OWNER`, `PROPERTY_MANAGER`, `ACCOUNTANT`, `WARDEN`
+  - `audit.export`: `OWNER`, `PROPERTY_MANAGER`, `ACCOUNTANT`
+- Non-administrative roles (`TENANT`, `STAFF`, `SECURITY_GUARD`) are rejected with `403 Forbidden`.
+
+
 
 

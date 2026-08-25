@@ -523,5 +523,37 @@ On-demand property facility service requests (plumbing, electrical, housekeeping
 - `PATCH /api/v1/services/requests/:id/status` (Permission: `service_request.update` or `service_request.cancel`) — Update request status (`SCHEDULED`, `IN_PROGRESS`, `COMPLETED`, `CANCELLED`). Serialized via PostgreSQL advisory lock. Rejects transitions on already completed/cancelled requests with `409 Conflict`. When completing, records `actualCost`, `resolutionNotes`, and `completedAt`. When cancelling, requires `cancellationReason` and stamps `cancelledAt`. Emits `SERVICE_REQUEST_STATUS_CHANGED` or `SERVICE_REQUEST_CANCELLED` audit log.
 - `DELETE /api/v1/services/requests/:id` (Permission: `service_request.delete` — `OWNER`, `PROPERTY_MANAGER`) — Soft-delete a service request (`deletedAt = new Date()`). Serialized via PostgreSQL advisory lock. Emits `SERVICE_REQUEST_DELETED` audit log.
 
+---
+
+## 27. Audit Trail & Event Logging (`/api/v1/audit`) (CORE-028)
+Enterprise immutable, append-only audit trail and compliance logging across 8 core domain categories (`AUTHENTICATION_ACCESS`, `PROPERTY_STRUCTURE`, `TENANT_LIFECYCLE`, `FINANCE_BILLING`, `FACILITY_OPERATIONS`, `COMMUNITY_ENGAGEMENT`, `SERVICES_REQUESTS`, `AUDIT_COMPLIANCE`):
+- `GET /api/v1/audit/logs` (Permission: `audit.read` — `OWNER`, `PROPERTY_MANAGER`, `ACCOUNTANT`, `WARDEN`) — Query and filter audit trail logs with multi-tenant scoping, category filtering, action filtering, resource filtering, actor filtering, date ranges, full-text search, and pagination.
+  - **Sensitive Metadata Redaction Invariant**: All JSON metadata payloads automatically pass through recursive redaction (`password`, `token`, `secret`, `key` masks replaced with `"[REDACTED]"`).
+  - **Query Parameters**:
+    - `page` (integer >= 1, default 1)
+    - `limit` (integer 1-100, default 20)
+    - `category` (`AUTHENTICATION_ACCESS`, `PROPERTY_STRUCTURE`, `TENANT_LIFECYCLE`, `FINANCE_BILLING`, `FACILITY_OPERATIONS`, `COMMUNITY_ENGAGEMENT`, `SERVICES_REQUESTS`, `AUDIT_COMPLIANCE`)
+    - `action` (`AuditAction` string)
+    - `resourceType` (e.g. `Property`, `Tenant`, `Invoice`, `Payment`, `CommunityPost`, `ServiceRequest`, etc.)
+    - `resourceId` (string identifier)
+    - `userId` (UUID)
+    - `startDate`, `endDate` (ISO 8601 timestamps)
+    - `search` (case-insensitive substring match on `action`, `resourceType`, `resourceId`, `ipAddress`, actor `firstName`, `lastName`, `email`)
+  - **Response Payload**: `{ success: true, data: { data: AuditLogDto[], total: number, page: number, limit: number, totalPages: number, hasNext: boolean, hasPrev: boolean }, meta: { requestId: string, timestamp: string } }`
+- `GET /api/v1/audit/summary` (Permission: `audit.summary` — `OWNER`, `PROPERTY_MANAGER`, `ACCOUNTANT`, `WARDEN`) — Retrieve portfolio-wide compliance and activity metrics:
+  - `totalLogs` (total immutable audit entries recorded)
+  - `eventsLast24h` (audit entries within the rolling 24 hours)
+  - `eventsLast7d` (audit entries within the rolling 7 days)
+  - `criticalSecurityEvents` (count of security-sensitive actions: `LOGIN_FAILED`, `PASSWORD_RESET_CONFIRMED`, `PASSWORD_CHANGED`, `TEAM_MEMBER_REMOVED`, `PROPERTY_DELETED`, `TENANT_DELETED`, `STAFF_MEMBER_DEACTIVATED`)
+  - `topActions` (top 5 most frequent action breakdown with counts)
+  - `topActors` (top 5 most active system/user actors with counts)
+  - `resourceBreakdown` (top 5 resource entity distributions)
+- `GET /api/v1/audit/logs/:id` (Permission: `audit.read` — `OWNER`, `PROPERTY_MANAGER`, `ACCOUNTANT`, `WARDEN`) — Retrieve single audit event details by ID with redacted metadata. Fails closed with `404 Not Found` if log does not exist or belongs to another organization.
+- `GET /api/v1/audit/export` (Permission: `audit.export` — `OWNER`, `PROPERTY_MANAGER`, `ACCOUNTANT`) — Export audit trail data for external compliance audits:
+  - **Format Support**: `format=CSV` (RFC 4180 compliant) or `format=JSON`.
+  - **Spreadsheet Formula Injection Defense**: For CSV exports, all cells starting with dangerous characters (`=`, `+`, `-`, `@`, `\t`, `\r`) are automatically escaped with a leading single quote (`'`) to neutralize Formula/CSV injection in Microsoft Excel, Google Sheets, and LibreOffice Calc.
+  - **Automated Compliance Logging**: Executing an export automatically writes an immutable `AUDIT_LOG_EXPORTED` event to the audit trail.
+
+
 
 

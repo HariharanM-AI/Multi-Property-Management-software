@@ -658,6 +658,10 @@ model AuditLog {
   user         User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   @@index([organizationId])
+  @@index([organizationId, createdAt])
+  @@index([organizationId, action])
+  @@index([organizationId, resourceType])
+  @@index([organizationId, userId])
   @@index([resourceType, resourceId])
   @@index([createdAt])
   @@map("audit_logs")

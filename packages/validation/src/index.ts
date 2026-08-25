@@ -22,3 +22,4 @@ export * from './discovery.schema.js';
 export * from './community.schema.js';
 export * from './marketplace.schema.js';
 export * from './services.schema.js';
+export * from './audit.schema.js';
