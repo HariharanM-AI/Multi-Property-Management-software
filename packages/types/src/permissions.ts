@@ -158,6 +158,13 @@ export enum Permission {
   COMMUNITY_COMMENT_CREATE = 'community.comment.create',
   COMMUNITY_MODERATE = 'community.moderate',
   COMMUNITY_DELETE = 'community.delete',
+
+  // Tenant Marketplace Foundation (CORE-026)
+  MARKETPLACE_READ = 'marketplace.read',
+  MARKETPLACE_LISTING_CREATE = 'marketplace.listing.create',
+  MARKETPLACE_LISTING_UPDATE = 'marketplace.listing.update',
+  MARKETPLACE_LISTING_DELETE = 'marketplace.listing.delete',
+  MARKETPLACE_MODERATE = 'marketplace.moderate',
 }
 
 /**
@@ -273,6 +280,11 @@ export const ROLE_PERMISSIONS_MAP: Record<UserRole, readonly Permission[]> = {
     Permission.COMMUNITY_COMMENT_CREATE,
     Permission.COMMUNITY_MODERATE,
     Permission.COMMUNITY_DELETE,
+    Permission.MARKETPLACE_READ,
+    Permission.MARKETPLACE_LISTING_CREATE,
+    Permission.MARKETPLACE_LISTING_UPDATE,
+    Permission.MARKETPLACE_LISTING_DELETE,
+    Permission.MARKETPLACE_MODERATE,
   ],
 
   [UserRole.PROPERTY_MANAGER]: [
@@ -376,6 +388,11 @@ export const ROLE_PERMISSIONS_MAP: Record<UserRole, readonly Permission[]> = {
     Permission.COMMUNITY_COMMENT_CREATE,
     Permission.COMMUNITY_MODERATE,
     Permission.COMMUNITY_DELETE,
+    Permission.MARKETPLACE_READ,
+    Permission.MARKETPLACE_LISTING_CREATE,
+    Permission.MARKETPLACE_LISTING_UPDATE,
+    Permission.MARKETPLACE_LISTING_DELETE,
+    Permission.MARKETPLACE_MODERATE,
   ],
 
   [UserRole.ACCOUNTANT]: [
@@ -425,6 +442,10 @@ export const ROLE_PERMISSIONS_MAP: Record<UserRole, readonly Permission[]> = {
     Permission.NOTIFICATION_DELETE,
     Permission.COMMUNITY_READ,
     Permission.COMMUNITY_COMMENT_CREATE,
+    Permission.MARKETPLACE_READ,
+    Permission.MARKETPLACE_LISTING_CREATE,
+    Permission.MARKETPLACE_LISTING_UPDATE,
+    Permission.MARKETPLACE_LISTING_DELETE,
   ],
 
   [UserRole.WARDEN]: [
@@ -482,6 +503,11 @@ export const ROLE_PERMISSIONS_MAP: Record<UserRole, readonly Permission[]> = {
     Permission.COMMUNITY_COMMENT_CREATE,
     Permission.COMMUNITY_MODERATE,
     Permission.COMMUNITY_DELETE,
+    Permission.MARKETPLACE_READ,
+    Permission.MARKETPLACE_LISTING_CREATE,
+    Permission.MARKETPLACE_LISTING_UPDATE,
+    Permission.MARKETPLACE_LISTING_DELETE,
+    Permission.MARKETPLACE_MODERATE,
   ],
 
   [UserRole.SECURITY]: [
@@ -505,6 +531,10 @@ export const ROLE_PERMISSIONS_MAP: Record<UserRole, readonly Permission[]> = {
     Permission.NOTIFICATION_UPDATE,
     Permission.NOTIFICATION_DELETE,
     Permission.COMMUNITY_READ,
+    Permission.MARKETPLACE_READ,
+    Permission.MARKETPLACE_LISTING_CREATE,
+    Permission.MARKETPLACE_LISTING_UPDATE,
+    Permission.MARKETPLACE_LISTING_DELETE,
   ],
 
   [UserRole.MAINTENANCE_STAFF]: [
@@ -525,6 +555,10 @@ export const ROLE_PERMISSIONS_MAP: Record<UserRole, readonly Permission[]> = {
     Permission.NOTIFICATION_DELETE,
     Permission.COMMUNITY_READ,
     Permission.COMMUNITY_COMMENT_CREATE,
+    Permission.MARKETPLACE_READ,
+    Permission.MARKETPLACE_LISTING_CREATE,
+    Permission.MARKETPLACE_LISTING_UPDATE,
+    Permission.MARKETPLACE_LISTING_DELETE,
   ],
 
   [UserRole.TENANT]: [
@@ -552,6 +586,10 @@ export const ROLE_PERMISSIONS_MAP: Record<UserRole, readonly Permission[]> = {
     Permission.COMMUNITY_POST_UPDATE,
     Permission.COMMUNITY_COMMENT_CREATE,
     Permission.COMMUNITY_DELETE,
+    Permission.MARKETPLACE_READ,
+    Permission.MARKETPLACE_LISTING_CREATE,
+    Permission.MARKETPLACE_LISTING_UPDATE,
+    Permission.MARKETPLACE_LISTING_DELETE,
   ],
 };
 

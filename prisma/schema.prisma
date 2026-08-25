@@ -404,6 +404,33 @@ enum CommunityPostStatus {
   DELETED
 }
 
+enum MarketplaceCategory {
+  FURNITURE
+  ELECTRONICS
+  APPLIANCES
+  BOOKS
+  VEHICLES
+  CLOTHING
+  SPORTS
+  OTHER
+}
+
+enum MarketplaceItemCondition {
+  BRAND_NEW
+  LIKE_NEW
+  GOOD
+  FAIR
+  POOR
+}
+
+enum MarketplaceListingStatus {
+  ACTIVE
+  RESERVED
+  SOLD
+  EXPIRED
+  DELETED
+}
+
 // ------------------------------------------------------------------------------
 // MULTI-TENANCY & IDENTITY
 // ------------------------------------------------------------------------------
@@ -457,6 +484,7 @@ model Organization {
   notifications           Notification[]
   communityPosts          CommunityPost[]
   communityComments       CommunityComment[]
+  marketplaceListings     MarketplaceListing[]
 
   @@map("organizations")
 }
@@ -492,6 +520,7 @@ model User {
   notifications            Notification[]
   communityPosts          CommunityPost[]
   communityComments       CommunityComment[]
+  marketplaceListings     MarketplaceListing[]
 
   @@index([organizationId])
   @@index([email])
@@ -654,6 +683,7 @@ model Property {
   agreements       Agreement[]
   billingSchedules BillingSchedule[]
   notifications    Notification[]
+  marketplaceListings MarketplaceListing[]
 
   @@unique([organizationId, code])
   @@index([organizationId])
@@ -2068,21 +2098,35 @@ model CommunityComment {
 }
 
 model MarketplaceListing {
-  id          String   @id @default(uuid())
-  tenantId    String
-  title       String
-  description String
-  price       Decimal  @db.Decimal(10, 2)
-  category    String   // FURNITURE, ELECTRONICS, BOOKS, APPLIANCES, OTHER
-  images      String[] @default([])
-  status      String   @default("ACTIVE") // ACTIVE, SOLD, EXPIRED, REMOVED
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id             String                   @id @default(uuid())
+  organizationId String
+  propertyId     String
+  sellerId       String
+  sellerName     String
+  sellerRole     UserRoleType
+  sellerPhone    String?
+  tenantId       String?
+  title          String                   @db.VarChar(255)
+  description    String                   @db.Text
+  price          Decimal                  @db.Decimal(10, 2)
+  isNegotiable   Boolean                  @default(false)
+  category       MarketplaceCategory      @default(OTHER)
+  condition      MarketplaceItemCondition @default(GOOD)
+  status         MarketplaceListingStatus @default(ACTIVE)
+  images         String[]                 @default([])
+  locationNote   String?
+  createdAt      DateTime                 @default(now())
+  updatedAt      DateTime                 @updatedAt
+  deletedAt      DateTime?
 
-  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  organization   Organization             @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  property       Property                 @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  seller         User                     @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+  tenant         Tenant?                  @relation(fields: [tenantId], references: [id], onDelete: SetNull)
 
-  @@index([tenantId])
-  @@index([status])
+  @@index([organizationId, propertyId, status, createdAt])
+  @@index([propertyId, status])
+  @@index([sellerId, createdAt])
   @@map("marketplace_listings")
 }
 

@@ -334,4 +334,34 @@ If a user possesses a permission (e.g. `property.read`) but requests a property 
 - **Comprehensive Audit Trail**:
   - All community actions (`COMMUNITY_POST_CREATED`, `COMMUNITY_POST_UPDATED`, `COMMUNITY_POST_PINNED`, `COMMUNITY_POST_UNPINNED`, `COMMUNITY_POST_DELETED`, `COMMUNITY_COMMENT_CREATED`, `COMMUNITY_COMMENT_DELETED`) generate immutable audit log records with sanitized metadata snapshots.
 
+---
+
+## 22. Tenant Marketplace Security & Concurrency Safeguards (CORE-026)
+- **Tenant-Property Active Stay Scoping Invariant**:
+  - `TENANT` users are strictly restricted to marketplace listings for properties where they have an active stay (a verified `CheckIn` record with status `CHECKED_IN` or an active `Lease`).
+  - Any attempt by a tenant to create listings, query listings, or view single listing details on unassigned properties is blocked fail-closed with `403 Forbidden`.
+  - Management roles (`OWNER`, `PROPERTY_MANAGER`, `WARDEN`, `ACCOUNTANT`, `SECURITY`, `MAINTENANCE_STAFF`) have property visibility across their authenticated `organizationId`.
+- **Author Ownership vs Moderation Privileges**:
+  - Listing Authors can update details (`PATCH /api/v1/marketplace/listings/:id`), update status (`PATCH /api/v1/marketplace/listings/:id/status`), or delete (`DELETE /api/v1/marketplace/listings/:id`) their own listings.
+  - Moderators (`OWNER`, `PROPERTY_MANAGER`, `WARDEN` with `Permission.MARKETPLACE_MODERATE`) can update, change status, or delete any listing within their organization.
+  - Non-author non-moderators attempting to modify or delete another resident's listing are rejected with `403 Forbidden`.
+- **Status State Machine & Transaction-Scoped Advisory Locking**:
+  - Status transitions (`ACTIVE`, `RESERVED`, `SOLD`) and soft-deletions acquire a PostgreSQL transaction-scoped advisory lock:
+    ```sql
+    SELECT pg_advisory_xact_lock(hashtext('marketplace_status_' || :listingId))
+    ```
+  - Competing parallel status updates are serialized without race conditions or deadlocks.
+  - Status updates on already deleted (`DELETED`) listings are rejected with `409 Conflict`.
+- **Financial Validation & Positive Decimal Precision**:
+  - Listing prices must be strictly positive (`price > 0`) and bounded up to ₹10,000,000.
+  - Summary KPI valuation (`totalActiveValue`) sums active item prices using `Prisma.Decimal` arithmetic to ensure exact currency calculations.
+- **Fail-Closed Multi-Tenant Isolation**:
+  - Cross-organization listing creation, retrieval, updates, status changes, and deletions fail closed with `404 Not Found` without leaking listing or property existence.
+- **RBAC Matrix Enforcement**:
+  - `OWNER`, `PROPERTY_MANAGER`, `WARDEN`: `marketplace.read`, `marketplace.listing.create`, `marketplace.listing.update`, `marketplace.listing.delete`, `marketplace.moderate`.
+  - `ACCOUNTANT`, `SECURITY`, `MAINTENANCE_STAFF`, `TENANT`: `marketplace.read`, `marketplace.listing.create`, `marketplace.listing.update`, `marketplace.listing.delete`.
+- **Comprehensive Audit Trail**:
+  - All marketplace operations (`MARKETPLACE_LISTING_CREATED`, `MARKETPLACE_LISTING_UPDATED`, `MARKETPLACE_LISTING_STATUS_CHANGED`, `MARKETPLACE_LISTING_DELETED`) generate immutable audit log records with sanitized metadata snapshots.
+
+
 

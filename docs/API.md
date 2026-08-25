@@ -465,4 +465,34 @@ Multi-tenant notice board and resident discussion stream with multi-property mul
 - `POST /api/v1/community/posts/:id/comments` (Permission: `community.comment.create`) — Add a comment to an active community post. Scoped to post's property; tenants cannot comment on foreign properties (`403 Forbidden`) or deleted posts (`404 Not Found`). Emits `COMMUNITY_COMMENT_CREATED` audit log.
 - `DELETE /api/v1/community/comments/:id` (Permission: `community.delete` or `community.moderate`) — Soft-delete a comment (`deletedAt = new Date()`). Authors can delete their own comments; moderators can delete any comment. Emits `COMMUNITY_COMMENT_DELETED` audit log.
 
+---
+
+## 25. Tenant Marketplace Foundation (`/api/v1/marketplace`) (CORE-026)
+Peer-to-peer second-hand goods marketplace and resident board with multi-tenant multi-property isolation:
+- `GET /api/v1/marketplace/listings` (Permission: `marketplace.read`) — List and search marketplace listings with multi-tenant filtering, category filtering, condition filtering, status filtering, price range bounds, keyword search, sorting, and pagination.
+  - **Tenant Scoping Invariant**: For `TENANT` users, the query is automatically scoped to the tenant's active assigned properties (derived from active `CHECKED_IN` check-ins or active `Lease` records). Attempting to query foreign/unassigned properties fails closed with `403 Forbidden`.
+  - **Query Parameters**:
+    - `page` (integer >= 1, default 1)
+    - `limit` (integer 1-50, default 20)
+    - `propertyId` (UUID, optional for tenants; validated against tenant assigned stays)
+    - `category` (`FURNITURE`, `ELECTRONICS`, `APPLIANCES`, `BOOKS`, `VEHICLES`, `CLOTHING`, `SPORTS`, `OTHER`)
+    - `condition` (`BRAND_NEW`, `LIKE_NEW`, `GOOD`, `FAIR`, `POOR`)
+    - `status` (`ACTIVE`, `RESERVED`, `SOLD`, `EXPIRED`, `DELETED` — default excludes `DELETED`)
+    - `minPrice`, `maxPrice` (non-negative numeric bounds, `minPrice <= maxPrice`)
+    - `isNegotiable` (boolean `true` | `false`)
+    - `search` (case-insensitive substring match on `title`, `description`, `locationNote`, or `sellerName`)
+    - `sellerId` (UUID)
+    - `sortBy` (`NEWEST`, `PRICE_ASC`, `PRICE_DESC`)
+  - **Response Payload**: `{ success: true, data: { data: MarketplaceListingDto[], total: number, page: number, limit: number, totalPages: number }, meta: { requestId: string, timestamp: string } }`
+- `GET /api/v1/marketplace/summary` (Permission: `marketplace.read`) — Return property-scoped or portfolio-wide aggregate marketplace KPIs: `activeListings`, `soldListings`, `reservedListings`, `totalActiveValue` (computed via exact PostgreSQL `Decimal` arithmetic), `categoryBreakdown`. Tenants querying unassigned properties are rejected with `403 Forbidden`.
+- `GET /api/v1/marketplace/listings/:id` (Permission: `marketplace.read`) — Retrieve single marketplace listing details by ID. Fails closed with `404 Not Found` if listing does not exist or has been deleted, and `403 Forbidden` if a tenant attempts cross-property access.
+- `POST /api/v1/marketplace/listings` (Permission: `marketplace.listing.create`) — Publish a marketplace listing for sale or giveaway.
+  - **RBAC & Active Stay Invariant**: `TENANT` users must have an active stay (`CHECKED_IN` check-in or active `Lease`) on the specified `propertyId`; cross-property listing attempts fail closed with `403 Forbidden`. Staff/management users can list items across managed properties.
+  - **Validation Bounds**: Price must be > 0 and <= ₹10,000,000. Title 3-255 chars, description 5-2000 chars, max 5 image URLs.
+  - **Audit Logging**: Emits `MARKETPLACE_LISTING_CREATED` structured audit log.
+- `PATCH /api/v1/marketplace/listings/:id` (Permission: `marketplace.listing.update`) — Update listing details (title, description, price, isNegotiable, category, condition, locationNote, contactPhone, images). Authors can update their own listings; moderators (`OWNER`, `PROPERTY_MANAGER`, `WARDEN`) can update any listing. Unauthorized users rejected with `403 Forbidden`. Emits `MARKETPLACE_LISTING_UPDATED` audit log.
+- `PATCH /api/v1/marketplace/listings/:id/status` (Permission: `marketplace.listing.update`) — Update listing status (`ACTIVE`, `RESERVED`, `SOLD`). Serialized via PostgreSQL transaction-scoped advisory lock `SELECT pg_advisory_xact_lock(hashtext('marketplace_status_' || :id))`. Authors can change status of their listings; moderators can change status of any listing. Status change on deleted listing rejected with `409 Conflict`. Emits `MARKETPLACE_LISTING_STATUS_CHANGED` audit log.
+- `DELETE /api/v1/marketplace/listings/:id` (Permission: `marketplace.listing.delete`) — Soft-delete a marketplace listing (`status = DELETED`, `deletedAt = new Date()`). Serialized via PostgreSQL advisory lock. Authors can delete their own listings; moderators (`OWNER`, `PROPERTY_MANAGER`, `WARDEN`) can delete any listing. Emits `MARKETPLACE_LISTING_DELETED` audit log.
+
+
 
