@@ -466,6 +466,23 @@ enum ServiceRequestSlot {
   ANYTIME
 }
 
+enum JobType {
+  INVOICE_GENERATION
+  PAYMENT_REMINDERS
+  MAINTENANCE_ESCALATION
+  AGREEMENT_EXPIRY
+  NOTIFICATION_DISPATCH
+  SYSTEM_CLEANUP
+}
+
+enum JobExecutionStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
 // ------------------------------------------------------------------------------
 // MULTI-TENANCY & IDENTITY
 // ------------------------------------------------------------------------------
@@ -521,6 +538,8 @@ model Organization {
   communityComments       CommunityComment[]
   marketplaceListings     MarketplaceListing[]
   serviceRequests         ServiceRequest[]
+  jobExecutions           JobExecution[]
+  scheduledJobConfigs     ScheduledJobConfig[]
 
   @@map("organizations")
 }
@@ -558,6 +577,7 @@ model User {
   communityComments       CommunityComment[]
   marketplaceListings     MarketplaceListing[]
   serviceRequests         ServiceRequest[]
+  triggeredJobExecutions  JobExecution[] @relation("JobTriggeredByUser")
 
   @@index([organizationId])
   @@index([email])
@@ -2234,5 +2254,60 @@ model ServiceRequest {
   @@map("service_requests")
 }
 
+// ------------------------------------------------------------------------------
+// AUTOMATED JOB SCHEDULER & BULLMQ (CORE-029)
+// ------------------------------------------------------------------------------
 
+model JobExecution {
+  id            String             @id @default(uuid())
+  organizationId String
+  jobType       JobType
+  queueName     String             @default("propertyos:jobs")
+  bullJobId     String?
+  status        JobExecutionStatus @default(PENDING)
+  payload       Json?
+  result        Json?
+  error         String?            @db.Text
+  durationMs    Int?
+  attempts      Int                @default(0)
+  maxAttempts   Int                @default(3)
+  scheduledAt   DateTime?
+  startedAt     DateTime?
+  completedAt   DateTime?
+  failedAt      DateTime?
+  triggeredById String?
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
 
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  triggeredBy  User?        @relation("JobTriggeredByUser", fields: [triggeredById], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, createdAt])
+  @@index([organizationId, jobType, createdAt])
+  @@index([organizationId, status, createdAt])
+  @@index([bullJobId])
+  @@index([scheduledAt])
+  @@index([status])
+  @@map("job_executions")
+}
+
+model ScheduledJobConfig {
+  id             String              @id @default(uuid())
+  organizationId String
+  jobType        JobType
+  cronExpression String              @db.VarChar(100)
+  isEnabled      Boolean             @default(true)
+  lastRunAt      DateTime?
+  nextRunAt      DateTime?
+  lastStatus     JobExecutionStatus?
+  metadata       Json?
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, jobType])
+  @@index([organizationId])
+  @@index([isEnabled])
+  @@map("scheduled_job_configs")
+}

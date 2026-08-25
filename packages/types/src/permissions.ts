@@ -177,6 +177,12 @@ export enum Permission {
   // Audit Trail & Event Logging (CORE-028)
   AUDIT_READ = 'audit.read',
   AUDIT_EXPORT = 'audit.export',
+
+  // Automated Job Scheduler & BullMQ (CORE-029)
+  JOB_READ = 'job.read',
+  JOB_TRIGGER = 'job.trigger',
+  JOB_MANAGE = 'job.manage',
+  JOB_EXPORT = 'job.export',
 }
 
 /**
@@ -305,6 +311,10 @@ export const ROLE_PERMISSIONS_MAP: Record<UserRole, readonly Permission[]> = {
     Permission.SERVICE_REQUEST_DELETE,
     Permission.AUDIT_READ,
     Permission.AUDIT_EXPORT,
+    Permission.JOB_READ,
+    Permission.JOB_TRIGGER,
+    Permission.JOB_MANAGE,
+    Permission.JOB_EXPORT,
   ],
 
   [UserRole.PROPERTY_MANAGER]: [
@@ -421,6 +431,10 @@ export const ROLE_PERMISSIONS_MAP: Record<UserRole, readonly Permission[]> = {
     Permission.SERVICE_REQUEST_DELETE,
     Permission.AUDIT_READ,
     Permission.AUDIT_EXPORT,
+    Permission.JOB_READ,
+    Permission.JOB_TRIGGER,
+    Permission.JOB_MANAGE,
+    Permission.JOB_EXPORT,
   ],
 
   [UserRole.ACCOUNTANT]: [
@@ -477,6 +491,7 @@ export const ROLE_PERMISSIONS_MAP: Record<UserRole, readonly Permission[]> = {
     Permission.SERVICE_REQUEST_READ,
     Permission.AUDIT_READ,
     Permission.AUDIT_EXPORT,
+    Permission.JOB_READ,
   ],
 
   [UserRole.WARDEN]: [

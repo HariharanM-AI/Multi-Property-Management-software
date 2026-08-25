@@ -554,6 +554,35 @@ Enterprise immutable, append-only audit trail and compliance logging across 8 co
   - **Spreadsheet Formula Injection Defense**: For CSV exports, all cells starting with dangerous characters (`=`, `+`, `-`, `@`, `\t`, `\r`) are automatically escaped with a leading single quote (`'`) to neutralize Formula/CSV injection in Microsoft Excel, Google Sheets, and LibreOffice Calc.
   - **Automated Compliance Logging**: Executing an export automatically writes an immutable `AUDIT_LOG_EXPORTED` event to the audit trail.
 
+---
+
+## 28. Automated Job Scheduler & Queues (`/api/v1/jobs`) (CORE-029)
+Production-grade background worker and queue orchestration infrastructure powered by BullMQ v5.41 and Redis 7, with durable PostgreSQL execution persistence (`job_executions`, `scheduled_job_configs`) and Dead-Letter Queue (DLQ) recovery:
+- `GET /api/v1/jobs/stats` (Permission: `job.read` — `OWNER`, `PROPERTY_MANAGER`, `ACCOUNTANT`) — Retrieve real-time BullMQ queue metrics and Redis engine health:
+  - `engine`: `"BullMQ + Redis"`
+  - `redisConnected`: boolean
+  - `queues`: Object containing `jobs`, `notifications`, `dlq` counters (`waiting`, `active`, `completed`, `failed`, `delayed`, `paused`)
+  - `totalWorkers`: integer count
+  - `timestamp`: ISO 8601 string
+- `POST /api/v1/jobs/trigger` (Permission: `job.trigger` — `OWNER`, `PROPERTY_MANAGER`) — Manually trigger an ad-hoc or batch background job with multi-tenant organization validation:
+  - **Request Body**:
+    - `jobType` (`INVOICE_GENERATION`, `PAYMENT_REMINDERS`, `MAINTENANCE_ESCALATION`, `AGREEMENT_EXPIRY`, `NOTIFICATION_DISPATCH`, `SYSTEM_CLEANUP`)
+    - `propertyId` (UUID, optional; validated against tenant's properties)
+    - `parameters` (arbitrary JSON object; sanitized with sensitive credential redaction)
+    - `forceRun` (boolean, optional; bypasses idempotency time-window checks)
+  - **Behavior**: Creates durable `PENDING` record in PostgreSQL `job_executions`, enqueues to BullMQ (`propertyos:jobs` or `propertyos:notifications`), updates `bullJobId`, and records `JOB_MANUALLY_TRIGGERED` audit log.
+- `GET /api/v1/jobs/executions` (Permission: `job.read` — `OWNER`, `PROPERTY_MANAGER`, `ACCOUNTANT`) — List durable job execution history scoped to organization with filtering and pagination:
+  - **Query Parameters**: `page`, `limit`, `jobType`, `status`, `queueName`, `startDate`, `endDate`.
+  - **Response**: `{ data: JobExecutionDto[], total: number, page: number, limit: number, totalPages: number }`
+- `GET /api/v1/jobs/executions/:id` (Permission: `job.read` — `OWNER`, `PROPERTY_MANAGER`, `ACCOUNTANT`) — Retrieve single execution detail by ID with redacted metadata payload and execution result. Fails closed with `404 Not Found` for cross-tenant access.
+- `POST /api/v1/jobs/pause` (Permission: `job.manage` — `OWNER`, `PROPERTY_MANAGER`) — Pause a BullMQ queue (`propertyos:jobs`, `propertyos:notifications`, `propertyos:dlq`). Emits `JOB_QUEUE_PAUSED` audit log.
+- `POST /api/v1/jobs/resume` (Permission: `job.manage` — `OWNER`, `PROPERTY_MANAGER`) — Resume a paused BullMQ queue. Emits `JOB_QUEUE_RESUMED` audit log.
+- `POST /api/v1/jobs/clean` (Permission: `job.manage` — `OWNER`, `PROPERTY_MANAGER`) — Remove completed/failed jobs from Redis queue older than grace period (`gracePeriodMs`, `limit`). Emits `JOB_QUEUE_CLEANED` audit log.
+- `POST /api/v1/jobs/retry/:id` (Permission: `job.trigger` — `OWNER`, `PROPERTY_MANAGER`) — Retry a failed execution or recover from DLQ. Resets PostgreSQL status to `PENDING`, increments attempts, and re-enqueues into BullMQ. Emits `JOB_RETRY_TRIGGERED` audit log.
+- `GET /api/v1/jobs/schedules` (Permission: `job.read` — `OWNER`, `PROPERTY_MANAGER`, `ACCOUNTANT`) — List recurring cron schedules for all 6 job types for the organization (seeds defaults if missing).
+- `PATCH /api/v1/jobs/schedules/:jobType` (Permission: `job.manage` — `OWNER`, `PROPERTY_MANAGER`) — Update cron expression, enabled toggle (`isEnabled`), or metadata for a recurring schedule. Emits `SCHEDULE_CONFIG_UPDATED` audit log.
+
+
 
 
 

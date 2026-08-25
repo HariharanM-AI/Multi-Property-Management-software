@@ -35,6 +35,7 @@ import { CommunityModule } from './modules/community/community.module';
 import { MarketplaceModule } from './modules/marketplace/marketplace.module';
 import { ServicesModule } from './modules/services/services.module';
 import { AuditModule } from './modules/audit/audit.module';
+import { JobsModule } from './modules/jobs/jobs.module';
 import { AuthGuard } from './common/guards/auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
 import { PermissionsGuard } from './common/guards/permissions.guard';
@@ -92,6 +93,7 @@ import { GlobalHttpExceptionFilter } from './common/filters/http-exception.filte
     MarketplaceModule,
     ServicesModule,
     AuditModule,
+    JobsModule,
   ],
   providers: [
     {

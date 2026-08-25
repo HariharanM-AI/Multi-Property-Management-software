@@ -429,6 +429,39 @@ If a user possesses a permission (e.g. `property.read`) but requests a property 
   - `audit.export`: `OWNER`, `PROPERTY_MANAGER`, `ACCOUNTANT`
 - Non-administrative roles (`TENANT`, `STAFF`, `SECURITY_GUARD`) are rejected with `403 Forbidden`.
 
+---
+
+## 25. Automated Job Scheduler & Worker Security (CORE-029)
+
+### 1. Fail-Closed Multi-Tenant Worker Isolation
+- Every background worker job payload requires an authoritative `organizationId`.
+- Before executing any job logic, the worker queries PostgreSQL to verify the organization exists. If nonexistent, the worker aborts with an error without performing mutations.
+- Multi-tenant isolation is enforced at the database level across all 6 deterministic processors (`INVOICE_GENERATION`, `PAYMENT_REMINDERS`, `MAINTENANCE_ESCALATION`, `AGREEMENT_EXPIRY`, `NOTIFICATION_DISPATCH`, `SYSTEM_CLEANUP`).
+- REST endpoints for querying execution logs (`/executions`, `/executions/:id`), managing schedules (`/schedules`), and pausing/resuming queues are strictly scoped by `organizationId`.
+
+### 2. Deterministic Business-Level Idempotency
+- **Invoice Generation**: Checks for existing invoice for `(organizationId, tenantId, chargeId, billingPeriodMonth)` within atomic transaction; duplicate triggers are skipped with zero orphan charges or duplicate billing.
+- **Payment Reminders**: Deduplicates reminders within a 24-hour window by checking prior notifications with `path: ['invoiceId']`.
+- **Maintenance SLA Escalation**: Avoids redundant ticket escalations by checking for `[SLA Escalation]` comments posted in the last 24 hours.
+- **Agreement Expiry**: Deduplicates 30/15/7-day renewal notice notifications within a 48-hour window.
+
+### 3. Sensitive Payload Redaction & Credential Scrubbing
+- All payloads passed into manual triggers (`POST /jobs/trigger`) or persisted in `job_executions` are recursively scrubbed via `AuditService.redactSensitiveMetadata` to remove passwords, tokens, API keys, and secrets.
+- Dead-Letter Queue (DLQ) diagnostic payloads dispatched upon retry exhaustion are similarly sanitized before enqueuing to `propertyos:dlq`.
+
+### 4. Dead-Letter Queue (DLQ) & Exponential Backoff Policy
+- Workers use exponential backoff: 3 attempts with initial 2000ms delay.
+- When all attempts are exhausted, the execution status is transitioned to `FAILED` in PostgreSQL, a diagnostic payload is routed to `propertyos:dlq`, and a `DLQ_ROUTED` audit event is logged.
+- Failed executions can be safely inspected and retried via `POST /api/v1/jobs/retry/:id`. Retrying a non-failed job is rejected with `400 Bad Request`.
+
+### 5. Role-Based Access Control (RBAC)
+- `job.read`: `OWNER`, `PROPERTY_MANAGER`, `ACCOUNTANT`
+- `job.trigger`: `OWNER`, `PROPERTY_MANAGER`
+- `job.manage`: `OWNER`, `PROPERTY_MANAGER`
+- `job.export`: `OWNER`, `PROPERTY_MANAGER`
+- Unauthorized roles (`WARDEN`, `SECURITY`, `MAINTENANCE_STAFF`, `TENANT`) are rejected with `403 Forbidden`.
+
+
 
 
 
