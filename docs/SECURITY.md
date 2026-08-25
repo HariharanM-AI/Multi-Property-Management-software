@@ -294,4 +294,21 @@ If a user possesses a permission (e.g. `property.read`) but requests a property 
   - All administrative dispatches generate immutable `NOTIFICATION_DISPATCHED` audit log entries with recipient and type metadata.
   - All notification deletions generate immutable `NOTIFICATION_DELETED` audit log entries.
 
+---
+
+## 20. Property Discovery Security & Fail-Closed Public Boundaries (CORE-024)
+- **Public `@Public()` Routing & DoS Throttling**:
+  - Discovery endpoints (`/api/v1/discovery`, `/cities`, `/featured`, `/:id`) are decorated with `@Public()` to allow unauthenticated public exploration for prospective tenants.
+  - Rate limiting is enforced across all discovery routes via `ThrottlerGuard` to prevent scraping abuse, automated crawling floods, and denial-of-service attempts.
+- **Fail-Closed Privacy & Soft-Delete Invariant**:
+  - Discovery search and single-property lookups strictly filter properties by `status: PropertyStatus.ACTIVE` and `deletedAt: null`.
+  - Inactive, archived, draft, or soft-deleted properties immediately return `404 Not Found` upon public lookup, preventing exposure of unlisted or deactivated real estate.
+- **Zero PII & Financial Ledger Leakage**:
+  - Discovery responses are strictly sanitized to public marketing and inventory data only.
+  - Internal tenant profiles, names, phone numbers, KYC documents, financial journal entries, electricity sub-meter balances, and internal maintenance tickets are never joined or serialized in public discovery payloads.
+- **Input Validation & Parameter Bounds**:
+  - Spatial coordinates (`latitude` between -90 and 90, `longitude` between -180 and 180) and search radii (`0.5km` to `100km`) are validated using `PropertyDiscoveryQuerySchema`.
+  - Indian postal codes are validated using 6-digit PIN code regex (`^[1-9][0-9]{5}$`).
+  - Strict numeric bounds prevent inverted budgets (`minRent <= maxRent`), negative rents, or integer overflows.
+
 

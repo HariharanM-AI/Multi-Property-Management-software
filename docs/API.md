@@ -417,4 +417,33 @@ All structure endpoints operate within a scoped property context.
   - **Audit Trail**: Writes `NOTIFICATION_DISPATCHED` audit log with recipient, type, and title metadata.
 - `DELETE /api/v1/notifications/:id` (Permission: `notification.delete`) — Delete/dismiss a notification belonging to the caller. Fails closed (`404 Not Found`) for cross-user or cross-org access. Writes `NOTIFICATION_DELETED` audit log.
 
+---
+
+## 23. Property Discovery & Search Engine (`/api/v1/discovery`) (CORE-024)
+Public, deterministic relational discovery portal for prospective tenants and clients across India:
+- `GET /api/v1/discovery` (Public, Unauthenticated with Global Rate Limiting) — Multi-dimensional relational property discovery search.
+  - **Query Parameters**:
+    - `page` (default 1, min 1)
+    - `limit` (default 12, min 1, max 100)
+    - `search` (case-insensitive keyword matching `name`, `code`, `locality`, `city`, `address`, `description`)
+    - `city`, `locality`, `state` (case-insensitive substring filter)
+    - `postalCode` (6-digit Indian PIN code regex)
+    - `propertyType` (`PG` | `RENTAL_HOUSE`)
+    - `minRent`, `maxRent` (non-negative numeric bounds, `minRent <= maxRent`)
+    - `sharingTypes` (`SINGLE`, `DOUBLE`, `TRIPLE`, `FOUR_PLUS` — comma-separated string or array)
+    - `unitTypes` (`1BHK`, `2BHK`, `3BHK`, `Studio`, `Villa` — comma-separated string or array)
+    - `furnishingStatus` (`FULLY_FURNISHED`, `SEMI_FURNISHED`, `UNFURNISHED`)
+    - `amenities` (comma-separated string or array — required intersection across all requested amenities)
+    - `latitude`, `longitude` (decimal GPS coordinates for spherical Haversine proximity calculations)
+    - `radiusKm` (min 0.5km, max 100km, default 10km)
+    - `availableOnly` (boolean, requires `availableCapacity > 0`)
+    - `sortBy` (`NEWEST`, `RENT_ASC`, `RENT_DESC`, `DISTANCE_ASC`, `NAME_ASC`)
+    - `organizationId` (UUID)
+  - **Response Payload**: `{ success: true, data: PropertyDiscoveryDto[], meta: { total: number, page: number, limit: number, totalPages: number, timestamp: string } }`
+- `GET /api/v1/discovery/cities` (Public, Unauthenticated) — Distinct active discovery cities in India with active property counts, PG count, Rental count, and sorted locality lists.
+- `GET /api/v1/discovery/featured` (Public, Unauthenticated) — Curated active discovery properties prioritized by available inventory and newest listings.
+- `GET /api/v1/discovery/:id` (Public, Unauthenticated) — Comprehensive single-property public discovery profile including photo galleries, amenity badges, host organization info, available room & bed roster (for PG), and available unit inventory (for Rental Houses).
+  - **Fail-Closed Security**: Throws `404 Not Found` for inactive, archived, draft, or soft-deleted properties.
+  - **PII Sanitation Invariant**: Zero internal tenant records, tenant phone numbers, or internal accounting journals are ever exposed in public responses.
+
 

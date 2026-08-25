@@ -23,6 +23,7 @@ import {
   Zap,
   Receipt,
   Bell,
+  Compass,
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -43,6 +44,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentPropertyType, activePat
 
   const navItems: NavItem[] = [
     { name: 'Dashboard', href: '/', icon: LayoutDashboard },
+    { name: 'Discover', href: '/discover', icon: Compass },
     { name: 'Properties', href: '/properties', icon: Building2 },
     { name: 'Beds & Rooms', href: '/pg/rooms', icon: BedDouble, pgOnly: true },
     { name: 'Meal & Mess', href: '/meals', icon: UtensilsCrossed, pgOnly: true },

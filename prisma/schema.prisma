@@ -641,6 +641,8 @@ model Property {
   @@index([organizationId, city])
   @@index([city, propertyType])
   @@index([status])
+  @@index([status, city, propertyType])
+  @@index([locality])
   @@map("properties")
 }
 
