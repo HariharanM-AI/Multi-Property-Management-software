@@ -431,6 +431,41 @@ enum MarketplaceListingStatus {
   DELETED
 }
 
+enum ServiceRequestCategory {
+  PLUMBING
+  ELECTRICAL
+  HOUSEKEEPING
+  CARPENTRY
+  APPLIANCE_REPAIR
+  PEST_CONTROL
+  PAINTING
+  LAUNDRY
+  PACKING_MOVING
+  OTHER
+}
+
+enum ServiceRequestPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum ServiceRequestStatus {
+  PENDING
+  SCHEDULED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum ServiceRequestSlot {
+  MORNING
+  AFTERNOON
+  EVENING
+  ANYTIME
+}
+
 // ------------------------------------------------------------------------------
 // MULTI-TENANCY & IDENTITY
 // ------------------------------------------------------------------------------
@@ -485,6 +520,7 @@ model Organization {
   communityPosts          CommunityPost[]
   communityComments       CommunityComment[]
   marketplaceListings     MarketplaceListing[]
+  serviceRequests         ServiceRequest[]
 
   @@map("organizations")
 }
@@ -521,6 +557,7 @@ model User {
   communityPosts          CommunityPost[]
   communityComments       CommunityComment[]
   marketplaceListings     MarketplaceListing[]
+  serviceRequests         ServiceRequest[]
 
   @@index([organizationId])
   @@index([email])
@@ -796,6 +833,7 @@ model Room {
   electricityCharges  ElectricityCharge[]
   maintenanceTickets MaintenanceTicket[]
   inventoryItems InventoryItem[]
+  serviceRequests ServiceRequest[]
 
   @@unique([floorId, roomNumber])
   @@index([propertyId])
@@ -853,6 +891,7 @@ model RentalUnit {
   inventoryItems InventoryItem[]
   checkIns CheckIn[]
   checkouts Checkout[]
+  serviceRequests ServiceRequest[]
 
   @@unique([propertyId, unitNumber])
   @@index([status])
@@ -950,6 +989,7 @@ model Tenant {
   checkIns                CheckIn[]
   checkouts               Checkout[]
   settlements             Settlement[]
+  serviceRequests         ServiceRequest[]
   agreements              Agreement[]
   billingSchedules        BillingSchedule[]
   credits                 Credit[]
@@ -1908,6 +1948,7 @@ model StaffMember {
   property     Property?         @relation(fields: [propertyId], references: [id], onDelete: SetNull)
   user         User?             @relation(fields: [userId], references: [id], onDelete: SetNull)
   attendance   StaffAttendance[]
+  serviceRequests ServiceRequest[]
 
   @@index([organizationId])
   @@map("staff_members")
@@ -2131,20 +2172,63 @@ model MarketplaceListing {
 }
 
 model ServiceRequest {
-  id           String   @id @default(uuid())
-  propertyId   String
-  serviceType  String   // PLUMBING, ELECTRICAL, PAINTING, CLEANING, CARPENTRY, AC_SERVICE, OTHER
-  title        String
-  description  String
-  status       String   @default("PENDING") // PENDING, SCHEDULED, IN_PROGRESS, COMPLETED, CANCELLED
-  contactPhone String
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id                  String                 @id @default(uuid())
+  organizationId      String
+  propertyId          String
+  requesterId         String
+  tenantId            String?
+  serviceCategory     ServiceRequestCategory @default(OTHER)
+  priority            ServiceRequestPriority @default(MEDIUM)
+  status              ServiceRequestStatus   @default(PENDING)
+  title               String                 @db.VarChar(255)
+  description         String                 @db.Text
+  requesterName       String
+  requesterRole       UserRoleType
+  contactPhone        String
 
-  property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  // Location targeting (PG Room, Rental Unit, or general locationDetails)
+  roomId              String?
+  rentalUnitId        String?
+  locationDetails     String?
 
-  @@index([propertyId])
+  // Scheduling & Assignment
+  preferredSlot       ServiceRequestSlot     @default(ANYTIME)
+  preferredDate       DateTime?
+  scheduledDate       DateTime?
+  assignedStaffId     String?
+  assignedVendorName  String?
+  assignedVendorPhone String?
+
+  // Financial & Cost Tracking
+  estimatedCost       Decimal?               @db.Decimal(10, 2)
+  actualCost          Decimal?               @db.Decimal(10, 2)
+  isPaidByTenant      Boolean                @default(false)
+
+  // Resolution & Lifecycle Timestamps
+  resolutionNotes     String?                @db.Text
+  completedAt         DateTime?
+  cancelledAt         DateTime?
+  cancellationReason  String?
+  deletedAt           DateTime?
+
+  createdAt           DateTime               @default(now())
+  updatedAt           DateTime               @updatedAt
+
+  organization        Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  property            Property               @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  requester           User                   @relation(fields: [requesterId], references: [id], onDelete: Cascade)
+  tenant              Tenant?                @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+  room                Room?                  @relation(fields: [roomId], references: [id], onDelete: SetNull)
+  rentalUnit          RentalUnit?            @relation(fields: [rentalUnitId], references: [id], onDelete: SetNull)
+  assignedStaff       StaffMember?           @relation(fields: [assignedStaffId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, propertyId, status, createdAt])
+  @@index([propertyId, status])
+  @@index([requesterId, createdAt])
+  @@index([tenantId])
+  @@index([assignedStaffId])
   @@map("service_requests")
 }
+
 
 

@@ -26,6 +26,7 @@ import {
   Compass,
   MessageSquare,
   ShoppingBag,
+  Sparkles,
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -61,6 +62,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentPropertyType, activePat
     { name: 'Financials', href: '/financials', icon: Zap },
     { name: 'Expenses', href: '/expenses', icon: Receipt },
     { name: 'Maintenance', href: '/maintenance', icon: Wrench },
+    { name: 'Service Desk', href: '/services', icon: Sparkles },
     { name: 'Staff & Roster', href: '/staff', icon: UserCheck },
     { name: 'Visitors', href: '/visitors', icon: ShieldCheck },
     { name: 'Inventory', href: '/inventory', icon: Package },

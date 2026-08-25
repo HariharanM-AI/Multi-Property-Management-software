@@ -363,5 +363,41 @@ If a user possesses a permission (e.g. `property.read`) but requests a property 
 - **Comprehensive Audit Trail**:
   - All marketplace operations (`MARKETPLACE_LISTING_CREATED`, `MARKETPLACE_LISTING_UPDATED`, `MARKETPLACE_LISTING_STATUS_CHANGED`, `MARKETPLACE_LISTING_DELETED`) generate immutable audit log records with sanitized metadata snapshots.
 
+---
+
+## 23. Local Service Request Security & Concurrency Safeguards (CORE-027)
+- **Tenant-Property Active Stay Scoping Invariant**:
+  - `TENANT` users are strictly restricted to service requests on properties where they have an active stay (a verified `CheckIn` record with status `CHECKED_IN` or an active `Lease`).
+  - Any attempt by a tenant to submit service requests, list requests, or view single request details on unassigned properties is blocked fail-closed with `403 Forbidden`.
+  - Management roles (`OWNER`, `PROPERTY_MANAGER`, `WARDEN`) have operational service desk visibility across their authenticated `organizationId`.
+- **Operating Model Targeting Validation**:
+  - `PG` Properties: `roomId` is permitted; `rentalUnitId` is rejected with `400 Bad Request`.
+  - `RENTAL_HOUSE` Properties: `rentalUnitId` is permitted; `roomId` is rejected with `400 Bad Request`.
+  - Common property areas: Handled when both `roomId === null && rentalUnitId === null`.
+- **Status State Machine & Transaction-Scoped Advisory Locking**:
+  - Status transitions (`PENDING -> SCHEDULED -> IN_PROGRESS -> COMPLETED / CANCELLED`), technician assignments, and soft-deletions acquire a PostgreSQL transaction-scoped advisory lock:
+    ```sql
+    SELECT pg_advisory_xact_lock(hashtext('service_req_status_' || :requestId))
+    ```
+  - Competing parallel assignment or status updates are serialized without race conditions or deadlocks.
+  - Status updates on already completed (`COMPLETED`) or cancelled (`CANCELLED`) requests are rejected with `409 Conflict`.
+- **Author Ownership vs Staff Assignment Privileges**:
+  - Authors can update request details while in `PENDING` status, and can cancel their own pending/scheduled requests with a reason.
+  - Assigning internal technicians (`assignedStaffId`) or external vendors (`assignedVendorName`) is restricted to management roles (`OWNER`, `PROPERTY_MANAGER`, `WARDEN` with `Permission.SERVICE_REQUEST_ASSIGN`).
+  - Completing service requests with `actualCost`, `resolutionNotes`, and billing flags is restricted to management roles.
+- **Financial Validation & Positive Decimal Precision**:
+  - Estimated and actual service costs are validated to be non-negative (`>= 0`) and formatted via `Prisma.Decimal`.
+  - Summary KPI valuation (`totalActualCost`, `totalEstimatedCost`) aggregates costs using `Prisma.Decimal` arithmetic to prevent floating-point inaccuracies.
+- **Fail-Closed Multi-Tenant Isolation**:
+  - Cross-organization service request submission, retrieval, updates, assignments, status changes, and deletions fail closed with `404 Not Found` without leaking request or property existence.
+- **RBAC Matrix Enforcement**:
+  - `OWNER`, `PROPERTY_MANAGER`: `service_request.read`, `service_request.create`, `service_request.update`, `service_request.assign`, `service_request.cancel`, `service_request.delete`.
+  - `WARDEN`: `service_request.read`, `service_request.create`, `service_request.update`, `service_request.assign`, `service_request.cancel`.
+  - `MAINTENANCE_STAFF`: `service_request.read`, `service_request.update`.
+  - `ACCOUNTANT`, `SECURITY`: `service_request.read`.
+  - `TENANT`: `service_request.read`, `service_request.create`, `service_request.cancel` (strictly scoped to active assigned stays).
+- **Comprehensive Audit Trail**:
+  - All service desk operations (`SERVICE_REQUEST_CREATED`, `SERVICE_REQUEST_UPDATED`, `SERVICE_REQUEST_ASSIGNED`, `SERVICE_REQUEST_STATUS_CHANGED`, `SERVICE_REQUEST_CANCELLED`, `SERVICE_REQUEST_DELETED`) generate immutable audit log records with sanitized metadata snapshots.
+
 
 

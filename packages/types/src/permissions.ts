@@ -165,6 +165,14 @@ export enum Permission {
   MARKETPLACE_LISTING_UPDATE = 'marketplace.listing.update',
   MARKETPLACE_LISTING_DELETE = 'marketplace.listing.delete',
   MARKETPLACE_MODERATE = 'marketplace.moderate',
+
+  // Local Service Requests (CORE-027)
+  SERVICE_REQUEST_READ = 'service_request.read',
+  SERVICE_REQUEST_CREATE = 'service_request.create',
+  SERVICE_REQUEST_UPDATE = 'service_request.update',
+  SERVICE_REQUEST_ASSIGN = 'service_request.assign',
+  SERVICE_REQUEST_CANCEL = 'service_request.cancel',
+  SERVICE_REQUEST_DELETE = 'service_request.delete',
 }
 
 /**
@@ -285,6 +293,12 @@ export const ROLE_PERMISSIONS_MAP: Record<UserRole, readonly Permission[]> = {
     Permission.MARKETPLACE_LISTING_UPDATE,
     Permission.MARKETPLACE_LISTING_DELETE,
     Permission.MARKETPLACE_MODERATE,
+    Permission.SERVICE_REQUEST_READ,
+    Permission.SERVICE_REQUEST_CREATE,
+    Permission.SERVICE_REQUEST_UPDATE,
+    Permission.SERVICE_REQUEST_ASSIGN,
+    Permission.SERVICE_REQUEST_CANCEL,
+    Permission.SERVICE_REQUEST_DELETE,
   ],
 
   [UserRole.PROPERTY_MANAGER]: [
@@ -393,6 +407,12 @@ export const ROLE_PERMISSIONS_MAP: Record<UserRole, readonly Permission[]> = {
     Permission.MARKETPLACE_LISTING_UPDATE,
     Permission.MARKETPLACE_LISTING_DELETE,
     Permission.MARKETPLACE_MODERATE,
+    Permission.SERVICE_REQUEST_READ,
+    Permission.SERVICE_REQUEST_CREATE,
+    Permission.SERVICE_REQUEST_UPDATE,
+    Permission.SERVICE_REQUEST_ASSIGN,
+    Permission.SERVICE_REQUEST_CANCEL,
+    Permission.SERVICE_REQUEST_DELETE,
   ],
 
   [UserRole.ACCOUNTANT]: [
@@ -446,6 +466,7 @@ export const ROLE_PERMISSIONS_MAP: Record<UserRole, readonly Permission[]> = {
     Permission.MARKETPLACE_LISTING_CREATE,
     Permission.MARKETPLACE_LISTING_UPDATE,
     Permission.MARKETPLACE_LISTING_DELETE,
+    Permission.SERVICE_REQUEST_READ,
   ],
 
   [UserRole.WARDEN]: [
@@ -508,6 +529,11 @@ export const ROLE_PERMISSIONS_MAP: Record<UserRole, readonly Permission[]> = {
     Permission.MARKETPLACE_LISTING_UPDATE,
     Permission.MARKETPLACE_LISTING_DELETE,
     Permission.MARKETPLACE_MODERATE,
+    Permission.SERVICE_REQUEST_READ,
+    Permission.SERVICE_REQUEST_CREATE,
+    Permission.SERVICE_REQUEST_UPDATE,
+    Permission.SERVICE_REQUEST_ASSIGN,
+    Permission.SERVICE_REQUEST_CANCEL,
   ],
 
   [UserRole.SECURITY]: [
@@ -535,6 +561,7 @@ export const ROLE_PERMISSIONS_MAP: Record<UserRole, readonly Permission[]> = {
     Permission.MARKETPLACE_LISTING_CREATE,
     Permission.MARKETPLACE_LISTING_UPDATE,
     Permission.MARKETPLACE_LISTING_DELETE,
+    Permission.SERVICE_REQUEST_READ,
   ],
 
   [UserRole.MAINTENANCE_STAFF]: [
@@ -559,6 +586,8 @@ export const ROLE_PERMISSIONS_MAP: Record<UserRole, readonly Permission[]> = {
     Permission.MARKETPLACE_LISTING_CREATE,
     Permission.MARKETPLACE_LISTING_UPDATE,
     Permission.MARKETPLACE_LISTING_DELETE,
+    Permission.SERVICE_REQUEST_READ,
+    Permission.SERVICE_REQUEST_UPDATE,
   ],
 
   [UserRole.TENANT]: [
@@ -590,6 +619,9 @@ export const ROLE_PERMISSIONS_MAP: Record<UserRole, readonly Permission[]> = {
     Permission.MARKETPLACE_LISTING_CREATE,
     Permission.MARKETPLACE_LISTING_UPDATE,
     Permission.MARKETPLACE_LISTING_DELETE,
+    Permission.SERVICE_REQUEST_READ,
+    Permission.SERVICE_REQUEST_CREATE,
+    Permission.SERVICE_REQUEST_CANCEL,
   ],
 };
 

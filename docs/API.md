@@ -494,5 +494,34 @@ Peer-to-peer second-hand goods marketplace and resident board with multi-tenant 
 - `PATCH /api/v1/marketplace/listings/:id/status` (Permission: `marketplace.listing.update`) — Update listing status (`ACTIVE`, `RESERVED`, `SOLD`). Serialized via PostgreSQL transaction-scoped advisory lock `SELECT pg_advisory_xact_lock(hashtext('marketplace_status_' || :id))`. Authors can change status of their listings; moderators can change status of any listing. Status change on deleted listing rejected with `409 Conflict`. Emits `MARKETPLACE_LISTING_STATUS_CHANGED` audit log.
 - `DELETE /api/v1/marketplace/listings/:id` (Permission: `marketplace.listing.delete`) — Soft-delete a marketplace listing (`status = DELETED`, `deletedAt = new Date()`). Serialized via PostgreSQL advisory lock. Authors can delete their own listings; moderators (`OWNER`, `PROPERTY_MANAGER`, `WARDEN`) can delete any listing. Emits `MARKETPLACE_LISTING_DELETED` audit log.
 
+---
+
+## 26. Local Service Request Foundation (`/api/v1/services`) (CORE-027)
+On-demand property facility service requests (plumbing, electrical, housekeeping, carpentry, appliance, pest control, painting, laundry, packing/moving) and task management with multi-tenant multi-property isolation:
+- `GET /api/v1/services/requests` (Permission: `service_request.read`) — List and search service desk requests with multi-tenant filtering, category filtering, priority filtering, status filtering, keyword search, and pagination.
+  - **Tenant Scoping Invariant**: For `TENANT` users, queries are automatically scoped to the tenant's active assigned properties (derived from active `CHECKED_IN` check-ins or active `Lease` records). Attempting to query foreign/unassigned properties fails closed with `403 Forbidden`.
+  - **Query Parameters**:
+    - `page` (integer >= 1, default 1)
+    - `limit` (integer 1-50, default 20)
+    - `propertyId` (UUID, optional for tenants; validated against tenant active stays)
+    - `serviceCategory` (`PLUMBING`, `ELECTRICAL`, `HOUSEKEEPING`, `CARPENTRY`, `APPLIANCE_REPAIR`, `PEST_CONTROL`, `PAINTING`, `LAUNDRY`, `PACKING_MOVING`, `OTHER`)
+    - `priority` (`LOW`, `MEDIUM`, `HIGH`, `URGENT`)
+    - `status` (`PENDING`, `SCHEDULED`, `IN_PROGRESS`, `COMPLETED`, `CANCELLED`)
+    - `assignedStaffId` (UUID)
+    - `isPaidByTenant` (boolean `true` | `false`)
+    - `search` (case-insensitive substring match on `title`, `description`, `locationDetails`, or `requesterName`)
+    - `sortBy` (`NEWEST`, `PRIORITY_DESC`, `STATUS`)
+  - **Response Payload**: `{ success: true, data: { data: ServiceRequestDto[], total: number, page: number, limit: number, totalPages: number }, meta: { requestId: string, timestamp: string } }`
+- `GET /api/v1/services/summary` (Permission: `service_request.read`) — Return property-scoped or organization-wide aggregate service desk KPIs: `totalRequests`, `pendingRequests`, `scheduledRequests`, `inProgressRequests`, `completedRequests`, `cancelledRequests`, `totalEstimatedCost` (Decimal string), `totalActualCost` (Decimal string), `categoryBreakdown`, `priorityBreakdown`.
+- `GET /api/v1/services/requests/:id` (Permission: `service_request.read`) — Retrieve single service request details by ID. Fails closed with `404 Not Found` if request does not exist or has been deleted, and `403 Forbidden` if a tenant attempts cross-property access.
+- `POST /api/v1/services/requests` (Permission: `service_request.create`) — Submit a new service request.
+  - **RBAC & Active Stay Invariant**: `TENANT` users must have an active stay (`CHECKED_IN` check-in or active `Lease`) on the target `propertyId`; unassigned property requests fail closed with `403 Forbidden`. Staff/management users can create requests across managed properties.
+  - **Operating Model Targeting Invariant**: `roomId` is only permitted for `PG` properties; `rentalUnitId` is only permitted for `RENTAL_HOUSE` properties. Cross-model targeting is rejected with `400 Bad Request`.
+  - **Audit Logging**: Emits `SERVICE_REQUEST_CREATED` structured audit log.
+- `PATCH /api/v1/services/requests/:id` (Permission: `service_request.update`) — Update service request details (title, description, priority, category, locationDetails, preferredSlot, preferredDate, estimatedCost, isPaidByTenant). Authors can update their own requests in `PENDING` status; managers (`OWNER`, `PROPERTY_MANAGER`, `WARDEN`) can update any request. Emits `SERVICE_REQUEST_UPDATED` audit log.
+- `PATCH /api/v1/services/requests/:id/assign` (Permission: `service_request.assign` — `OWNER`, `PROPERTY_MANAGER`, `WARDEN`) — Assign internal staff technician (`assignedStaffId`) or external vendor (`assignedVendorName`, `assignedVendorPhone`), schedule date, and transition status from `PENDING` to `SCHEDULED`. Serialized via PostgreSQL transaction-scoped advisory lock `SELECT pg_advisory_xact_lock(hashtext('service_req_status_' || :id))`. Emits `SERVICE_REQUEST_ASSIGNED` audit log.
+- `PATCH /api/v1/services/requests/:id/status` (Permission: `service_request.update` or `service_request.cancel`) — Update request status (`SCHEDULED`, `IN_PROGRESS`, `COMPLETED`, `CANCELLED`). Serialized via PostgreSQL advisory lock. Rejects transitions on already completed/cancelled requests with `409 Conflict`. When completing, records `actualCost`, `resolutionNotes`, and `completedAt`. When cancelling, requires `cancellationReason` and stamps `cancelledAt`. Emits `SERVICE_REQUEST_STATUS_CHANGED` or `SERVICE_REQUEST_CANCELLED` audit log.
+- `DELETE /api/v1/services/requests/:id` (Permission: `service_request.delete` — `OWNER`, `PROPERTY_MANAGER`) — Soft-delete a service request (`deletedAt = new Date()`). Serialized via PostgreSQL advisory lock. Emits `SERVICE_REQUEST_DELETED` audit log.
+
 
 
