@@ -266,4 +266,32 @@ If a user possesses a permission (e.g. `property.read`) but requests a property 
   - `TENANT`: Blocked (`403 Forbidden`).
   - Unauthenticated requests: Rejected with `401 Unauthorized`.
 
+---
+
+## 19. In-App Notification Security & User-Level Scoping (CORE-023)
+- **User-Level & Organization-Level Isolation (Self-Scoping Invariant)**:
+  - All notification read, mark-as-read, unread count, and deletion queries require authentication and enforce compound scoping: `organizationId === caller.organizationId` AND `userId === caller.userId`.
+  - Having generic permissions (`notification.read`, `notification.update`, `notification.delete`) NEVER allows a user to access, view, modify, or delete another user's notifications, even within the same organization.
+  - Fail-closed semantics: Any attempt to access or mutate a foreign notification (belonging to another user or another organization) immediately returns `404 Not Found`.
+- **Administrative Creation Restrictions**:
+  - Notification dispatch (`POST /api/v1/notifications`) is strictly restricted to `OWNER` and `PROPERTY_MANAGER` roles (`notification.create`).
+  - Target recipient validation: The recipient `userId` must exist and belong to the caller's `organizationId`. Dispatching notifications into foreign organizations returns `404 Not Found`.
+  - Property ownership validation: If a `propertyId` is attached, it must belong to the caller's `organizationId` (`404 Not Found` if foreign).
+- **Deep-Link Security & Relative Path Validation**:
+  - Notification `link` attributes are validated with strict regex patterns requiring safe internal relative paths (starting with `/`, no protocol-relative `//` URLs, no backslashes, no `javascript:`, `http:`, or `https:` external links) to prevent open redirect and cross-site scripting attacks.
+- **Sensitive Credential Sanitization**:
+  - Notification payloads and metadata dictionaries are strictly sanitized. Any fields named `password`, `passwordHash`, `token`, `refreshToken`, `accessToken`, or `secret` are stripped prior to database persistence.
+- **RBAC Authorization Matrix**:
+  - `OWNER`: READ, CREATE, UPDATE, DELETE
+  - `PROPERTY_MANAGER`: READ, CREATE, UPDATE, DELETE
+  - `ACCOUNTANT`: READ, UPDATE, DELETE (Self-scoped)
+  - `WARDEN`: READ, UPDATE, DELETE (Self-scoped)
+  - `SECURITY`: READ, UPDATE, DELETE (Self-scoped)
+  - `MAINTENANCE_STAFF`: READ, UPDATE, DELETE (Self-scoped)
+  - `TENANT`: READ, UPDATE, DELETE (Self-scoped)
+  - Unauthenticated requests: Rejected with `401 Unauthorized`.
+- **Audit Logging**:
+  - All administrative dispatches generate immutable `NOTIFICATION_DISPATCHED` audit log entries with recipient and type metadata.
+  - All notification deletions generate immutable `NOTIFICATION_DELETED` audit log entries.
+
 

@@ -29,6 +29,7 @@ import { InventoryModule } from './modules/inventory/inventory.module';
 import { ExpensesModule } from './modules/expenses/expenses.module';
 import { ReportsModule } from './modules/reports/reports.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
+import { NotificationsModule } from './modules/notifications/notifications.module';
 import { AuthGuard } from './common/guards/auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
 import { PermissionsGuard } from './common/guards/permissions.guard';
@@ -80,6 +81,7 @@ import { GlobalHttpExceptionFilter } from './common/filters/http-exception.filte
     ExpensesModule,
     ReportsModule,
     DashboardModule,
+    NotificationsModule,
   ],
   providers: [
     {

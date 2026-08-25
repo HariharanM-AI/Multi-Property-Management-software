@@ -144,6 +144,12 @@ export enum Permission {
 
   // Dashboard Foundation (CORE-022)
   DASHBOARD_READ = 'dashboard.read',
+
+  // In-App Notification System (CORE-023)
+  NOTIFICATION_READ = 'notification.read',
+  NOTIFICATION_CREATE = 'notification.create',
+  NOTIFICATION_UPDATE = 'notification.update',
+  NOTIFICATION_DELETE = 'notification.delete',
 }
 
 /**
@@ -249,6 +255,10 @@ export const ROLE_PERMISSIONS_MAP: Record<UserRole, readonly Permission[]> = {
     Permission.MAINTENANCE_MANAGE_VENDOR,
     Permission.REPORTS_READ,
     Permission.DASHBOARD_READ,
+    Permission.NOTIFICATION_READ,
+    Permission.NOTIFICATION_CREATE,
+    Permission.NOTIFICATION_UPDATE,
+    Permission.NOTIFICATION_DELETE,
   ],
 
   [UserRole.PROPERTY_MANAGER]: [
@@ -342,6 +352,10 @@ export const ROLE_PERMISSIONS_MAP: Record<UserRole, readonly Permission[]> = {
     Permission.MAINTENANCE_MANAGE_VENDOR,
     Permission.REPORTS_READ,
     Permission.DASHBOARD_READ,
+    Permission.NOTIFICATION_READ,
+    Permission.NOTIFICATION_CREATE,
+    Permission.NOTIFICATION_UPDATE,
+    Permission.NOTIFICATION_DELETE,
   ],
 
   [UserRole.ACCOUNTANT]: [
@@ -386,6 +400,9 @@ export const ROLE_PERMISSIONS_MAP: Record<UserRole, readonly Permission[]> = {
     Permission.MAINTENANCE_MANAGE_COST,
     Permission.REPORTS_READ,
     Permission.DASHBOARD_READ,
+    Permission.NOTIFICATION_READ,
+    Permission.NOTIFICATION_UPDATE,
+    Permission.NOTIFICATION_DELETE,
   ],
 
   [UserRole.WARDEN]: [
@@ -434,6 +451,9 @@ export const ROLE_PERMISSIONS_MAP: Record<UserRole, readonly Permission[]> = {
     Permission.MAINTENANCE_UPDATE,
     Permission.MAINTENANCE_COMMENT,
     Permission.DASHBOARD_READ,
+    Permission.NOTIFICATION_READ,
+    Permission.NOTIFICATION_UPDATE,
+    Permission.NOTIFICATION_DELETE,
   ],
 
   [UserRole.SECURITY]: [
@@ -453,6 +473,9 @@ export const ROLE_PERMISSIONS_MAP: Record<UserRole, readonly Permission[]> = {
     Permission.INVOICE_READ,
     Permission.PAYMENT_READ,
     Permission.MAINTENANCE_READ,
+    Permission.NOTIFICATION_READ,
+    Permission.NOTIFICATION_UPDATE,
+    Permission.NOTIFICATION_DELETE,
   ],
 
   [UserRole.MAINTENANCE_STAFF]: [
@@ -468,6 +491,9 @@ export const ROLE_PERMISSIONS_MAP: Record<UserRole, readonly Permission[]> = {
     Permission.MAINTENANCE_UPDATE,
     Permission.MAINTENANCE_COMMENT,
     Permission.MAINTENANCE_COMPLETE,
+    Permission.NOTIFICATION_READ,
+    Permission.NOTIFICATION_UPDATE,
+    Permission.NOTIFICATION_DELETE,
   ],
 
   [UserRole.TENANT]: [
@@ -487,6 +513,9 @@ export const ROLE_PERMISSIONS_MAP: Record<UserRole, readonly Permission[]> = {
     Permission.MAINTENANCE_READ,
     Permission.MAINTENANCE_CREATE,
     Permission.MAINTENANCE_COMMENT,
+    Permission.NOTIFICATION_READ,
+    Permission.NOTIFICATION_UPDATE,
+    Permission.NOTIFICATION_DELETE,
   ],
 };
 

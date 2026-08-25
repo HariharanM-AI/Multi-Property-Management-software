@@ -402,4 +402,19 @@ All structure endpoints operate within a scoped property context.
   - `TENANT_CHECKED_IN`: Digital resident check-in completions.
   - `EXPENSE_RECORDED`: Operational expenses logged with category and amount.
 
+---
+
+## 22. In-App Notification System (`/api/v1/notifications`) (CORE-023)
+- `GET /api/v1/notifications` (Permission: `notification.read`) — List notifications for the authenticated user, strictly scoped to caller `organizationId` AND `userId`.
+  - **Query Parameters**: `page` (default 1), `limit` (default 20, max 100), `isRead` (boolean `true` | `false`), `type` (`RENT_DUE`, `PAYMENT_RECEIVED`, `PAYMENT_OVERDUE`, `MAINTENANCE_UPDATED`, `LEASE_EXPIRING`, `CHECKOUT_REMINDER`, `VISITOR_REQUEST`, `DOCUMENT_EXPIRING`, `GENERAL`), `propertyId` (UUID), `search` (case-insensitive substring match on `title` or `message`).
+  - **Response**: `{ success: true, data: { data: NotificationDto[], total: number, page: number, limit: number, totalPages: number } }`.
+- `GET /api/v1/notifications/unread-count` (Permission: `notification.read`) — High-performance indexed query returning the unread notification count for the authenticated caller: `{ success: true, data: { unreadCount: number } }`.
+- `GET /api/v1/notifications/:id` (Permission: `notification.read`) — Get single notification by ID. Fails closed (`404 Not Found`) if notification belongs to another user or another organization.
+- `PATCH /api/v1/notifications/:id/read` (Permission: `notification.update`) — Mark single notification as read. Scoped strictly to caller's `organizationId` AND `userId`. Sets `isRead = true` and `readAt = new Date()`. Idempotent if already read. Fails closed (`404 Not Found`) for cross-user or cross-org access.
+- `POST /api/v1/notifications/mark-all-read` (Permission: `notification.update`) — Atomic single-statement bulk update marking all unread notifications for the caller as read: `UPDATE notifications SET "isRead" = true, "readAt" = NOW() WHERE "organizationId" = :orgId AND "userId" = :userId AND "isRead" = false`. Returns `{ success: true, count: number, markedAt: string }`.
+- `POST /api/v1/notifications` (Permission: `notification.create` — `OWNER`, `PROPERTY_MANAGER`) — Administratively create/dispatch an in-app notification to a user within the caller's organization.
+  - **Validation**: Recipient `userId` must exist and belong to caller's organization (`404 Not Found` if foreign/nonexistent). Optional `propertyId` must belong to caller's organization (`404 Not Found` if foreign). `link` must be a safe internal relative path starting with `/` (max 500 chars, no external/protocol-relative URLs). Sensitive credential fields (`password`, `token`, `secret`) are stripped from `metadata`.
+  - **Audit Trail**: Writes `NOTIFICATION_DISPATCHED` audit log with recipient, type, and title metadata.
+- `DELETE /api/v1/notifications/:id` (Permission: `notification.delete`) — Delete/dismiss a notification belonging to the caller. Fails closed (`404 Not Found`) for cross-user or cross-org access. Writes `NOTIFICATION_DELETED` audit log.
+
 

@@ -3,7 +3,8 @@
 // ==============================================================================
 
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "debian-openssl-3.0.x", "windows"]
 }
 
 datasource db {
@@ -383,6 +384,7 @@ enum NotificationType {
   CHECKOUT_REMINDER
   VISITOR_REQUEST
   DOCUMENT_EXPIRING
+  GENERAL
 }
 
 // ------------------------------------------------------------------------------
@@ -435,6 +437,7 @@ model Organization {
   maintenanceAttachments  MaintenanceAttachment[]
   maintenanceStatusHistories MaintenanceStatusHistory[]
   maintenanceAssignments  MaintenanceAssignment[]
+  notifications           Notification[]
 
   @@map("organizations")
 }
@@ -467,6 +470,7 @@ model User {
   maintenanceAssignmentsReceived MaintenanceAssignment[] @relation("StaffAssignedTo")
   maintenanceAssignmentsCreated  MaintenanceAssignment[] @relation("StaffAssignedBy")
   maintenanceStatusChanges MaintenanceStatusHistory[]
+  notifications            Notification[]
 
   @@index([organizationId])
   @@index([email])
@@ -628,6 +632,7 @@ model Property {
   checkouts        Checkout[]
   agreements       Agreement[]
   billingSchedules BillingSchedule[]
+  notifications    Notification[]
 
   @@unique([organizationId, code])
   @@index([organizationId])
@@ -888,7 +893,6 @@ model Tenant {
   visitors                VisitorRecord[]
   marketplaceListings     MarketplaceListing[]
   communityPosts          CommunityPost[]
-  notifications           Notification[]
   checkIns                CheckIn[]
   checkouts               Checkout[]
   settlements             Settlement[]
@@ -1963,17 +1967,26 @@ model ExpenseRecord {
 // ------------------------------------------------------------------------------
 
 model Notification {
-  id        String           @id @default(uuid())
-  tenantId  String
-  type      NotificationType
-  title     String
-  message   String
-  isRead    Boolean          @default(false)
-  createdAt DateTime         @default(now())
+  id             String           @id @default(uuid())
+  organizationId String
+  userId         String
+  propertyId     String?
+  type           NotificationType
+  title          String           @db.VarChar(255)
+  message        String           @db.Text
+  link           String?          @db.VarChar(500)
+  metadata       Json?
+  isRead         Boolean          @default(false)
+  readAt         DateTime?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
 
-  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  property     Property?    @relation(fields: [propertyId], references: [id], onDelete: SetNull)
 
-  @@index([tenantId, isRead])
+  @@index([organizationId, userId, isRead])
+  @@index([userId, createdAt])
   @@map("notifications")
 }
 
@@ -2042,3 +2055,5 @@ model ServiceRequest {
   @@index([propertyId])
   @@map("service_requests")
 }
+
+
