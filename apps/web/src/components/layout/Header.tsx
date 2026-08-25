@@ -14,7 +14,6 @@ import { useAuth } from '@/lib/auth-context';
 import {
   Building2,
   Bell,
-  Compass,
   Shield,
   LogOut,
   LogIn,
@@ -379,16 +378,6 @@ export const Header: React.FC<HeaderProps> = ({
           <Shield className="w-3.5 h-3.5" />
           <span>Deterministic Core Active</span>
         </div>
-
-        {/* Public Discovery Link */}
-        <Link
-          href="/discover"
-          className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold text-brand-navy hover:bg-surface-subtle border border-surface-border transition-colors"
-          title="Explore public property discovery"
-        >
-          <Compass className="w-3.5 h-3.5 text-indigo-600" />
-          <span>Discover</span>
-        </Link>
 
         {/* Notification Bell Control */}
         <div className="relative" ref={notifDropdownRef}>
