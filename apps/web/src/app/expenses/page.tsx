@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { AppShell } from '@/components/layout/AppShell';
 import { useAuth } from '@/lib/auth-context';
+import { getLocalDateString } from '@/lib/date-utils';
 import {
   ExpenseRecordDto,
   ExpenseCategoryDto,
@@ -83,7 +84,7 @@ export default function ExpensesPage() {
     categoryName: ExpenseCategoryType.MAINTENANCE,
     title: '',
     amount: '',
-    expenseDate: new Date().toISOString().split('T')[0],
+    expenseDate: getLocalDateString(),
     vendorName: '',
     notes: '',
     receiptUrl: '',
@@ -194,7 +195,7 @@ export default function ExpensesPage() {
       categoryName: ExpenseCategoryType.MAINTENANCE,
       title: '',
       amount: '',
-      expenseDate: new Date().toISOString().split('T')[0],
+      expenseDate: getLocalDateString(),
       vendorName: '',
       notes: '',
       receiptUrl: '',

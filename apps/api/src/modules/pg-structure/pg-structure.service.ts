@@ -146,14 +146,35 @@ export class PgStructureService {
       throw new ConflictException(`Floor number ${input.floorNumber} already exists for this property.`);
     }
 
+    const existingSoftDeleted = await this.prisma.floor.findFirst({
+      where: {
+        propertyId,
+        floorNumber: input.floorNumber,
+        deletedAt: { not: null },
+      },
+    });
+
+    const floorName = (input.name && input.name.trim()) ? input.name.trim() : (input.floorNumber === 0 ? 'Ground Floor' : `Floor ${input.floorNumber}`);
+
     const floor = await this.prisma.$transaction(async (tx) => {
-      const created = await tx.floor.create({
-        data: {
-          propertyId,
-          floorNumber: input.floorNumber,
-          name: input.name.trim(),
-        },
-      });
+      let created: any;
+      if (existingSoftDeleted) {
+        created = await tx.floor.update({
+          where: { id: existingSoftDeleted.id },
+          data: {
+            name: floorName,
+            deletedAt: null,
+          },
+        });
+      } else {
+        created = await tx.floor.create({
+          data: {
+            propertyId,
+            floorNumber: input.floorNumber,
+            name: floorName,
+          },
+        });
+      }
 
       await this.writeAuditLog(
         tx,
@@ -396,24 +417,36 @@ export class PgStructureService {
 
     await this.prisma.$transaction(async (tx) => {
       const timestamp = new Date();
+      const deleteSuffix = `__deleted_${Date.now()}`;
 
       // Soft delete floor
       await tx.floor.update({
         where: { id: floorId },
-        data: { deletedAt: timestamp },
+        data: {
+          deletedAt: timestamp,
+          name: `${floor.name}${deleteSuffix}`,
+        },
       });
 
       // Soft delete rooms and beds under this floor
       for (const room of floor.rooms) {
         await tx.room.update({
           where: { id: room.id },
-          data: { deletedAt: timestamp },
+          data: {
+            deletedAt: timestamp,
+            roomNumber: `${room.roomNumber}${deleteSuffix}`,
+          },
         });
 
-        await tx.bed.updateMany({
-          where: { roomId: room.id, deletedAt: null },
-          data: { deletedAt: timestamp },
-        });
+        for (const b of room.beds) {
+          await tx.bed.update({
+            where: { id: b.id },
+            data: {
+              deletedAt: timestamp,
+              bedNumber: `${b.bedNumber}${deleteSuffix}`,
+            },
+          });
+        }
       }
 
       await this.writeAuditLog(
@@ -425,7 +458,135 @@ export class PgStructureService {
         floorId,
         { name: floor.name, floorNumber: floor.floorNumber }
       );
+
+      // Auto re-sequence remaining VACANT floors (only floors with 0 occupied beds)
+      await this.autoResequenceVacantFloors(tx, propertyId);
     });
+  }
+
+  /**
+   * Re-sequences vacant floor levels and room numbers when intermediate floors are removed,
+   * while strictly preserving all occupied floors and resident records.
+   */
+  private async autoResequenceVacantFloors(tx: any, propertyId: string): Promise<void> {
+    const activeFloors = await tx.floor.findMany({
+      where: { propertyId, deletedAt: null },
+      include: {
+        rooms: {
+          where: { deletedAt: null },
+          include: {
+            beds: {
+              where: { deletedAt: null },
+            },
+          },
+          orderBy: { roomNumber: 'asc' },
+        },
+      },
+      orderBy: { floorNumber: 'asc' },
+    });
+
+    if (activeFloors.length === 0) return;
+
+    let nextExpectedFloor = activeFloors[0].floorNumber === 0 ? 0 : 1;
+
+    for (const f of activeFloors) {
+      const isOccupied = f.rooms.some((r: any) =>
+        r.beds.some((b: any) => (b.status as BedStatus) === BedStatus.OCCUPIED)
+      );
+
+      if (isOccupied) {
+        // If floor has occupants, preserve its floorNumber and advance expected counter past it
+        nextExpectedFloor = Math.max(nextExpectedFloor, f.floorNumber + 1);
+      } else {
+        const targetFloorNum = nextExpectedFloor;
+        if (f.floorNumber !== targetFloorNum) {
+          // Check if a soft-deleted floor holds targetFloorNum and archive it
+          const existingSoftFloor = await tx.floor.findFirst({
+            where: {
+              propertyId,
+              floorNumber: targetFloorNum,
+              deletedAt: { not: null },
+              id: { not: f.id },
+            },
+          });
+          if (existingSoftFloor) {
+            const archivedNum = -1 * (Math.abs(targetFloorNum) * 10000 + Math.floor(Math.random() * 9000 + 1000));
+            await tx.floor.update({
+              where: { id: existingSoftFloor.id },
+              data: {
+                floorNumber: archivedNum,
+                name: `${existingSoftFloor.name}__archived_${existingSoftFloor.id.substring(0, 8)}`,
+              },
+            });
+          }
+
+          const newFloorName = targetFloorNum === 0 ? 'Ground Floor' : `Floor ${targetFloorNum}`;
+          await tx.floor.update({
+            where: { id: f.id },
+            data: {
+              floorNumber: targetFloorNum,
+              name: newFloorName,
+            },
+          });
+
+          // Re-sequence rooms and beds on this vacant floor
+          for (let rIdx = 0; rIdx < f.rooms.length; rIdx++) {
+            const room = f.rooms[rIdx];
+            const rCount = rIdx + 1;
+            const newRoomNum = `${targetFloorNum}${rCount < 10 ? '0' + rCount : rCount}`;
+
+            // Check if a soft-deleted room holds this roomNumber and archive it
+            const existingSoftRoom = await tx.room.findFirst({
+              where: {
+                floorId: f.id,
+                roomNumber: newRoomNum,
+                deletedAt: { not: null },
+                id: { not: room.id },
+              },
+            });
+            if (existingSoftRoom) {
+              await tx.room.update({
+                where: { id: existingSoftRoom.id },
+                data: { roomNumber: `${newRoomNum}__archived_${existingSoftRoom.id.substring(0, 8)}` },
+              });
+            }
+
+            await tx.room.update({
+              where: { id: room.id },
+              data: { roomNumber: newRoomNum },
+            });
+
+            for (let bIdx = 0; bIdx < room.beds.length; bIdx++) {
+              const bed = room.beds[bIdx];
+              const bedLetter = String.fromCharCode(65 + bIdx);
+              const newBedNum = `${newRoomNum}-${bedLetter}`;
+
+              // Check if a soft-deleted bed holds this bedNumber and archive it
+              const existingSoftBed = await tx.bed.findFirst({
+                where: {
+                  roomId: room.id,
+                  bedNumber: newBedNum,
+                  deletedAt: { not: null },
+                  id: { not: bed.id },
+                },
+              });
+              if (existingSoftBed) {
+                await tx.bed.update({
+                  where: { id: existingSoftBed.id },
+                  data: { bedNumber: `${newBedNum}__archived_${existingSoftBed.id.substring(0, 8)}` },
+                });
+              }
+
+              await tx.bed.update({
+                where: { id: bed.id },
+                data: { bedNumber: newBedNum },
+              });
+            }
+          }
+        }
+        nextExpectedFloor++;
+      }
+    }
   }
 
   // ==========================================================================
@@ -483,20 +644,45 @@ export class PgStructureService {
       throw new ConflictException(`Room number ${input.roomNumber} already exists on this floor.`);
     }
 
+    const existingSoftDeleted = await this.prisma.room.findFirst({
+      where: {
+        floorId: input.floorId,
+        roomNumber: input.roomNumber.trim(),
+        deletedAt: { not: null },
+      },
+    });
+
     const capacity = input.capacity ?? this.getDefaultCapacity(input.sharingType);
 
     const room = await this.prisma.$transaction(async (tx) => {
-      const created = await tx.room.create({
-        data: {
-          propertyId,
-          floorId: input.floorId,
-          roomNumber: input.roomNumber.trim(),
-          sharingType: input.sharingType,
-          capacity,
-          baseRent: input.baseRent,
-          amenities: input.amenities || [],
-        },
-      });
+      let created: any;
+      if (existingSoftDeleted) {
+        created = await tx.room.update({
+          where: { id: existingSoftDeleted.id },
+          data: {
+            propertyId,
+            floorId: input.floorId,
+            roomNumber: input.roomNumber.trim(),
+            sharingType: input.sharingType,
+            capacity,
+            baseRent: input.baseRent,
+            amenities: input.amenities || [],
+            deletedAt: null,
+          },
+        });
+      } else {
+        created = await tx.room.create({
+          data: {
+            propertyId,
+            floorId: input.floorId,
+            roomNumber: input.roomNumber.trim(),
+            sharingType: input.sharingType,
+            capacity,
+            baseRent: input.baseRent,
+            amenities: input.amenities || [],
+          },
+        });
+      }
 
       // Auto-generate beds if requested
       const generatedBeds: BedDto[] = [];
@@ -505,20 +691,39 @@ export class PgStructureService {
           const bedLetter = String.fromCharCode(65 + i); // A, B, C, etc.
           const bedNumber = `${created.roomNumber}-${bedLetter}`;
 
-          const bed = await tx.bed.create({
-            data: {
+          const existingBed = await tx.bed.findFirst({
+            where: {
               roomId: created.id,
               bedNumber,
-              monthlyRent: created.baseRent,
-              status: BedStatus.AVAILABLE,
             },
           });
+
+          let bed: any;
+          if (existingBed) {
+            bed = await tx.bed.update({
+              where: { id: existingBed.id },
+              data: {
+                monthlyRent: created.baseRent,
+                status: BedStatus.AVAILABLE,
+                deletedAt: null,
+              },
+            });
+          } else {
+            bed = await tx.bed.create({
+              data: {
+                roomId: created.id,
+                bedNumber,
+                monthlyRent: created.baseRent,
+                status: BedStatus.AVAILABLE,
+              },
+            });
+          }
 
           generatedBeds.push({
             id: bed.id,
             roomId: bed.roomId,
             bedNumber: bed.bedNumber,
-            monthlyRent: bed.monthlyRent.toNumber(),
+            monthlyRent: typeof bed.monthlyRent.toNumber === 'function' ? bed.monthlyRent.toNumber() : Number(bed.monthlyRent),
             status: bed.status as BedStatus,
             createdAt: bed.createdAt,
             updatedAt: bed.updatedAt,
@@ -690,13 +895,33 @@ export class PgStructureService {
       if (existing) {
         throw new ConflictException(`Room number ${input.roomNumber} already exists on this floor.`);
       }
+
+      const existingSoftDeleted = await this.prisma.room.findFirst({
+        where: {
+          floorId: room.floorId,
+          roomNumber: input.roomNumber.trim(),
+          deletedAt: { not: null },
+        },
+      });
+      if (existingSoftDeleted) {
+        await this.prisma.room.update({
+          where: { id: existingSoftDeleted.id },
+          data: { roomNumber: `${existingSoftDeleted.roomNumber}_archived_${Date.now()}` },
+        });
+      }
     }
 
     // Capacity checks
-    const targetCapacity = input.capacity ?? (input.sharingType ? this.getDefaultCapacity(input.sharingType) : room.capacity);
-    if (targetCapacity < room.beds.length) {
+    const targetCapacity =
+      input.capacity !== undefined && input.capacity > 0
+        ? input.capacity
+        : input.sharingType
+        ? this.getDefaultCapacity(input.sharingType)
+        : room.capacity;
+    const occupiedCount = room.beds.filter((b) => (b.status as BedStatus) === BedStatus.OCCUPIED).length;
+    if (targetCapacity < occupiedCount) {
       throw new BadRequestException(
-        `Cannot reduce capacity below existing bed count (${room.beds.length}). Delete extra beds first.`
+        `Cannot reduce capacity to ${targetCapacity} beds because ${occupiedCount} beds are currently Occupied. Check out occupants first.`
       );
     }
 
@@ -766,13 +991,21 @@ export class PgStructureService {
 
       await tx.room.update({
         where: { id: roomId },
-        data: { deletedAt: timestamp },
+        data: {
+          deletedAt: timestamp,
+          roomNumber: `${room.roomNumber}__deleted_${Date.now()}`,
+        },
       });
 
-      await tx.bed.updateMany({
-        where: { roomId: room.id, deletedAt: null },
-        data: { deletedAt: timestamp },
-      });
+      for (const b of room.beds) {
+        await tx.bed.update({
+          where: { id: b.id },
+          data: {
+            deletedAt: timestamp,
+            bedNumber: `${b.bedNumber}__deleted_${Date.now()}`,
+          },
+        });
+      }
 
       await this.writeAuditLog(
         tx,
@@ -812,7 +1045,10 @@ export class PgStructureService {
     }
 
     if (room.beds.length >= room.capacity) {
-      throw new BadRequestException(`Room capacity of ${room.capacity} is already fully allocated.`);
+      await this.prisma.room.update({
+        where: { id: input.roomId },
+        data: { capacity: room.beds.length + 1 },
+      });
     }
 
     const existing = await this.prisma.bed.findFirst({
@@ -825,6 +1061,50 @@ export class PgStructureService {
 
     if (existing) {
       throw new ConflictException(`Bed number ${input.bedNumber} already exists in this room.`);
+    }
+
+    const existingSoftDeleted = await this.prisma.bed.findFirst({
+      where: {
+        roomId: input.roomId,
+        bedNumber: input.bedNumber.trim(),
+        deletedAt: { not: null },
+      },
+    });
+
+    if (existingSoftDeleted) {
+      const restored = await this.prisma.$transaction(async (tx) => {
+        const updated = await tx.bed.update({
+          where: { id: existingSoftDeleted.id },
+          data: {
+            monthlyRent: input.monthlyRent,
+            status: input.status ?? BedStatus.AVAILABLE,
+            deletedAt: null,
+          },
+        });
+
+        await this.writeAuditLog(
+          tx,
+          organizationId,
+          userId,
+          'BED_CREATED',
+          'Bed',
+          updated.id,
+          { bedNumber: updated.bedNumber, monthlyRent: updated.monthlyRent, restored: true }
+        );
+
+        return updated;
+      });
+
+      return {
+        id: restored.id,
+        roomId: restored.roomId,
+        bedNumber: restored.bedNumber,
+        monthlyRent: restored.monthlyRent.toNumber(),
+        status: restored.status as BedStatus,
+        createdAt: restored.createdAt,
+        updatedAt: restored.updatedAt,
+        deletedAt: restored.deletedAt,
+      };
     }
 
     const bed = await this.prisma.$transaction(async (tx) => {
@@ -962,6 +1242,20 @@ export class PgStructureService {
       if (existing) {
         throw new ConflictException(`Bed number ${input.bedNumber} already exists in this room.`);
       }
+
+      const existingSoftDeleted = await this.prisma.bed.findFirst({
+        where: {
+          roomId: bed.roomId,
+          bedNumber: input.bedNumber.trim(),
+          deletedAt: { not: null },
+        },
+      });
+      if (existingSoftDeleted) {
+        await this.prisma.bed.update({
+          where: { id: existingSoftDeleted.id },
+          data: { bedNumber: `${existingSoftDeleted.bedNumber}_archived_${Date.now()}` },
+        });
+      }
     }
 
     // Explicit validation on status transitions
@@ -1081,7 +1375,10 @@ export class PgStructureService {
     await this.prisma.$transaction(async (tx) => {
       await tx.bed.update({
         where: { id: bedId },
-        data: { deletedAt: new Date() },
+        data: {
+          deletedAt: new Date(),
+          bedNumber: `${bed.bedNumber}__deleted_${Date.now()}`,
+        },
       });
 
       await this.writeAuditLog(

@@ -2,6 +2,8 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/lib/auth-context';
+import { AppShell } from '@/components/layout/AppShell';
+import { BackButton } from '@/components/ui/BackButton';
 import {
   AuditLogDto,
   AuditSummaryDto,
@@ -76,7 +78,7 @@ export default function AuditPage() {
       });
       if (!res.ok) throw new Error('Failed to load audit summary metrics');
       const data = await res.json();
-      setSummary(data);
+      setSummary(data?.data || data);
     } catch (err: any) {
       console.error('Error fetching audit summary:', err);
     } finally {
@@ -110,12 +112,28 @@ export default function AuditPage() {
         },
       });
 
-      if (!res.ok) throw new Error('Failed to load audit logs');
-      const result = await res.json();
+      if (!res.ok) {
+        if (res.status === 403) {
+          throw new Error('Access denied: You do not have permission to view audit logs.');
+        }
+        throw new Error('Failed to fetch audit logs.');
+      }
 
-      setLogs(result.data || []);
-      setTotalCount(result.total || 0);
-      setTotalPages(result.totalPages || 1);
+      const resData = await res.json();
+      const raw = resData?.data || resData;
+      const list = Array.isArray(raw) ? raw : (Array.isArray(raw?.data) ? raw.data : []);
+      setLogs(Array.isArray(list) ? list : []);
+
+      if (resData?.meta) {
+        setTotalPages(resData.meta.totalPages || 1);
+        setTotalCount(resData.meta.total || 0);
+      } else if (raw?.meta) {
+        setTotalPages(raw.meta.totalPages || 1);
+        setTotalCount(raw.meta.total || 0);
+      } else {
+        setTotalPages(1);
+        setTotalCount(Array.isArray(list) ? list.length : 0);
+      }
     } catch (err: any) {
       setError(err.message || 'An error occurred while loading audit trail.');
     } finally {
@@ -124,21 +142,17 @@ export default function AuditPage() {
   }, [page, limit, sortBy, search, selectedCategory, selectedAction, selectedResourceType, startDate, endDate]);
 
   useEffect(() => {
-    if (user) {
-      fetchSummary();
-    }
-  }, [user, fetchSummary]);
+    fetchSummary();
+  }, [fetchSummary]);
 
   useEffect(() => {
-    if (user) {
-      fetchLogs();
-    }
-  }, [user, fetchLogs]);
+    fetchLogs();
+  }, [fetchLogs]);
 
-  // Copy JSON to Clipboard
-  const handleCopyJson = () => {
+  // Copy JSON metadata handler
+  const handleCopyMetadata = () => {
     if (!selectedLog) return;
-    navigator.clipboard.writeText(JSON.stringify(selectedLog, null, 2));
+    navigator.clipboard.writeText(JSON.stringify(selectedLog.metadata || {}, null, 2));
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -150,7 +164,7 @@ export default function AuditPage() {
       const params = new URLSearchParams({
         format: exportFormat,
       });
-      if (search.trim()) params.append('search', search.trim());
+
       if (selectedCategory) params.append('category', selectedCategory);
       if (selectedAction) params.append('action', selectedAction);
       if (selectedResourceType) params.append('resourceType', selectedResourceType);
@@ -167,13 +181,12 @@ export default function AuditPage() {
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = exportFormat === 'JSON' ? `audit_logs_${Date.now()}.json` : `audit_logs_${Date.now()}.csv`;
+      a.download = `audit-trail-${new Date().toISOString().split('T')[0]}.${exportFormat.toLowerCase()}`;
       document.body.appendChild(a);
       a.click();
       window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
+      a.remove();
       setShowExportModal(false);
-      fetchSummary(); // Refresh summary to capture AUDIT_LOG_EXPORTED
     } catch (err: any) {
       alert(err.message || 'Failed to export audit logs');
     } finally {
@@ -184,18 +197,18 @@ export default function AuditPage() {
   // Severity Color Mapping
   const getActionBadgeColor = (action: string) => {
     if (action.includes('DELETED') || action.includes('FAILED') || action.includes('VOIDED') || action.includes('REMOVED')) {
-      return 'bg-rose-500/10 text-rose-400 border-rose-500/30';
+      return 'bg-rose-50 text-rose-700 border-rose-200';
     }
     if (action.includes('CANCELLED') || action.includes('RESET') || action.includes('SUSPENDED') || action.includes('REJECTED')) {
-      return 'bg-amber-500/10 text-amber-400 border-amber-500/30';
+      return 'bg-amber-50 text-amber-700 border-amber-200';
     }
     if (action.includes('EXPORTED') || action.includes('SIGNED') || action.includes('ALLOCATED') || action.includes('VERIFIED')) {
-      return 'bg-purple-500/10 text-purple-400 border-purple-500/30';
+      return 'bg-purple-50 text-purple-700 border-purple-200';
     }
     if (action.includes('CREATED') || action.includes('ISSUED') || action.includes('COMPLETED') || action.includes('SUCCESS')) {
-      return 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30';
+      return 'bg-emerald-50 text-emerald-700 border-emerald-200';
     }
-    return 'bg-teal-500/10 text-teal-400 border-teal-500/30';
+    return 'bg-teal-50 text-teal-700 border-teal-200';
   };
 
   const categories = [
@@ -210,605 +223,629 @@ export default function AuditPage() {
   ];
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 p-6 lg:p-8">
-      {/* Header Section */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 border-b border-slate-800">
-        <div>
+    <AppShell activePath="/audit">
+      <div className="space-y-6 max-w-7xl mx-auto pb-12">
+        {/* Navigation Back Button */}
+        <div className="flex items-center justify-between">
+          <BackButton fallbackHref="/" label="Back to Dashboard" />
+        </div>
+
+        {/* Page Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 pb-5">
           <div className="flex items-center gap-3">
-            <div className="p-2 rounded-xl bg-teal-500/10 border border-teal-500/20 text-teal-400">
+            <div className="p-2.5 bg-teal-50 text-brand-teal border border-teal-200 rounded-xl">
               <Shield className="w-6 h-6" />
             </div>
             <div>
-              <h1 className="text-2xl font-bold tracking-tight text-white flex items-center gap-2">
-                Audit Trail & Compliance Log
-                <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-teal-500/20 text-teal-300 border border-teal-500/30">
+              <h1 className="text-2xl font-bold text-slate-900 tracking-tight flex items-center gap-2.5">
+                <span>Audit Trail & Compliance Log</span>
+                <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-teal-50 text-brand-teal border border-teal-200">
                   Append-Only
                 </span>
               </h1>
-              <p className="text-sm text-slate-400">
+              <p className="text-sm text-slate-500 mt-1">
                 Immutable, cryptographic security, financial, and operational event stream
               </p>
             </div>
           </div>
-        </div>
 
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => {
-              fetchSummary();
-              fetchLogs();
-            }}
-            disabled={loading}
-            className="flex items-center gap-2 px-3.5 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-700 text-sm font-medium transition-colors"
-          >
-            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-            Refresh
-          </button>
-
-          <button
-            onClick={() => setShowExportModal(true)}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-teal-600 hover:bg-teal-500 text-white text-sm font-semibold shadow-lg shadow-teal-900/30 transition-colors"
-          >
-            <Download className="w-4 h-4" />
-            Export Audit Trail
-          </button>
-        </div>
-      </div>
-
-      {/* KPI StatCards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-6">
-        <div className="p-5 rounded-xl bg-slate-900/80 border border-slate-800 relative overflow-hidden">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-slate-400">Total Audit Logs</span>
-            <History className="w-4 h-4 text-teal-400" />
-          </div>
-          <div className="mt-3 text-2xl font-bold text-white">
-            {summaryLoading ? '...' : (summary?.totalLogs || 0).toLocaleString()}
-          </div>
-          <div className="mt-1 text-xs text-slate-400 flex items-center gap-1">
-            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-            Strictly Append-Only
-          </div>
-        </div>
-
-        <div className="p-5 rounded-xl bg-slate-900/80 border border-slate-800 relative overflow-hidden">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-slate-400">Events (Last 24h)</span>
-            <Calendar className="w-4 h-4 text-cyan-400" />
-          </div>
-          <div className="mt-3 text-2xl font-bold text-white">
-            {summaryLoading ? '...' : (summary?.eventsLast24h || 0).toLocaleString()}
-          </div>
-          <div className="mt-1 text-xs text-slate-400">
-            {summaryLoading ? '...' : `${summary?.eventsLast7d || 0} events past 7 days`}
-          </div>
-        </div>
-
-        <div className="p-5 rounded-xl bg-slate-900/80 border border-slate-800 relative overflow-hidden">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-slate-400">Active Actors</span>
-            <UserIcon className="w-4 h-4 text-indigo-400" />
-          </div>
-          <div className="mt-3 text-2xl font-bold text-white">
-            {summaryLoading ? '...' : summary?.uniqueActors || 0}
-          </div>
-          <div className="mt-1 text-xs text-slate-400">Distinct authorized identities</div>
-        </div>
-
-        <div className="p-5 rounded-xl bg-slate-900/80 border border-slate-800 relative overflow-hidden">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-slate-400">Security & Financial Events</span>
-            <AlertTriangle className="w-4 h-4 text-amber-400" />
-          </div>
-          <div className="mt-3 text-2xl font-bold text-white">
-            {summaryLoading ? '...' : ((summary?.criticalSecurityEvents || 0) + (summary?.financialEvents || 0)).toLocaleString()}
-          </div>
-          <div className="mt-1 text-xs text-slate-400">
-            {summary?.financialEvents || 0} ledger/finance, {summary?.criticalSecurityEvents || 0} security
-          </div>
-        </div>
-      </div>
-
-      {/* Horizontal Category Filter Pills */}
-      <div className="flex items-center gap-2 overflow-x-auto py-4 mt-6 border-b border-slate-800 scrollbar-none">
-        {categories.map((cat) => {
-          const isSelected = selectedCategory === cat.value;
-          return (
-            <button
-              key={cat.label}
-              onClick={() => {
-                setSelectedCategory(cat.value as AuditCategory | '');
-                setPage(1);
-              }}
-              className={`px-3.5 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-all border ${
-                isSelected
-                  ? 'bg-teal-500/20 text-teal-300 border-teal-500/40 shadow-sm'
-                  : 'bg-slate-900/60 text-slate-400 border-slate-800 hover:bg-slate-800 hover:text-slate-200'
-              }`}
-            >
-              {cat.label}
-            </button>
-          );
-        })}
-      </div>
-
-      {/* Multi-Parameter Filter Toolbar */}
-      <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-4 mt-4 space-y-3">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
-          {/* Keyword Search */}
-          <div className="relative lg:col-span-2">
-            <Search className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
-            <input
-              type="text"
-              placeholder="Search by action, resource, actor, IP, or user agent..."
-              value={search}
-              onChange={(e) => {
-                setSearch(e.target.value);
-                setPage(1);
-              }}
-              className="w-full pl-9 pr-4 py-2 bg-slate-950 border border-slate-800 rounded-lg text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-teal-500"
-            />
-          </div>
-
-          {/* Action Filter */}
-          <div>
-            <select
-              value={selectedAction}
-              onChange={(e) => {
-                setSelectedAction(e.target.value);
-                setPage(1);
-              }}
-              className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-sm text-slate-300 focus:outline-none focus:border-teal-500"
-            >
-              <option value="">All Actions</option>
-              {summary?.topActions?.map((a) => (
-                <option key={a.action} value={a.action}>
-                  {a.action} ({a.count})
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Resource Type Filter */}
-          <div>
-            <select
-              value={selectedResourceType}
-              onChange={(e) => {
-                setSelectedResourceType(e.target.value);
-                setPage(1);
-              }}
-              className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-sm text-slate-300 focus:outline-none focus:border-teal-500"
-            >
-              <option value="">All Resources</option>
-              {summary?.resourceBreakdown?.map((r) => (
-                <option key={r.resourceType} value={r.resourceType}>
-                  {r.resourceType} ({r.count})
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Sort Order */}
-          <div>
-            <select
-              value={sortBy}
-              onChange={(e) => {
-                setSortBy(e.target.value as 'NEWEST' | 'OLDEST');
-                setPage(1);
-              }}
-              className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-sm text-slate-300 focus:outline-none focus:border-teal-500"
-            >
-              <option value="NEWEST">Newest First</option>
-              <option value="OLDEST">Oldest First</option>
-            </select>
-          </div>
-        </div>
-
-        {/* Date Range & Reset Filters */}
-        <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-slate-800/60 text-xs">
-          <div className="flex items-center gap-2">
-            <span className="text-slate-400 font-medium">Date Range:</span>
-            <input
-              type="date"
-              value={startDate}
-              onChange={(e) => {
-                setStartDate(e.target.value);
-                setPage(1);
-              }}
-              className="px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded text-slate-300 text-xs focus:outline-none focus:border-teal-500"
-            />
-            <span className="text-slate-500">to</span>
-            <input
-              type="date"
-              value={endDate}
-              onChange={(e) => {
-                setEndDate(e.target.value);
-                setPage(1);
-              }}
-              className="px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded text-slate-300 text-xs focus:outline-none focus:border-teal-500"
-            />
-          </div>
-
-          {(search || selectedCategory || selectedAction || selectedResourceType || startDate || endDate) && (
+          <div className="flex items-center gap-3">
             <button
               onClick={() => {
-                setSearch('');
-                setSelectedCategory('');
-                setSelectedAction('');
-                setSelectedResourceType('');
-                setStartDate('');
-                setEndDate('');
-                setPage(1);
+                fetchSummary();
+                fetchLogs();
               }}
-              className="text-teal-400 hover:text-teal-300 font-medium flex items-center gap-1"
+              disabled={loading}
+              className="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg bg-white border border-slate-200 text-slate-700 text-sm font-medium hover:bg-slate-50 shadow-sm transition"
             >
-              <X className="w-3.5 h-3.5" />
-              Clear Filters
+              <RefreshCw className={`w-4 h-4 text-slate-500 ${loading ? 'animate-spin' : ''}`} />
+              <span>Refresh</span>
             </button>
-          )}
-        </div>
-      </div>
 
-      {/* Error Banner */}
-      {error && (
-        <div className="mt-4 p-4 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-sm flex items-center gap-2">
-          <AlertTriangle className="w-4 h-4 shrink-0" />
-          <span>{error}</span>
-        </div>
-      )}
-
-      {/* Main Audit Log Table */}
-      <div className="bg-slate-900/80 border border-slate-800 rounded-xl mt-6 overflow-hidden shadow-xl">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead className="bg-slate-950/80 text-slate-400 border-b border-slate-800 text-xs font-semibold uppercase tracking-wider">
-              <tr>
-                <th className="px-5 py-3.5">Timestamp (UTC)</th>
-                <th className="px-5 py-3.5">Action</th>
-                <th className="px-5 py-3.5">Resource</th>
-                <th className="px-5 py-3.5">Actor</th>
-                <th className="px-5 py-3.5">Client Context</th>
-                <th className="px-5 py-3.5 text-right">Details</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-800/60">
-              {loading ? (
-                // Skeletons
-                Array.from({ length: 6 }).map((_, i) => (
-                  <tr key={i} className="animate-pulse">
-                    <td className="px-5 py-4"><div className="h-4 bg-slate-800 rounded w-24"></div></td>
-                    <td className="px-5 py-4"><div className="h-5 bg-slate-800 rounded w-32"></div></td>
-                    <td className="px-5 py-4"><div className="h-4 bg-slate-800 rounded w-28"></div></td>
-                    <td className="px-5 py-4"><div className="h-4 bg-slate-800 rounded w-28"></div></td>
-                    <td className="px-5 py-4"><div className="h-4 bg-slate-800 rounded w-20"></div></td>
-                    <td className="px-5 py-4 text-right"><div className="h-7 bg-slate-800 rounded w-16 ml-auto"></div></td>
-                  </tr>
-                ))
-              ) : logs.length === 0 ? (
-                <tr>
-                  <td colSpan={6} className="px-5 py-12 text-center text-slate-400">
-                    <History className="w-10 h-10 mx-auto text-slate-600 mb-3" />
-                    <p className="font-semibold text-slate-300">No audit records found</p>
-                    <p className="text-xs text-slate-500 mt-1">Try adjusting your filters or search query.</p>
-                  </td>
-                </tr>
-              ) : (
-                logs.map((log) => {
-                  const date = new Date(log.createdAt);
-                  const formattedTime = date.toISOString().replace('T', ' ').substring(0, 19);
-
-                  return (
-                    <tr key={log.id} className="hover:bg-slate-800/40 transition-colors">
-                      <td className="px-5 py-4 text-xs font-mono text-slate-300 whitespace-nowrap">
-                        {formattedTime}
-                      </td>
-
-                      <td className="px-5 py-4 whitespace-nowrap">
-                        <span className={`px-2.5 py-1 rounded-md text-xs font-semibold border ${getActionBadgeColor(log.action)}`}>
-                          {log.action}
-                        </span>
-                      </td>
-
-                      <td className="px-5 py-4 whitespace-nowrap">
-                        <div className="flex flex-col">
-                          <span className="font-medium text-slate-200 text-xs">{log.resourceType}</span>
-                          <span className="text-[11px] font-mono text-slate-500 truncate max-w-[140px]" title={log.resourceId}>
-                            {log.resourceId}
-                          </span>
-                        </div>
-                      </td>
-
-                      <td className="px-5 py-4 whitespace-nowrap">
-                        {log.actor ? (
-                          <div className="flex flex-col">
-                            <span className="font-medium text-slate-200 text-xs">
-                              {log.actor.firstName} {log.actor.lastName}
-                            </span>
-                            <span className="text-[11px] text-slate-400">{log.actor.email}</span>
-                            {log.actor.role && (
-                              <span className="text-[10px] text-teal-400/90 font-semibold">{log.actor.role}</span>
-                            )}
-                          </div>
-                        ) : (
-                          <span className="text-xs text-slate-500 italic">System Process</span>
-                        )}
-                      </td>
-
-                      <td className="px-5 py-4 whitespace-nowrap text-xs text-slate-400 font-mono">
-                        <div className="flex flex-col">
-                          <span>{log.ipAddress || '—'}</span>
-                          <span className="text-[10px] text-slate-500 truncate max-w-[150px]" title={log.userAgent || ''}>
-                            {log.userAgent || '—'}
-                          </span>
-                        </div>
-                      </td>
-
-                      <td className="px-5 py-4 text-right whitespace-nowrap">
-                        <button
-                          onClick={() => setSelectedLog(log)}
-                          className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium border border-slate-700 transition-colors inline-flex items-center gap-1.5"
-                        >
-                          <Eye className="w-3.5 h-3.5 text-teal-400" />
-                          Inspect
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Pagination Footer */}
-        <div className="p-4 border-t border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-400 bg-slate-950/60">
-          <div>
-            Showing <span className="font-semibold text-slate-200">{logs.length}</span> of{' '}
-            <span className="font-semibold text-slate-200">{totalCount}</span> records
-          </div>
-
-          <div className="flex items-center gap-2">
             <button
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
-              disabled={page <= 1 || loading}
-              className="p-1.5 rounded-lg bg-slate-900 border border-slate-800 hover:bg-slate-800 text-slate-300 disabled:opacity-40 disabled:cursor-not-allowed"
+              onClick={() => setShowExportModal(true)}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-brand-teal text-white text-sm font-medium hover:bg-teal-700 shadow-sm transition"
             >
-              <ChevronLeft className="w-4 h-4" />
-            </button>
-            <span className="px-2 font-medium text-slate-300">
-              Page {page} of {totalPages}
-            </span>
-            <button
-              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-              disabled={page >= totalPages || loading}
-              className="p-1.5 rounded-lg bg-slate-900 border border-slate-800 hover:bg-slate-800 text-slate-300 disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              <ChevronRight className="w-4 h-4" />
+              <Download className="w-4 h-4" />
+              <span>Export Audit Trail</span>
             </button>
           </div>
         </div>
-      </div>
 
-      {/* Slide-Over Metadata Detail Drawer */}
-      {selectedLog && (
-        <div className="fixed inset-0 z-50 overflow-hidden bg-black/60 backdrop-blur-sm flex justify-end">
-          <div className="w-full max-w-xl bg-slate-900 border-l border-slate-800 h-full flex flex-col shadow-2xl animate-in slide-in-from-right duration-200">
-            {/* Drawer Header */}
-            <div className="p-5 border-b border-slate-800 flex items-center justify-between bg-slate-950">
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-teal-500/10 text-teal-400">
-                  <FileText className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="font-bold text-white text-base">Audit Event Details</h3>
-                  <p className="text-xs font-mono text-slate-400">{selectedLog.id}</p>
-                </div>
-              </div>
-
-              <button
-                onClick={() => setSelectedLog(null)}
-                className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {/* Redaction Notice */}
-            <div className="px-5 py-3 bg-teal-950/40 border-b border-teal-800/40 flex items-center gap-2 text-xs text-teal-300">
-              <Lock className="w-3.5 h-3.5 shrink-0 text-teal-400" />
-              <span>Sensitive credentials, passwords, and keys are automatically redacted.</span>
-            </div>
-
-            {/* Drawer Body */}
-            <div className="flex-1 overflow-y-auto p-5 space-y-5 text-sm">
-              {/* Event Overview */}
-              <div className="grid grid-cols-2 gap-3 p-4 rounded-lg bg-slate-950/60 border border-slate-800/80">
-                <div>
-                  <span className="text-[11px] text-slate-400 uppercase font-semibold">Action</span>
-                  <p className="font-semibold text-white mt-0.5">{selectedLog.action}</p>
-                </div>
-
-                <div>
-                  <span className="text-[11px] text-slate-400 uppercase font-semibold">Resource</span>
-                  <p className="font-semibold text-white mt-0.5">{selectedLog.resourceType}</p>
-                </div>
-
-                <div>
-                  <span className="text-[11px] text-slate-400 uppercase font-semibold">Timestamp (UTC)</span>
-                  <p className="text-xs font-mono text-slate-300 mt-0.5">{selectedLog.createdAt}</p>
-                </div>
-
-                <div>
-                  <span className="text-[11px] text-slate-400 uppercase font-semibold">Resource ID</span>
-                  <p className="text-xs font-mono text-slate-300 mt-0.5 truncate" title={selectedLog.resourceId}>
-                    {selectedLog.resourceId}
-                  </p>
-                </div>
-              </div>
-
-              {/* Actor Information */}
-              <div className="p-4 rounded-lg bg-slate-950/60 border border-slate-800/80 space-y-2">
-                <span className="text-[11px] text-slate-400 uppercase font-semibold">Actor Profile</span>
-                {selectedLog.actor ? (
-                  <div className="grid grid-cols-2 gap-2 text-xs">
-                    <div>
-                      <span className="text-slate-500">Name:</span>
-                      <p className="text-slate-200 font-medium">{selectedLog.actor.firstName} {selectedLog.actor.lastName}</p>
-                    </div>
-                    <div>
-                      <span className="text-slate-500">Email:</span>
-                      <p className="text-slate-200 font-medium">{selectedLog.actor.email}</p>
-                    </div>
-                    <div>
-                      <span className="text-slate-500">Role:</span>
-                      <p className="text-teal-400 font-semibold">{selectedLog.actor.role || '—'}</p>
-                    </div>
-                    <div>
-                      <span className="text-slate-500">User ID:</span>
-                      <p className="text-slate-400 font-mono truncate">{selectedLog.actor.id}</p>
-                    </div>
-                  </div>
-                ) : (
-                  <p className="text-xs text-slate-500 italic">Automated System Execution</p>
-                )}
-              </div>
-
-              {/* Client Network & Agent */}
-              <div className="p-4 rounded-lg bg-slate-950/60 border border-slate-800/80 space-y-2">
-                <span className="text-[11px] text-slate-400 uppercase font-semibold">Network & Client Context</span>
-                <div className="text-xs space-y-1.5">
-                  <div className="flex justify-between">
-                    <span className="text-slate-500">IP Address:</span>
-                    <span className="text-slate-300 font-mono">{selectedLog.ipAddress || 'Not recorded'}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-500">User Agent:</span>
-                    <span className="text-slate-400 font-mono text-[11px] max-w-[280px] truncate" title={selectedLog.userAgent || ''}>
-                      {selectedLog.userAgent || 'Not recorded'}
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Sanitized Metadata JSON */}
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-[11px] text-slate-400 uppercase font-semibold">Event Payload / Metadata</span>
-                  <button
-                    onClick={handleCopyJson}
-                    className="flex items-center gap-1 text-xs text-teal-400 hover:text-teal-300 transition-colors"
-                  >
-                    {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                    {copied ? 'Copied' : 'Copy JSON'}
-                  </button>
-                </div>
-
-                <pre className="p-4 rounded-lg bg-slate-950 border border-slate-800 text-xs font-mono text-teal-300 overflow-x-auto max-h-72">
-                  {JSON.stringify(selectedLog.metadata || {}, null, 2)}
-                </pre>
-              </div>
-            </div>
-
-            {/* Drawer Footer */}
-            <div className="p-4 border-t border-slate-800 bg-slate-950 flex justify-end">
-              <button
-                onClick={() => setSelectedLog(null)}
-                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-sm font-medium rounded-lg transition-colors"
-              >
-                Close Inspector
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Export Modal */}
-      {showExportModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-5 animate-in zoom-in-95 duration-150">
+        {/* KPI Metrics Grid */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2.5">
-                <div className="p-2 rounded-lg bg-teal-500/10 text-teal-400">
-                  <Download className="w-5 h-5" />
-                </div>
-                <h3 className="text-lg font-bold text-white">Export Audit Trail</h3>
-              </div>
-
-              <button
-                onClick={() => setShowExportModal(false)}
-                className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400"
-              >
-                <X className="w-4 h-4" />
-              </button>
+              <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                Total Audit Logs
+              </span>
+              <History className="w-5 h-5 text-brand-teal" />
             </div>
-
-            <p className="text-xs text-slate-400">
-              Export up to 5,000 audit records matching current search, category, and date parameters.
+            <p className="text-2xl font-bold text-slate-900 mt-2">
+              {summaryLoading ? '...' : (summary?.totalLogs || 0).toLocaleString()}
             </p>
+            <p className="text-xs text-emerald-600 font-medium mt-1 flex items-center gap-1">
+              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
+              Strictly Append-Only
+            </p>
+          </div>
 
-            {/* Format Selection */}
-            <div className="space-y-2">
-              <label className="text-xs font-medium text-slate-300">File Format</label>
-              <div className="grid grid-cols-2 gap-3">
-                <button
-                  type="button"
-                  onClick={() => setExportFormat('CSV')}
-                  className={`p-3 rounded-xl border text-left transition-all ${
-                    exportFormat === 'CSV'
-                      ? 'bg-teal-500/10 border-teal-500/50 text-white shadow-sm'
-                      : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700'
-                  }`}
-                >
-                  <span className="block font-bold text-sm">CSV Spreadsheet</span>
-                  <span className="block text-[11px] text-slate-400 mt-0.5">RFC 4180 with Formula Injection Protection</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setExportFormat('JSON')}
-                  className={`p-3 rounded-xl border text-left transition-all ${
-                    exportFormat === 'JSON'
-                      ? 'bg-teal-500/10 border-teal-500/50 text-white shadow-sm'
-                      : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700'
-                  }`}
-                >
-                  <span className="block font-bold text-sm">JSON Format</span>
-                  <span className="block text-[11px] text-slate-400 mt-0.5">Full structured objects & metadata</span>
-                </button>
-              </div>
+          <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                Events (Last 24h)
+              </span>
+              <Calendar className="w-5 h-5 text-blue-500" />
             </div>
+            <p className="text-2xl font-bold text-blue-600 mt-2">
+              {summaryLoading ? '...' : (summary?.eventsLast24h || 0).toLocaleString()}
+            </p>
+            <p className="text-xs text-slate-500 mt-1">
+              {summaryLoading ? '...' : `${summary?.eventsLast7d || 0} events past 7 days`}
+            </p>
+          </div>
 
-            {/* Active Filters Summary */}
-            <div className="p-3 rounded-lg bg-slate-950 border border-slate-800/80 text-xs text-slate-400 space-y-1">
-              <span className="font-semibold text-slate-300 block">Applied Filters:</span>
-              <div>Category: <span className="text-slate-200">{selectedCategory || 'All'}</span></div>
-              {selectedAction && <div>Action: <span className="text-slate-200">{selectedAction}</span></div>}
-              {startDate && <div>Date Range: <span className="text-slate-200">{startDate} to {endDate || 'Now'}</span></div>}
+          <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                Active Actors
+              </span>
+              <UserIcon className="w-5 h-5 text-indigo-500" />
             </div>
+            <p className="text-2xl font-bold text-slate-900 mt-2">
+              {summaryLoading ? '...' : summary?.uniqueActors || 0}
+            </p>
+            <p className="text-xs text-slate-500 mt-1">Distinct authorized identities</p>
+          </div>
 
-            {/* Modal Actions */}
-            <div className="flex items-center justify-end gap-3 pt-2">
+          <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                Security & Finance
+              </span>
+              <AlertTriangle className="w-5 h-5 text-amber-500" />
+            </div>
+            <p className="text-2xl font-bold text-amber-600 mt-2">
+              {summaryLoading ? '...' : ((summary?.criticalSecurityEvents || 0) + (summary?.financialEvents || 0)).toLocaleString()}
+            </p>
+            <p className="text-xs text-slate-500 mt-1">
+              {summary?.financialEvents || 0} ledger/finance, {summary?.criticalSecurityEvents || 0} security
+            </p>
+          </div>
+        </div>
+
+        {/* Horizontal Category Filter Pills */}
+        <div className="flex items-center gap-2 overflow-x-auto py-2 border-b border-slate-200 scrollbar-none">
+          {categories.map((cat) => {
+            const isSelected = selectedCategory === cat.value;
+            return (
               <button
-                type="button"
-                onClick={() => setShowExportModal(false)}
-                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm font-medium rounded-lg transition-colors"
+                key={cat.label}
+                onClick={() => {
+                  setSelectedCategory(cat.value as AuditCategory | '');
+                  setPage(1);
+                }}
+                className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all border shrink-0 ${
+                  isSelected
+                    ? 'bg-brand-teal text-white border-brand-teal shadow-sm'
+                    : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50 hover:text-slate-900'
+                }`}
               >
-                Cancel
+                {cat.label}
               </button>
+            );
+          })}
+        </div>
 
-              <button
-                type="button"
-                onClick={handleExport}
-                disabled={exporting}
-                className="px-4 py-2 bg-teal-600 hover:bg-teal-500 text-white text-sm font-semibold rounded-lg shadow-lg shadow-teal-900/30 transition-colors flex items-center gap-2"
+        {/* Multi-Parameter Filter Toolbar */}
+        <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm space-y-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+            {/* Keyword Search */}
+            <div className="relative lg:col-span-2">
+              <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                placeholder="Search by action, resource, actor, IP, or user agent..."
+                value={search}
+                onChange={(e) => {
+                  setSearch(e.target.value);
+                  setPage(1);
+                }}
+                className="w-full pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-lg text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-teal/20 focus:border-brand-teal"
+              />
+            </div>
+
+            {/* Action Filter */}
+            <div>
+              <select
+                aria-label="Filter by Action"
+                value={selectedAction}
+                onChange={(e) => {
+                  setSelectedAction(e.target.value);
+                  setPage(1);
+                }}
+                className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-teal/20 focus:border-brand-teal"
               >
-                {exporting ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
-                {exporting ? 'Generating...' : 'Download Export'}
+                <option value="">All Actions</option>
+                {summary?.topActions?.map((a) => (
+                  <option key={a.action} value={a.action}>
+                    {a.action} ({a.count})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Resource Type Filter */}
+            <div>
+              <select
+                aria-label="Filter by Resource Type"
+                value={selectedResourceType}
+                onChange={(e) => {
+                  setSelectedResourceType(e.target.value);
+                  setPage(1);
+                }}
+                className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-teal/20 focus:border-brand-teal"
+              >
+                <option value="">All Resources</option>
+                {summary?.resourceBreakdown?.map((r) => (
+                  <option key={r.resourceType} value={r.resourceType}>
+                    {r.resourceType} ({r.count})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Sort Order */}
+            <div>
+              <select
+                aria-label="Sort Order"
+                value={sortBy}
+                onChange={(e) => {
+                  setSortBy(e.target.value as 'NEWEST' | 'OLDEST');
+                  setPage(1);
+                }}
+                className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-teal/20 focus:border-brand-teal"
+              >
+                <option value="NEWEST">Newest First</option>
+                <option value="OLDEST">Oldest First</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Date Range & Reset Filters */}
+          <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-slate-100 text-xs">
+            <div className="flex items-center gap-2">
+              <span className="text-slate-500 font-medium">Date Range:</span>
+              <input
+                type="date"
+                aria-label="Start Date"
+                value={startDate}
+                onChange={(e) => {
+                  setStartDate(e.target.value);
+                  setPage(1);
+                }}
+                className="px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-slate-700 text-xs focus:outline-none focus:ring-2 focus:ring-brand-teal/20 focus:border-brand-teal"
+              />
+              <span className="text-slate-400">to</span>
+              <input
+                type="date"
+                aria-label="End Date"
+                value={endDate}
+                onChange={(e) => {
+                  setEndDate(e.target.value);
+                  setPage(1);
+                }}
+                className="px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-slate-700 text-xs focus:outline-none focus:ring-2 focus:ring-brand-teal/20 focus:border-brand-teal"
+              />
+            </div>
+
+            {(search || selectedCategory || selectedAction || selectedResourceType || startDate || endDate) && (
+              <button
+                onClick={() => {
+                  setSearch('');
+                  setSelectedCategory('');
+                  setSelectedAction('');
+                  setSelectedResourceType('');
+                  setStartDate('');
+                  setEndDate('');
+                  setPage(1);
+                }}
+                className="text-brand-teal hover:underline font-semibold flex items-center gap-1"
+              >
+                <X className="w-3.5 h-3.5" />
+                <span>Clear Filters</span>
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Error Banner */}
+        {error && (
+          <div className="p-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-sm flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 text-rose-500 shrink-0" />
+            <span>{error}</span>
+          </div>
+        )}
+
+        {/* Main Audit Log Table */}
+        <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead className="bg-slate-50 text-slate-700 border-b border-slate-200 text-xs font-semibold uppercase tracking-wider">
+                <tr>
+                  <th className="px-5 py-3.5">Timestamp (UTC)</th>
+                  <th className="px-5 py-3.5">Action</th>
+                  <th className="px-5 py-3.5">Resource</th>
+                  <th className="px-5 py-3.5">Actor</th>
+                  <th className="px-5 py-3.5">Client Context</th>
+                  <th className="px-5 py-3.5 text-right">Details</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {loading ? (
+                  Array.from({ length: 6 }).map((_, i) => (
+                    <tr key={i} className="animate-pulse">
+                      <td className="px-5 py-4"><div className="h-4 bg-slate-100 rounded w-24"></div></td>
+                      <td className="px-5 py-4"><div className="h-5 bg-slate-100 rounded w-32"></div></td>
+                      <td className="px-5 py-4"><div className="h-4 bg-slate-100 rounded w-28"></div></td>
+                      <td className="px-5 py-4"><div className="h-4 bg-slate-100 rounded w-28"></div></td>
+                      <td className="px-5 py-4"><div className="h-4 bg-slate-100 rounded w-20"></div></td>
+                      <td className="px-5 py-4 text-right"><div className="h-7 bg-slate-100 rounded w-16 ml-auto"></div></td>
+                    </tr>
+                  ))
+                ) : logs.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="px-5 py-16 text-center text-slate-400">
+                      <History className="w-10 h-10 mx-auto text-slate-300 mb-3" />
+                      <p className="font-semibold text-slate-700">No audit records found</p>
+                      <p className="text-xs text-slate-500 mt-1">Try adjusting your filters or search query.</p>
+                    </td>
+                  </tr>
+                ) : (
+                  logs.map((log) => {
+                    const date = new Date(log.createdAt);
+                    const formattedTime = date.toISOString().replace('T', ' ').substring(0, 19);
+
+                    return (
+                      <tr key={log.id} className="hover:bg-slate-50/80 transition-colors">
+                        <td className="px-5 py-4 text-xs font-mono text-slate-600 whitespace-nowrap">
+                          {formattedTime}
+                        </td>
+
+                        <td className="px-5 py-4 whitespace-nowrap">
+                          <span className={`px-2.5 py-1 rounded-md text-xs font-semibold border ${getActionBadgeColor(log.action)}`}>
+                            {log.action}
+                          </span>
+                        </td>
+
+                        <td className="px-5 py-4 whitespace-nowrap">
+                          <div className="flex flex-col">
+                            <span className="font-medium text-slate-900 text-xs">{log.resourceType}</span>
+                            <span className="text-[11px] font-mono text-slate-400 truncate max-w-[140px]" title={log.resourceId}>
+                              {log.resourceId}
+                            </span>
+                          </div>
+                        </td>
+
+                        <td className="px-5 py-4 whitespace-nowrap">
+                          {log.actor ? (
+                            <div className="flex flex-col">
+                              <span className="font-medium text-slate-900 text-xs">
+                                {log.actor.firstName} {log.actor.lastName}
+                              </span>
+                              <span className="text-[11px] text-slate-500">{log.actor.email}</span>
+                              {log.actor.role && (
+                                <span className="text-[10px] text-brand-teal font-semibold">{log.actor.role}</span>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="text-xs text-slate-400 italic">System Process</span>
+                          )}
+                        </td>
+
+                        <td className="px-5 py-4 whitespace-nowrap text-xs text-slate-500 font-mono">
+                          <div className="flex flex-col">
+                            <span>{log.ipAddress || '—'}</span>
+                            <span className="text-[10px] text-slate-400 truncate max-w-[150px]" title={log.userAgent || ''}>
+                              {log.userAgent || '—'}
+                            </span>
+                          </div>
+                        </td>
+
+                        <td className="px-5 py-4 text-right whitespace-nowrap">
+                          <button
+                            onClick={() => setSelectedLog(log)}
+                            className="px-3 py-1.5 rounded-lg bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-semibold transition inline-flex items-center gap-1.5 shadow-2xs"
+                          >
+                            <Eye className="w-3.5 h-3.5 text-brand-teal" />
+                            <span>Inspect</span>
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Pagination Footer */}
+          <div className="p-4 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-500 bg-slate-50/50">
+            <div>
+              Showing <span className="font-semibold text-slate-800">{logs.length}</span> of{' '}
+              <span className="font-semibold text-slate-800">{totalCount}</span> records
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={page <= 1 || loading}
+                className="p-1.5 rounded-lg bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 disabled:opacity-40 disabled:cursor-not-allowed shadow-2xs"
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+              <span className="px-2 font-medium text-slate-700">
+                Page {page} of {totalPages}
+              </span>
+              <button
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                disabled={page >= totalPages || loading}
+                className="p-1.5 rounded-lg bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 disabled:opacity-40 disabled:cursor-not-allowed shadow-2xs"
+              >
+                <ChevronRight className="w-4 h-4" />
               </button>
             </div>
           </div>
         </div>
-      )}
-    </div>
+
+        {/* Slide-Over Metadata Detail Drawer */}
+        {selectedLog && (
+          <div className="fixed inset-0 z-50 overflow-hidden bg-slate-900/40 backdrop-blur-xs flex justify-end">
+            <div className="w-full max-w-xl bg-white border-l border-slate-200 h-full flex flex-col shadow-2xl animate-in slide-in-from-right duration-200">
+              {/* Drawer Header */}
+              <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/60">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-xl bg-teal-50 text-brand-teal border border-teal-200">
+                    <FileText className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-slate-900 text-base">Audit Event Details</h3>
+                    <p className="text-xs font-mono text-slate-500">{selectedLog.id}</p>
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => setSelectedLog(null)}
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Redaction Notice */}
+              <div className="px-5 py-3 bg-teal-50 border-b border-teal-100 flex items-center gap-2 text-xs text-teal-800">
+                <Lock className="w-3.5 h-3.5 shrink-0 text-brand-teal" />
+                <span>Sensitive credentials, passwords, and keys are automatically redacted.</span>
+              </div>
+
+              {/* Drawer Body */}
+              <div className="flex-1 overflow-y-auto p-5 space-y-5 text-sm">
+                {/* Event Overview */}
+                <div className="grid grid-cols-2 gap-3 p-4 rounded-xl bg-slate-50 border border-slate-200">
+                  <div>
+                    <span className="text-[11px] text-slate-500 uppercase font-semibold">Action</span>
+                    <p className="font-semibold text-slate-900 mt-0.5">{selectedLog.action}</p>
+                  </div>
+
+                  <div>
+                    <span className="text-[11px] text-slate-500 uppercase font-semibold">Resource</span>
+                    <p className="font-semibold text-slate-900 mt-0.5">{selectedLog.resourceType}</p>
+                  </div>
+
+                  <div>
+                    <span className="text-[11px] text-slate-500 uppercase font-semibold">Timestamp (UTC)</span>
+                    <p className="text-xs font-mono text-slate-700 mt-0.5">{selectedLog.createdAt}</p>
+                  </div>
+
+                  <div>
+                    <span className="text-[11px] text-slate-500 uppercase font-semibold">Resource ID</span>
+                    <p className="text-xs font-mono text-slate-700 mt-0.5 truncate" title={selectedLog.resourceId}>
+                      {selectedLog.resourceId}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Actor Information */}
+                <div className="p-4 rounded-xl border border-slate-200 space-y-3">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-2">
+                    <UserIcon className="w-4 h-4 text-brand-teal" />
+                    Authorized Actor
+                  </h4>
+
+                  {selectedLog.actor ? (
+                    <div className="grid grid-cols-2 gap-3 text-xs">
+                      <div>
+                        <span className="text-slate-500 block">Name:</span>
+                        <span className="font-semibold text-slate-900">
+                          {selectedLog.actor.firstName} {selectedLog.actor.lastName}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-slate-500 block">Email:</span>
+                        <span className="font-semibold text-slate-900">{selectedLog.actor.email}</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-500 block">Role:</span>
+                        <span className="font-semibold text-brand-teal">{selectedLog.actor.role || '—'}</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-500 block">User ID:</span>
+                        <span className="font-mono text-slate-600 truncate block" title={selectedLog.actor.id}>
+                          {selectedLog.actor.id}
+                        </span>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-slate-500 italic">System daemon / Automated cron scheduler</p>
+                  )}
+                </div>
+
+                {/* Client Environment */}
+                <div className="p-4 rounded-xl border border-slate-200 space-y-3">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-2">
+                    <Globe className="w-4 h-4 text-brand-teal" />
+                    Client Context
+                  </h4>
+
+                  <div className="space-y-2 text-xs">
+                    <div>
+                      <span className="text-slate-500 block">IP Address:</span>
+                      <span className="font-mono font-semibold text-slate-900">{selectedLog.ipAddress || 'Not recorded'}</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-500 block">User Agent:</span>
+                      <span className="font-mono text-slate-700 text-[11px] break-all">
+                        {selectedLog.userAgent || 'Not recorded'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Differential State / Metadata */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-2">
+                      <Server className="w-4 h-4 text-brand-teal" />
+                      Differential Metadata (JSON)
+                    </h4>
+
+                    <button
+                      onClick={handleCopyMetadata}
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-medium transition"
+                    >
+                      {copied ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                      <span>{copied ? 'Copied' : 'Copy JSON'}</span>
+                    </button>
+                  </div>
+
+                  <pre className="p-4 rounded-xl bg-slate-900 text-teal-300 font-mono text-xs overflow-x-auto max-h-72 border border-slate-800">
+                    {JSON.stringify(selectedLog.metadata || {}, null, 2)}
+                  </pre>
+                </div>
+              </div>
+
+              {/* Drawer Footer */}
+              <div className="p-4 border-t border-slate-100 flex justify-end bg-slate-50/50">
+                <button
+                  onClick={() => setSelectedLog(null)}
+                  className="px-4 py-2 rounded-lg bg-white border border-slate-200 text-slate-700 text-xs font-semibold hover:bg-slate-100 transition shadow-2xs"
+                >
+                  Close Inspector
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Export Modal */}
+        {showExportModal && (
+          <div className="fixed inset-0 z-50 overflow-hidden bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4">
+            <div className="w-full max-w-md bg-white border border-slate-200 rounded-2xl p-6 shadow-2xl space-y-5 animate-in fade-in zoom-in-95 duration-150">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-2 rounded-xl bg-teal-50 text-brand-teal border border-teal-200">
+                    <Download className="w-5 h-5" />
+                  </div>
+                  <h3 className="font-bold text-slate-900 text-base">Export Audit Trail</h3>
+                </div>
+
+                <button
+                  onClick={() => setShowExportModal(false)}
+                  className="text-slate-400 hover:text-slate-700"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="space-y-4 text-xs text-slate-600">
+                <p>
+                  Export all audit logs matching your current filters for compliance reporting, internal reviews, and tax audits.
+                </p>
+
+                <div className="space-y-2">
+                  <label className="font-semibold text-slate-700 block">Export File Format</label>
+                  <div className="grid grid-cols-2 gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setExportFormat('CSV')}
+                      className={`p-3 rounded-xl border text-center font-semibold transition ${
+                        exportFormat === 'CSV'
+                          ? 'border-brand-teal bg-teal-50/50 text-brand-teal ring-1 ring-brand-teal'
+                          : 'border-slate-200 text-slate-700 hover:bg-slate-50'
+                      }`}
+                    >
+                      CSV (Excel / Sheets)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setExportFormat('JSON')}
+                      className={`p-3 rounded-xl border text-center font-semibold transition ${
+                        exportFormat === 'JSON'
+                          ? 'border-brand-teal bg-teal-50/50 text-brand-teal ring-1 ring-brand-teal'
+                          : 'border-slate-200 text-slate-700 hover:bg-slate-50'
+                      }`}
+                    >
+                      JSON (Raw Stream)
+                    </button>
+                  </div>
+                </div>
+
+                <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-amber-900 text-[11px]">
+                  <strong>Formula Injection Defense:</strong> All CSV cells beginning with special characters (=, +, -, @) are automatically sanitized.
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
+                <button
+                  onClick={() => setShowExportModal(false)}
+                  className="px-4 py-2 rounded-lg border border-slate-200 text-slate-700 text-xs font-semibold hover:bg-slate-50 transition"
+                >
+                  Cancel
+                </button>
+
+                <button
+                  onClick={handleExport}
+                  disabled={exporting}
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-brand-teal text-white text-xs font-semibold hover:bg-teal-700 transition shadow-sm disabled:opacity-50"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>{exporting ? 'Generating...' : `Export ${exportFormat}`}</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </AppShell>
   );
 }

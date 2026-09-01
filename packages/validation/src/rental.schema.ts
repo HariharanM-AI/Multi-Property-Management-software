@@ -20,8 +20,8 @@ export const UpdateRentalUnitSchema = CreateRentalUnitSchema.partial().extend({
 export const LeaseBaseSchema = z.object({
   rentalUnitId: z.string().uuid('Invalid rental unit ID'),
   tenantId: z.string().uuid('Invalid tenant ID'),
-  startDate: z.string().datetime({ message: 'Invalid start date format' }),
-  endDate: z.string().datetime({ message: 'Invalid end date format' }),
+  startDate: z.string().min(1, 'Invalid start date format'),
+  endDate: z.string().min(1, 'Invalid end date format'),
   monthlyRent: z.number().positive('Monthly rent must be positive'),
   securityDeposit: z.number().positive('Security deposit must be positive'),
   noticePeriodDays: z.number().int().nonnegative().default(30),

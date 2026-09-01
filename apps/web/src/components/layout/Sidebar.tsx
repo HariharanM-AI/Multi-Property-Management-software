@@ -2,6 +2,7 @@
 
 import React from 'react';
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { PropertyType } from '@propertyos/types';
 import { useAuth } from '@/lib/auth-context';
 import {
@@ -23,9 +24,6 @@ import {
   Zap,
   Receipt,
   Bell,
-  Compass,
-  MessageSquare,
-  ShoppingBag,
   Sparkles,
   History,
   CalendarClock,
@@ -44,16 +42,15 @@ interface NavItem {
   rentalOnly?: boolean;
 }
 
-export const Sidebar: React.FC<SidebarProps> = ({ currentPropertyType, activePath = '/' }) => {
+export const Sidebar: React.FC<SidebarProps> = ({ currentPropertyType, activePath }) => {
   const { user, organization, isAuthenticated } = useAuth();
+  const pathname = usePathname();
+  const currentPath = (pathname || activePath || '/').replace(/\/$/, '') || '/';
 
   const navItems: NavItem[] = [
     { name: 'Dashboard', href: '/', icon: LayoutDashboard },
     { name: 'Properties', href: '/properties', icon: Building2 },
-    { name: 'Beds & Rooms', href: '/pg/rooms', icon: BedDouble, pgOnly: true },
-    { name: 'Occupants & KYC', href: '/tenants', icon: Users },
-    { name: 'Check-Ins', href: '/check-ins', icon: UserCheck },
-    { name: 'Check-Outs', href: '/check-outs', icon: UserMinus },
+    { name: 'Tenants', href: '/tenants', icon: Users },
     { name: 'Agreements', href: '/agreements', icon: FileSignature },
     { name: 'Billing', href: '/billing', icon: ReceiptText },
     { name: 'Invoices', href: '/invoices', icon: FileSpreadsheet },
@@ -61,13 +58,11 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentPropertyType, activePat
     { name: 'Financials', href: '/financials', icon: Zap },
     { name: 'Expenses', href: '/expenses', icon: Receipt },
     { name: 'Reports & P&L', href: '/reports', icon: FileSpreadsheet },
-    { name: 'Maintenance', href: '/maintenance', icon: Wrench },
-    { name: 'Service Desk', href: '/services', icon: Sparkles },
+    { name: 'Maintenance & Facility', href: '/services', icon: Wrench },
     { name: 'Staff & Roster', href: '/staff', icon: UserCheck },
     { name: 'Visitors', href: '/visitors', icon: ShieldCheck },
     { name: 'Inventory', href: '/inventory', icon: Package },
     { name: 'Meal & Mess', href: '/meals', icon: UtensilsCrossed, pgOnly: true },
-    { name: 'Electricity', href: '/electricity', icon: Zap, pgOnly: true },
     { name: 'Notifications', href: '/notifications', icon: Bell },
     { name: 'Audit Trail', href: '/audit', icon: History },
     { name: 'Jobs & Automation', href: '/jobs', icon: CalendarClock },
@@ -79,6 +74,24 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentPropertyType, activePat
     if (item.rentalOnly && currentPropertyType !== PropertyType.RENTAL_HOUSE) return false;
     return true;
   });
+
+  const isRouteActive = (itemHref: string) => {
+    if (itemHref === '/') {
+      return currentPath === '/';
+    }
+    if (itemHref === '/services') {
+      return (
+        currentPath === '/services' ||
+        currentPath.startsWith('/services/') ||
+        currentPath === '/maintenance' ||
+        currentPath.startsWith('/maintenance/')
+      );
+    }
+    if (itemHref === '/settings/organization') {
+      return currentPath.startsWith('/settings');
+    }
+    return currentPath === itemHref || currentPath.startsWith(itemHref + '/');
+  };
 
   const getInitials = () => {
     if (!user) return 'PO';
@@ -112,8 +125,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentPropertyType, activePat
       <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
         {filteredItems.map((item) => {
           const Icon = item.icon;
-          const isActive =
-            activePath === item.href || (item.href === '/settings/organization' && activePath.startsWith('/settings'));
+          const isActive = isRouteActive(item.href);
 
           return (
             <Link

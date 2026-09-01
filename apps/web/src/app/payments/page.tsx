@@ -4,7 +4,9 @@ import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { AppShell } from '@/components/layout/AppShell';
+import { BackButton } from '@/components/ui/BackButton';
 import { useAuth } from '@/lib/auth-context';
+import { getLocalDateString } from '@/lib/date-utils';
 import {
   PaymentDto,
   PaymentMethod,
@@ -49,7 +51,7 @@ export default function PaymentsPage() {
   const [amount, setAmount] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>(PaymentMethod.UPI);
   const [referenceNumber, setReferenceNumber] = useState('');
-  const [paymentDate, setPaymentDate] = useState(new Date().toISOString().split('T')[0]);
+  const [paymentDate, setPaymentDate] = useState(getLocalDateString());
   const [notes, setNotes] = useState('');
   const [savingPayment, setSavingPayment] = useState(false);
 
@@ -227,18 +229,21 @@ export default function PaymentsPage() {
       <div className="space-y-6">
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
+          <div className="space-y-1">
+            <div className="mb-2">
+              <BackButton fallbackHref="/" label="Back to Dashboard" />
+            </div>
             <h1 className="text-2xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
               <CircleDollarSign className="w-7 h-7 text-brand-teal" />
               Payments & Receipts
             </h1>
-            <p className="text-sm text-slate-500 mt-1">
+            <p className="text-sm text-slate-500">
               Record incoming tenant receipts and safely allocate funds to outstanding invoices
             </p>
           </div>
           <button
             onClick={() => setShowRecordModal(true)}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-brand-teal hover:bg-teal-700 text-white rounded-lg text-sm font-semibold transition shadow-sm"
+            className="inline-flex items-center gap-2 px-4 py-2.5 bg-brand-teal hover:bg-teal-700 text-white rounded-lg text-sm font-semibold transition shadow-sm"
           >
             <Plus className="w-4 h-4" />
             Record Payment

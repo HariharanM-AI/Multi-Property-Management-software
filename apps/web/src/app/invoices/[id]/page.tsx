@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { AppShell } from '@/components/layout/AppShell';
+import { BackButton } from '@/components/ui/BackButton';
 import { useAuth } from '@/lib/auth-context';
 import {
   InvoiceDto,
@@ -185,18 +186,18 @@ export default function InvoiceDetailPage() {
         {/* Back Link & Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <Link
-              href="/invoices"
-              className="p-2 rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-600 transition"
-            >
-              <ArrowLeft className="w-5 h-5" />
-            </Link>
+            <BackButton fallbackHref="/invoices" label="Back to Invoices" />
             <div>
-              <div className="flex items-center gap-3">
-                <h1 className="text-2xl font-mono font-bold text-slate-900">{invoice.invoiceNumber}</h1>
+              <div className="flex items-center gap-2">
+                <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
+                  Invoice {invoice.invoiceNumber}
+                </h1>
                 {getStatusBadge(invoice.status)}
               </div>
-              <p className="text-xs text-slate-400 mt-0.5">Created on {new Date(invoice.createdAt).toLocaleString()}</p>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Created on {new Date(invoice.createdAt).toLocaleDateString()} • Due on{' '}
+                {new Date(invoice.dueDate).toLocaleDateString()}
+              </p>
             </div>
           </div>
 

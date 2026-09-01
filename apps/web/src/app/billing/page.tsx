@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { AppShell } from '@/components/layout/AppShell';
 import { useAuth } from '@/lib/auth-context';
+import { getLocalDateString } from '@/lib/date-utils';
 import {
   BillingChargeDto,
   BillingScheduleDto,
@@ -60,7 +61,7 @@ export default function BillingDashboardPage() {
 
   // Generate Invoices Modal
   const [showGenerateModal, setShowGenerateModal] = useState(false);
-  const [asOfDate, setAsOfDate] = useState(new Date().toISOString().split('T')[0]);
+  const [asOfDate, setAsOfDate] = useState(getLocalDateString());
   const [generating, setGenerating] = useState(false);
   const [generateResult, setGenerateResult] = useState<{ count: number } | null>(null);
 
@@ -80,7 +81,7 @@ export default function BillingDashboardPage() {
   const [schedChargeId, setSchedChargeId] = useState('');
   const [schedAmount, setSchedAmount] = useState('');
   const [schedFreq, setSchedFreq] = useState<BillingFrequency>(BillingFrequency.MONTHLY);
-  const [schedStartDate, setSchedStartDate] = useState(new Date().toISOString().split('T')[0]);
+  const [schedStartDate, setSchedStartDate] = useState(getLocalDateString());
   const [savingSchedule, setSavingSchedule] = useState(false);
 
   const getHeaders = () => {

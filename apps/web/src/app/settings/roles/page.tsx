@@ -3,6 +3,7 @@
 import React from 'react';
 import { AppShell } from '@/components/layout/AppShell';
 import { Card } from '@/components/ui/Card';
+import { BackButton } from '@/components/ui/BackButton';
 import {
   Shield,
   CheckCircle2,
@@ -66,6 +67,11 @@ export default function RolesPermissionsPage() {
   return (
     <AppShell activePath="/settings">
       <div className="space-y-6 max-w-6xl mx-auto">
+        {/* Navigation Back Button */}
+        <div className="flex items-center justify-between">
+          <BackButton fallbackHref="/" label="Back to Dashboard" />
+        </div>
+
         <div>
           <h1 className="text-2xl font-bold text-brand-navy">Role & Permissions Matrix</h1>
           <p className="text-xs text-surface-textSecondary mt-1">

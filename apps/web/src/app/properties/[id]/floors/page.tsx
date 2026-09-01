@@ -6,6 +6,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { AppShell } from '@/components/layout/AppShell';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
+import { BackButton } from '@/components/ui/BackButton';
 import { useAuth } from '@/lib/auth-context';
 import {
   PropertyDto,
@@ -384,7 +385,10 @@ export default function PgFloorsPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ floorNumber, name: floorName }),
+        body: JSON.stringify({
+          floorNumber: Number(floorNumber) || 1,
+          name: floorName.trim() || (floorNumber === 0 ? 'Ground Floor' : `Floor ${floorNumber}`),
+        }),
       });
       const json = await res.json();
       if (res.ok && json.success) {
@@ -719,13 +723,15 @@ export default function PgFloorsPage() {
   return (
     <AppShell>
       <div className="max-w-7xl mx-auto py-8 px-4 space-y-6">
+        {/* Navigation Back Button */}
+        <div className="flex items-center justify-between">
+          <BackButton fallbackHref={`/properties/${propertyId}`} label="Back to Property" />
+        </div>
+
         {/* Header Section */}
         <div className="flex flex-col md:flex-row md:items-center justify-between border-b border-surface-border pb-6 gap-4">
           <div className="space-y-1">
             <div className="flex items-center gap-2">
-              <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-brand-teal/10 text-brand-teal border border-brand-teal/20">
-                {property.code}
-              </span>
               <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-slate-100 text-slate-800 border border-slate-200">
                 PG / CO-LIVING
               </span>

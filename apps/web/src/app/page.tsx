@@ -231,45 +231,6 @@ export default function HomePage() {
             />
           </div>
 
-          {/* Owner Automation & Time-Saving Intelligence */}
-          <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 rounded-2xl p-5 text-brand-white border border-slate-700/80 shadow-md">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-              <div className="space-y-1">
-                <div className="flex items-center gap-2">
-                  <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-brand-teal text-brand-white font-mono">
-                    Owner Automation Engine
-                  </span>
-                  <span className="text-xs text-slate-300 font-medium">BullMQ 5.41 & Redis Active</span>
-                </div>
-                <h3 className="text-base font-bold text-brand-white flex items-center gap-2">
-                  <span>~18.5 Hours Saved This Month</span>
-                  <span className="text-xs font-normal text-slate-300 font-sans">via automated recurring pipelines</span>
-                </h3>
-                <p className="text-xs text-slate-300">
-                  Automated monthly invoicing, SLA ticket escalation, payment reminder queues, and lease expiry monitoring.
-                </p>
-              </div>
-
-              <div className="flex flex-wrap items-center gap-3">
-                <div className="px-3 py-2 rounded-xl bg-slate-800/80 border border-slate-700 text-center min-w-[100px]">
-                  <span className="text-[10px] font-semibold text-slate-400 block uppercase">Auto Invoices</span>
-                  <span className="text-sm font-bold text-teal-300 block">100% On-Time</span>
-                </div>
-                <div className="px-3 py-2 rounded-xl bg-slate-800/80 border border-slate-700 text-center min-w-[100px]">
-                  <span className="text-[10px] font-semibold text-slate-400 block uppercase">SLA Escalations</span>
-                  <span className="text-sm font-bold text-emerald-300 block">Active</span>
-                </div>
-                <Link
-                  href="/jobs"
-                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-brand-teal text-brand-white text-xs font-bold hover:bg-teal-600 transition-colors shadow-sm"
-                >
-                  <span>Queue Monitor</span>
-                  <ArrowRight className="w-3.5 h-3.5" />
-                </Link>
-              </div>
-            </div>
-          </div>
-
           {/* Action Items Alert Center */}
           <div className="bg-brand-white border border-surface-border rounded-2xl p-6 shadow-sm space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-surface-border pb-4">

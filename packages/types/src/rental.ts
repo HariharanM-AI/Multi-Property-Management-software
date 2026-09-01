@@ -59,6 +59,7 @@ export interface LeaseDto {
   createdAt: Date;
   updatedAt: Date;
   escalations?: RentEscalationDto[];
+  tenant?: any;
 }
 
 export interface CreateLeaseDto {

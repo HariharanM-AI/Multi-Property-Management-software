@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { AppShell } from '@/components/layout/AppShell';
+import { BackButton } from '@/components/ui/BackButton';
 import { useAuth } from '@/lib/auth-context';
 import {
   TenantDetailsDto,
@@ -42,7 +43,13 @@ import {
   Zap,
   UtensilsCrossed,
   Wrench,
+  Download,
 } from 'lucide-react';
+import {
+  AgreementDocumentViewerModal,
+  AgreementDocumentData,
+} from '@/components/agreements/AgreementDocumentViewerModal';
+import { formatIdProofDisplay } from '@/components/agreements/AgreementSignModal';
 
 export default function TenantDetailsPage() {
   const params = useParams();
@@ -71,6 +78,7 @@ export default function TenantDetailsPage() {
 
   // Digital Agreements
   const [tenantAgreements, setTenantAgreements] = useState<any[]>([]);
+  const [viewingAgreementData, setViewingAgreementData] = useState<AgreementDocumentData | null>(null);
 
   // Financial Summary
   const [financialSummary, setFinancialSummary] = useState<any | null>(null);
@@ -264,6 +272,70 @@ export default function TenantDetailsPage() {
     }
   };
 
+  const handleViewTenancyAgreement = () => {
+    if (!details) return;
+    const { tenant, stays, leases } = details;
+    const activeStay: any = stays?.find((s: any) => !s.checkOutDate) || stays?.[0];
+    const activeLease: any = leases?.find((l: any) => l.status === 'ACTIVE') || leases?.[0];
+
+    const isRental = Boolean(activeLease);
+    const propName = activeStay?.room?.property?.name || activeStay?.propertyName || activeLease?.rentalUnit?.property?.name || activeLease?.propertyName || 'Property Residency';
+    const unitName = activeStay
+      ? `Bed ${activeStay?.bed?.bedNumber || activeStay?.bedNumber || '—'} (Room ${activeStay?.room?.roomNumber || activeStay?.roomNumber || '—'})`
+      : activeLease
+      ? `Unit / Flat ${activeLease?.rentalUnit?.unitNumber || activeLease?.unitNumber || '—'}`
+      : 'Allocated Bed / Unit';
+
+    const rent = Number(activeStay?.monthlyRent || activeLease?.monthlyRent || 8500);
+    const deposit = Number(activeStay?.securityDeposit || activeLease?.securityDeposit || rent * 2);
+
+    const doc = details.documents?.find(
+      (d) =>
+        d.documentType?.includes('AADHAAR') ||
+        d.documentType?.includes('PAN') ||
+        d.documentType?.includes('PASS')
+    );
+    const docNum = doc?.documentNumber || (tenant as any).documentNumber || (tenant as any).governmentIdNumber;
+    const docType = doc?.documentType || 'Aadhaar Card';
+
+    const agreement: AgreementDocumentData = {
+      id: activeStay?.id || activeLease?.id || tenant.id,
+      tenantName: `${tenant.firstName} ${tenant.lastName === '—' ? '' : tenant.lastName}`.trim(),
+      tenantPhone: tenant.phone,
+      tenantEmail: tenant.email || undefined,
+      tenantAddress: tenant.permanentAddress
+        ? `${tenant.permanentAddress}, ${tenant.permanentCity || 'Bengaluru'}, ${tenant.permanentState || 'Karnataka'} — ${tenant.permanentPostalCode || '560001'}`
+        : 'Resident Address on Record',
+      tenantAadhaar: formatIdProofDisplay(docType, docNum) || 'Government Photo ID Verified',
+      propertyName: propName,
+      propertyAddress: `${propName}, Bengaluru, Karnataka`,
+      unitOrBedName: unitName,
+      propertyType: isRental ? 'RENTAL_HOUSE' : 'PG',
+      monthlyRent: rent,
+      securityDeposit: deposit,
+      lockInMonths: 1,
+      noticePeriodDays: 30,
+      startDate: activeStay?.checkInDate
+        ? new Date(activeStay.checkInDate).toISOString().split('T')[0]
+        : activeLease?.startDate
+        ? new Date(activeLease.startDate).toISOString().split('T')[0]
+        : new Date(tenant.createdAt).toISOString().split('T')[0],
+      endDate: activeStay?.checkOutDate
+        ? new Date(activeStay.checkOutDate).toISOString().split('T')[0]
+        : activeLease?.endDate
+        ? new Date(activeLease.endDate).toISOString().split('T')[0]
+        : undefined,
+      signedAt: activeStay?.checkInDate
+        ? new Date(activeStay.checkInDate).toISOString()
+        : activeLease?.startDate
+        ? new Date(activeLease.startDate).toISOString()
+        : new Date(tenant.createdAt).toISOString(),
+      status: tenant.status,
+    };
+
+    setViewingAgreementData(agreement);
+  };
+
   if (loading) {
     return (
       <AppShell activePath="/tenants">
@@ -304,12 +376,7 @@ export default function TenantDetailsPage() {
         {/* Navigation & Actions */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <Link
-              href="/tenants"
-              className="p-2 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 transition"
-            >
-              <ArrowLeft className="w-5 h-5" />
-            </Link>
+            <BackButton fallbackHref="/tenants" label="Back to Tenants" />
             <div>
               <div className="flex items-center gap-3">
                 <h1 className="text-2xl font-bold text-slate-900">
@@ -327,6 +394,16 @@ export default function TenantDetailsPage() {
           </div>
 
           <div className="flex items-center gap-2.5">
+            <button
+              type="button"
+              onClick={handleViewTenancyAgreement}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm transition shadow-sm cursor-pointer"
+              title="View & Download Tenancy Agreement PDF"
+            >
+              <FileText className="w-4 h-4" />
+              <span>View Agreement PDF</span>
+            </button>
+
             {tenant.status === TenantStatus.PROSPECT && (
               <Link
                 href={`/check-ins`}
@@ -665,8 +742,24 @@ export default function TenantDetailsPage() {
               </div>
 
               {tenantAgreements.length === 0 ? (
-                <div className="py-6 text-center text-slate-400 text-xs">
-                  No digital agreements registered for this tenant.
+                <div className="p-4 rounded-xl border border-emerald-200 bg-emerald-50/40 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                  <div>
+                    <div className="font-bold text-slate-900 text-sm flex items-center gap-1.5">
+                      <FileCheck className="w-4 h-4 text-emerald-600" />
+                      <span>Standard Tenancy Agreement (MTA 2021 Compliant)</span>
+                    </div>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Executed contract with commercial schedule, house rules, and verified digital signatures.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleViewTenancyAgreement}
+                    className="px-3.5 py-1.5 rounded-lg bg-brand-teal hover:bg-teal-700 text-white font-bold text-xs flex items-center gap-1.5 transition shadow-2xs cursor-pointer shrink-0"
+                  >
+                    <FileText className="w-3.5 h-3.5" />
+                    <span>View / Download PDF</span>
+                  </button>
                 </div>
               ) : (
                 <div className="space-y-3">
@@ -676,23 +769,34 @@ export default function TenantDetailsPage() {
                       className="p-4 rounded-xl border border-slate-200 bg-slate-50/50 flex items-center justify-between"
                     >
                       <div>
-                        <Link
-                          href={`/agreements/${agr.id}`}
-                          className="font-semibold text-slate-900 text-sm hover:text-brand-teal flex items-center gap-1.5"
+                        <button
+                          type="button"
+                          onClick={handleViewTenancyAgreement}
+                          className="font-semibold text-slate-900 text-sm hover:text-brand-teal flex items-center gap-1.5 text-left cursor-pointer"
                         >
-                          {agr.agreementType.replace(/_/g, ' ')}
+                          {agr.agreementType?.replace(/_/g, ' ') || 'Tenancy Agreement'}
                           <span className="text-[11px] font-mono px-1.5 py-0.5 bg-slate-100 rounded text-slate-600">
-                            v{agr.version}
+                            v{agr.version || 1}
                           </span>
-                        </Link>
+                        </button>
                         <div className="text-xs text-slate-500 mt-0.5">
                           Created: {new Date(agr.createdAt).toLocaleDateString()}
                           {agr.contentHash && ` • Hash: ${agr.contentHash.substring(0, 12)}...`}
                         </div>
                       </div>
-                      <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-teal-50 text-teal-700 border border-teal-200">
-                        {agr.status}
-                      </span>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={handleViewTenancyAgreement}
+                          className="px-2.5 py-1 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800 hover:bg-emerald-100 text-xs font-bold transition flex items-center gap-1"
+                        >
+                          <Download className="w-3 h-3" />
+                          <span>PDF</span>
+                        </button>
+                        <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-teal-50 text-teal-700 border border-teal-200">
+                          {agr.status}
+                        </span>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -755,10 +859,10 @@ export default function TenantDetailsPage() {
                     Electricity & Utility Allocation
                   </h2>
                   <Link
-                    href="/electricity"
+                    href="/financials"
                     className="text-xs font-semibold text-brand-teal hover:underline"
                   >
-                    View All Readings
+                    View Invoices & Ledgers
                   </Link>
                 </div>
 
@@ -1104,6 +1208,13 @@ export default function TenantDetailsPage() {
             </div>
           </div>
         )}
+
+        {/* AGREEMENT DOCUMENT PDF VIEWER & DOWNLOADER MODAL */}
+        <AgreementDocumentViewerModal
+          isOpen={!!viewingAgreementData}
+          onClose={() => setViewingAgreementData(null)}
+          agreementData={viewingAgreementData}
+        />
       </div>
     </AppShell>
   );

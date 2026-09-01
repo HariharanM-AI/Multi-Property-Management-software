@@ -55,6 +55,14 @@ export interface PropertyDto {
   longitude?: number | null;
   contactPhone?: string | null;
   contactEmail?: string | null;
+  ownerName?: string | null;
+  ownerAddress?: string | null;
+  ownerPhone?: string | null;
+  ownerSignature?: string | null;
+  noticePeriodDays?: number | null;
+  lockInPeriodValue?: number | null;
+  lockInPeriodUnit?: 'DAYS' | 'MONTHS' | 'YEARS' | null;
+  lockInMonths?: number | null;
   images: string[];
   amenities?: AmenityDto[];
   media?: PropertyMediaDto[];
@@ -81,6 +89,14 @@ export interface CreatePropertyDto {
   longitude?: number | null;
   contactPhone?: string | null;
   contactEmail?: string | null;
+  ownerName?: string | null;
+  ownerAddress?: string | null;
+  ownerPhone?: string | null;
+  ownerSignature?: string | null;
+  noticePeriodDays?: number | null;
+  lockInPeriodValue?: number | null;
+  lockInPeriodUnit?: 'DAYS' | 'MONTHS' | 'YEARS' | null;
+  lockInMonths?: number | null;
   amenityIds?: string[];
 }
 
@@ -101,6 +117,14 @@ export interface UpdatePropertyDto {
   longitude?: number | null;
   contactPhone?: string | null;
   contactEmail?: string | null;
+  ownerName?: string | null;
+  ownerAddress?: string | null;
+  ownerPhone?: string | null;
+  ownerSignature?: string | null;
+  noticePeriodDays?: number | null;
+  lockInPeriodValue?: number | null;
+  lockInPeriodUnit?: 'DAYS' | 'MONTHS' | 'YEARS' | null;
+  lockInMonths?: number | null;
   amenityIds?: string[];
 }
 

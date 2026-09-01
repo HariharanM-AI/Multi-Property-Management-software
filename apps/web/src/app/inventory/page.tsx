@@ -436,6 +436,9 @@ export default function InventoryPage() {
           title="Property & Room Inventory"
           subtitle="Operational asset ledger, appliance serial tracking, room & unit assignments, and condition grading"
           icon={Package}
+          showBack={true}
+          backHref="/"
+          backLabel="Back to Dashboard"
           actions={
             <Button
               variant="primary"

@@ -1,15 +1,20 @@
 import { Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { LocalStorageDriver } from './local-storage.driver';
+import { R2StorageDriver } from './r2-storage.driver';
 import { IStorageDriver, UploadedFileResult } from './storage.interface';
 
 @Injectable()
 export class StorageService implements IStorageDriver {
   private readonly activeDriver: IStorageDriver;
 
-  constructor(private readonly localDriver: LocalStorageDriver) {
-    // In local development or testing, use local storage driver.
-    // In future cloud environments, GCSStorageDriver can be injected without altering property domain logic.
-    this.activeDriver = this.localDriver;
+  constructor(
+    private readonly localDriver: LocalStorageDriver,
+    private readonly r2Driver: R2StorageDriver,
+    private readonly configService: ConfigService
+  ) {
+    const driverType = this.configService.get<string>('STORAGE_DRIVER', 'local').toLowerCase();
+    this.activeDriver = driverType === 'r2' ? this.r2Driver : this.localDriver;
   }
 
   validateFile(file: { originalname: string; mimetype: string; size: number }): void {

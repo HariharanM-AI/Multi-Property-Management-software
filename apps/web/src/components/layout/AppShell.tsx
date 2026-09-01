@@ -13,11 +13,11 @@ interface AppShellProps {
         setPropertyType: (t: PropertyType) => void;
       }) => React.ReactNode);
   activePath?: string;
+  propertyName?: string;
 }
 
-export const AppShell: React.FC<AppShellProps> = ({ children, activePath = '/' }) => {
+export const AppShell: React.FC<AppShellProps> = ({ children, activePath, propertyName }) => {
   const [propertyType, setPropertyType] = useState<PropertyType>(PropertyType.PG);
-  const [propertyName] = useState<string>('GreenGlen PG Residency, HSR Layout');
 
   return (
     <div className="flex h-screen bg-surface-subtle overflow-hidden">
@@ -30,9 +30,10 @@ export const AppShell: React.FC<AppShellProps> = ({ children, activePath = '/' }
           currentPropertyType={propertyType}
           onPropertyTypeChange={setPropertyType}
           selectedPropertyName={
-            propertyType === PropertyType.PG
-              ? propertyName
-              : 'Emerald Heights Apt #402, Indiranagar'
+            propertyName ||
+            (propertyType === PropertyType.PG
+              ? 'GreenGlen PG Residency, HSR Layout'
+              : 'Emerald Heights Apt #402, Indiranagar')
           }
         />
 

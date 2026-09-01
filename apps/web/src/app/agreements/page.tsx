@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { AppShell } from '@/components/layout/AppShell';
+import { BackButton } from '@/components/ui/BackButton';
 import { useAuth } from '@/lib/auth-context';
 import {
   AgreementDto,
@@ -286,7 +287,10 @@ export default function AgreementsDashboardPage() {
       <div className="space-y-6 max-w-7xl mx-auto pb-16">
         {/* Page Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
+          <div className="space-y-1">
+            <div className="mb-2">
+              <BackButton fallbackHref="/" label="Back to Dashboard" />
+            </div>
             <div className="flex items-center gap-2.5">
               <div className="p-2 rounded-xl bg-teal-50 border border-teal-200 text-brand-teal">
                 <FileSignature className="w-6 h-6" />

@@ -3,6 +3,8 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { AppShell } from '@/components/layout/AppShell';
+import { BackButton } from '@/components/ui/BackButton';
 import {
   NotificationDto,
   NotificationType,
@@ -190,30 +192,30 @@ export default function NotificationsPage() {
 
       if (res.ok) {
         const json = await res.json();
-        if (json.data && Array.isArray(json.data.data)) {
-          let list = json.data.data as NotificationDto[];
+        const raw = json.data || json;
+        const listData = Array.isArray(raw) ? raw : (Array.isArray(raw?.data) ? raw.data : []);
+        let list = listData as NotificationDto[];
 
-          // Client-side category filtering for composite tabs
-          if (activeTab === 'BILLING') {
-            list = list.filter(
-              (n) =>
-                n.type === NotificationType.RENT_DUE ||
-                n.type === NotificationType.PAYMENT_RECEIVED ||
-                n.type === NotificationType.PAYMENT_OVERDUE
-            );
-          } else if (activeTab === 'LEASES') {
-            list = list.filter(
-              (n) =>
-                n.type === NotificationType.LEASE_EXPIRING ||
-                n.type === NotificationType.CHECKOUT_REMINDER ||
-                n.type === NotificationType.DOCUMENT_EXPIRING
-            );
-          }
-
-          setNotifications(list);
-          setTotal(json.data.total);
-          setTotalPages(json.data.totalPages);
+        // Client-side category filtering for composite tabs
+        if (activeTab === 'BILLING') {
+          list = list.filter(
+            (n) =>
+              n.type === NotificationType.RENT_DUE ||
+              n.type === NotificationType.PAYMENT_RECEIVED ||
+              n.type === NotificationType.PAYMENT_OVERDUE
+          );
+        } else if (activeTab === 'LEASES') {
+          list = list.filter(
+            (n) =>
+              n.type === NotificationType.LEASE_EXPIRING ||
+              n.type === NotificationType.CHECKOUT_REMINDER ||
+              n.type === NotificationType.DOCUMENT_EXPIRING
+          );
         }
+
+        setNotifications(list);
+        setTotal(raw?.total || json?.total || list.length);
+        setTotalPages(raw?.totalPages || json?.totalPages || 1);
       }
     } catch {
       // Ignore network error
@@ -287,8 +289,13 @@ export default function NotificationsPage() {
   }, [unreadCount, total]);
 
   return (
-    <div className="min-h-screen bg-slate-50/50 p-4 sm:p-6 lg:p-8">
-      <div className="max-w-6xl mx-auto space-y-6">
+    <AppShell activePath="/notifications">
+      <div className="space-y-6 max-w-7xl mx-auto pb-12">
+        {/* Navigation Back Button */}
+        <div className="flex items-center justify-between">
+          <BackButton fallbackHref="/" label="Back to Dashboard" />
+        </div>
+
         {/* Header Section */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-brand-white p-6 rounded-2xl border border-surface-border shadow-sm">
           <div>
@@ -350,18 +357,18 @@ export default function NotificationsPage() {
 
           <div className="bg-brand-white p-4 rounded-xl border border-surface-border shadow-sm">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-xs font-medium text-surface-textSecondary">System Scope</span>
-              <Sparkles className="w-4 h-4 text-brand-teal" />
+              <span className="text-xs font-medium text-surface-textSecondary">Alert Scope</span>
+              <ShieldCheck className="w-4 h-4 text-brand-teal" />
             </div>
-            <p className="text-xs font-semibold text-brand-teal">Zero-AI Relational</p>
+            <p className="text-sm font-bold text-brand-navy">Operations & Finance</p>
           </div>
 
           <div className="bg-brand-white p-4 rounded-xl border border-surface-border shadow-sm">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-xs font-medium text-surface-textSecondary">Delivery Engine</span>
-              <Clock className="w-4 h-4 text-amber-500" />
+              <span className="text-xs font-medium text-surface-textSecondary">Delivery Channel</span>
+              <Clock className="w-4 h-4 text-emerald-500" />
             </div>
-            <p className="text-xs font-semibold text-brand-navy">Deterministic Poll</p>
+            <p className="text-sm font-bold text-emerald-600">Active In-App Feed</p>
           </div>
         </div>
 
@@ -617,6 +624,6 @@ export default function NotificationsPage() {
           )}
         </div>
       </div>
-    </div>
+    </AppShell>
   );
 }

@@ -10,6 +10,7 @@ import { StatusBadge } from '@/components/ui/StatusBadge';
 import { Button } from '@/components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { getLocalDateString } from '@/lib/date-utils';
 import {
   LogIn,
   CheckCircle2,
@@ -154,7 +155,7 @@ export default function CheckInsPage() {
   const [wizardBedId, setWizardBedId] = useState('');
   const [wizardLeaseId, setWizardLeaseId] = useState('');
   const [wizardCheckInDate, setWizardCheckInDate] = useState(
-    new Date().toISOString().split('T')[0]
+    getLocalDateString()
   );
   const [wizardExpectedCheckoutDate, setWizardExpectedCheckoutDate] = useState('');
   const [wizardNotes, setWizardNotes] = useState('');
@@ -188,7 +189,7 @@ export default function CheckInsPage() {
   }, [wizardTenantId, wizardPropertyId]);
 
   useEffect(() => {
-    if (wizardPropertyId) {
+    if (wizardPropertyId && Array.isArray(properties)) {
       const prop = properties.find((p) => p.id === wizardPropertyId);
       if (prop?.propertyType === 'PG') {
         fetchFloors(wizardPropertyId);
@@ -210,9 +211,12 @@ export default function CheckInsPage() {
         fetch('/api/v1/tenants', { credentials: 'include' }).then((r) => r.json()).catch(() => ({ data: [] })),
       ]);
 
-      setCheckIns(checkInsRes.data || []);
-      setProperties(propsRes.data || []);
-      setTenants(tenantsRes.data || []);
+      const cList = Array.isArray(checkInsRes) ? checkInsRes : (checkInsRes?.data || []);
+      setCheckIns(Array.isArray(cList) ? cList : []);
+      const pList = Array.isArray(propsRes) ? propsRes : (propsRes?.data || []);
+      setProperties(Array.isArray(pList) ? pList : []);
+      const tList = Array.isArray(tenantsRes) ? tenantsRes : (tenantsRes?.data || []);
+      setTenants(Array.isArray(tList) ? tList : []);
     } catch (err) {
       console.error('Failed to load check-in dashboard data', err);
     } finally {
@@ -391,7 +395,7 @@ export default function CheckInsPage() {
     setWizardLeaseId('');
     setSelectedFloorId('');
     setSelectedRoomId('');
-    setWizardCheckInDate(new Date().toISOString().split('T')[0]);
+    setWizardCheckInDate(getLocalDateString());
     setWizardExpectedCheckoutDate('');
     setWizardNotes('');
     setWizardError('');
@@ -440,6 +444,9 @@ export default function CheckInsPage() {
           title="Digital Check-In & Onboarding"
           subtitle="Manage digital tenant check-in workflows, space allocation, and onboarding verification"
           icon={LogIn}
+          showBack={true}
+          backHref="/"
+          backLabel="Back to Dashboard"
           actions={
             <div className="flex items-center gap-2.5">
               <Button

@@ -10,6 +10,7 @@ import { StatusBadge } from '@/components/ui/StatusBadge';
 import { Button } from '@/components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { getLocalDateString } from '@/lib/date-utils';
 import {
   LogOut,
   CheckCircle2,
@@ -124,7 +125,7 @@ export default function CheckoutsPage() {
   const [wizardPropertyId, setWizardPropertyId] = useState<string>('');
   const [wizardTenantId, setWizardTenantId] = useState<string>('');
   const [wizardCheckoutDate, setWizardCheckoutDate] = useState<string>(
-    new Date().toISOString().split('T')[0]
+    getLocalDateString()
   );
   const [wizardReason, setWizardReason] = useState<string>('');
   const [wizardLoading, setWizardLoading] = useState(false);
@@ -180,7 +181,7 @@ export default function CheckoutsPage() {
     setIsWizardOpen(true);
     setWizardPropertyId(properties[0]?.id || '');
     setWizardTenantId('');
-    setWizardCheckoutDate(new Date().toISOString().split('T')[0]);
+    setWizardCheckoutDate(getLocalDateString());
     setWizardReason('');
     setWizardError(null);
   };
@@ -372,6 +373,9 @@ export default function CheckoutsPage() {
           title="Digital Check-Out & Settlement"
           subtitle="Manage tenant move-outs, inventory release, lease terminations, and deterministic deposit settlements"
           icon={LogOut}
+          showBack={true}
+          backHref="/"
+          backLabel="Back to Dashboard"
           actions={
             <Button
               variant="primary"

@@ -4,7 +4,9 @@ import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { AppShell } from '@/components/layout/AppShell';
+import { BackButton } from '@/components/ui/BackButton';
 import { useAuth } from '@/lib/auth-context';
+import { getLocalDateString } from '@/lib/date-utils';
 import {
   InvoiceDto,
   InvoiceSummaryDto,
@@ -52,9 +54,9 @@ export default function InvoicesPage() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [formTenantId, setFormTenantId] = useState('');
   const [formPropertyId, setFormPropertyId] = useState('');
-  const [formIssueDate, setFormIssueDate] = useState(new Date().toISOString().split('T')[0]);
+  const [formIssueDate, setFormIssueDate] = useState(getLocalDateString());
   const [formDueDate, setFormDueDate] = useState(
-    new Date(Date.now() + 5 * 86400000).toISOString().split('T')[0]
+    getLocalDateString(new Date(Date.now() + 5 * 86400000))
   );
   const [formNotes, setFormNotes] = useState('');
   const [formAdjustments, setFormAdjustments] = useState('0');
@@ -231,21 +233,25 @@ export default function InvoicesPage() {
       <div className="space-y-6">
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
+          <div className="space-y-1">
+            <div className="mb-2">
+              <BackButton fallbackHref="/" label="Back to Dashboard" />
+            </div>
             <h1 className="text-2xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
               <FileSpreadsheet className="w-7 h-7 text-brand-teal" />
               Invoices & Receivables
             </h1>
-            <p className="text-sm text-slate-500 mt-1">
+            <p className="text-sm text-slate-500">
               Issue tenant invoices, track payment progress, and manage receivable lifecycles
             </p>
           </div>
+
           <button
             onClick={() => setShowCreateModal(true)}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-brand-teal hover:bg-teal-700 text-white rounded-lg text-sm font-semibold transition shadow-sm"
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-brand-teal text-white font-medium text-sm hover:bg-teal-700 transition shadow-sm"
           >
             <Plus className="w-4 h-4" />
-            Create Invoice
+            Generate Invoice
           </button>
         </div>
 

@@ -443,20 +443,32 @@ export class DiscoveryService {
    * Returns deterministic curated featured properties
    */
   async getFeaturedProperties(limit = 6): Promise<PropertyDiscoveryDto[]> {
-    const queryResult = await this.searchProperties({
+    const availableResult = await this.searchProperties({
       page: 1,
-      limit: Math.max(limit * 4, 20),
+      limit,
+      availableOnly: true,
       sortBy: DiscoverySortBy.NEWEST,
     });
 
-    // Prioritize properties with availability
-    const availableFirst = [...queryResult.items].sort((a, b) => {
-      if (a.hasAvailability && !b.hasAvailability) return -1;
-      if (!a.hasAvailability && b.hasAvailability) return 1;
-      return 0;
+    if (availableResult.items.length >= limit) {
+      return availableResult.items.slice(0, limit);
+    }
+
+    const generalResult = await this.searchProperties({
+      page: 1,
+      limit,
+      sortBy: DiscoverySortBy.NEWEST,
     });
 
-    return availableFirst.slice(0, limit);
+    const combined = [...availableResult.items];
+    for (const item of generalResult.items) {
+      if (!combined.some((c) => c.id === item.id)) {
+        combined.push(item);
+      }
+      if (combined.length >= limit) break;
+    }
+
+    return combined.slice(0, limit);
   }
 
   /**

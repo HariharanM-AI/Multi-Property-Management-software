@@ -4,7 +4,9 @@ import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { AppShell } from '@/components/layout/AppShell';
+import { BackButton } from '@/components/ui/BackButton';
 import { useAuth } from '@/lib/auth-context';
+import { getLocalDateString } from '@/lib/date-utils';
 import {
   MealPlanDto,
   MealSubscriptionDto,
@@ -68,7 +70,7 @@ export default function MealsManagementPage() {
   const [tenants, setTenants] = useState<any[]>([]);
 
   // Matrix Filter State
-  const [matrixDate, setMatrixDate] = useState(new Date().toISOString().split('T')[0]);
+  const [matrixDate, setMatrixDate] = useState(getLocalDateString());
   const [matrixSearch, setMatrixSearch] = useState('');
   const [savingAttendance, setSavingAttendance] = useState(false);
 
@@ -90,14 +92,14 @@ export default function MealsManagementPage() {
   const [showSubModal, setShowSubModal] = useState(false);
   const [subTenantId, setSubTenantId] = useState('');
   const [subPlanId, setSubPlanId] = useState('');
-  const [subStartDate, setSubStartDate] = useState(new Date().toISOString().split('T')[0]);
+  const [subStartDate, setSubStartDate] = useState(getLocalDateString());
   const [subEndDate, setSubEndDate] = useState('');
   const [savingSub, setSavingSub] = useState(false);
 
   // Generate Charges Modal State
   const [showGenerateModal, setShowGenerateModal] = useState(false);
-  const [genPeriodStart, setGenPeriodStart] = useState(new Date().toISOString().split('T')[0]);
-  const [genPeriodEnd, setGenPeriodEnd] = useState(new Date().toISOString().split('T')[0]);
+  const [genPeriodStart, setGenPeriodStart] = useState(getLocalDateString());
+  const [genPeriodEnd, setGenPeriodEnd] = useState(getLocalDateString());
   const [genAutoInvoice, setGenAutoInvoice] = useState(true);
   const [generatingCharges, setGeneratingCharges] = useState(false);
 
@@ -173,23 +175,27 @@ export default function MealsManagementPage() {
 
       if (sumRes.ok) {
         const sumJson = await sumRes.json();
-        setSummary(sumJson.data || sumJson);
+        setSummary(sumJson?.data || sumJson);
       }
       if (planRes.ok) {
         const pJson = await planRes.json();
-        setPlans(pJson.data || pJson);
+        const raw = pJson?.data || pJson;
+        setPlans(Array.isArray(raw) ? raw : []);
       }
       if (subRes.ok) {
         const sJson = await subRes.json();
-        setSubscriptions(sJson.data || sJson);
+        const raw = sJson?.data || sJson;
+        setSubscriptions(Array.isArray(raw) ? raw : []);
       }
       if (chgRes.ok) {
         const cJson = await chgRes.json();
-        setCharges(cJson.data || cJson);
+        const raw = cJson?.data || cJson;
+        setCharges(Array.isArray(raw) ? raw : []);
       }
       if (matRes.ok) {
         const mJson = await matRes.json();
-        setMatrix(mJson.data || mJson);
+        const raw = mJson?.data || mJson;
+        setMatrix(Array.isArray(raw) ? raw : []);
       }
     } catch (err: any) {
       setErrorMsg(err.message || 'Failed to fetch meals data');
@@ -444,6 +450,11 @@ export default function MealsManagementPage() {
   return (
     <AppShell activePath="/meals">
       <div className="p-8 max-w-7xl mx-auto space-y-6">
+        {/* Navigation Back Button */}
+        <div className="flex items-center justify-between">
+          <BackButton fallbackHref="/" label="Back to Dashboard" />
+        </div>
+
         {/* Header & Controls */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
@@ -647,27 +658,29 @@ export default function MealsManagementPage() {
                   )}
                 </div>
 
-                {/* Quick Attendance / Operations Banner */}
+                {/* Operations & Subscriptions Summary */}
                 <div className="space-y-6">
-                  <div className="bg-gradient-to-br from-slate-900 to-brand-navy rounded-xl p-6 text-white shadow-sm">
-                    <h3 className="font-semibold text-base">Warden Daily Mess Operations</h3>
-                    <p className="text-xs text-slate-300 mt-1 leading-relaxed">
-                      Use the interactive <strong>Daily Attendance Matrix</strong> to mark meal consumption with a single click per tenant or trigger bulk meal marking for the entire mess hall.
+                  <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-6 space-y-4">
+                    <div className="flex items-center justify-between">
+                      <h4 className="font-semibold text-slate-900 text-sm">Meal Operations</h4>
+                    </div>
+                    <p className="text-xs text-slate-500">
+                      Record daily resident meal attendance or generate monthly meal billing charges across active subscriptions.
                     </p>
-                    <div className="mt-4 flex flex-wrap gap-3">
+                    <div className="flex flex-wrap gap-3">
                       <button
                         onClick={() => setActiveTab('matrix')}
-                        className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-brand-teal text-white text-xs font-medium hover:bg-teal-600 transition-colors"
+                        className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-brand-teal text-white text-xs font-semibold hover:bg-teal-700 transition-colors shadow-sm"
                       >
                         <UtensilsCrossed className="w-3.5 h-3.5" />
-                        <span>Open Attendance Matrix</span>
+                        <span>Attendance Matrix</span>
                       </button>
                       <button
                         onClick={() => setShowGenerateModal(true)}
-                        className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-800 text-slate-200 text-xs font-medium hover:bg-slate-700 border border-slate-700 transition-colors"
+                        className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-100 text-slate-700 text-xs font-semibold hover:bg-slate-200 border border-slate-300 transition-colors"
                       >
                         <Play className="w-3.5 h-3.5" />
-                        <span>Generate Monthly Invoices</span>
+                        <span>Generate Charges</span>
                       </button>
                     </div>
                   </div>
@@ -681,7 +694,7 @@ export default function MealsManagementPage() {
                       </button>
                     </div>
                     <p className="text-xs text-slate-500">
-                      Currently <strong>{subscriptions.filter((s) => s.status === MealSubscriptionStatus.ACTIVE).length}</strong> active tenant subscriptions enrolled in mess plans.
+                      Currently <strong>{(subscriptions || []).filter((s) => s.status === MealSubscriptionStatus.ACTIVE).length}</strong> active tenant subscriptions enrolled in mess plans.
                     </p>
                   </div>
                 </div>

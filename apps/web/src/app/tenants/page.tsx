@@ -1,48 +1,185 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { AppShell } from '@/components/layout/AppShell';
+import { BackButton } from '@/components/ui/BackButton';
 import { useAuth } from '@/lib/auth-context';
-import { TenantDto, TenantStatus } from '@propertyos/types';
+import { getLocalDateString } from '@/lib/date-utils';
+import { TenantDto, TenantStatus, KycDocumentType } from '@propertyos/types';
 import {
   Users,
-  UserPlus,
   Search,
   CheckCircle2,
-  Clock,
-  AlertCircle,
-  FileCheck2,
-  ChevronRight,
   Phone,
   Mail,
-  MapPin,
-  Building,
-  GraduationCap,
-  Briefcase,
+  Building2,
+  BedDouble,
+  Home,
+  Calendar,
   X,
   Loader2,
+  Edit,
+  UserMinus,
+  ArrowUpRight,
+  Building,
+  UserCheck,
+  Eye,
+  AlertCircle,
+  RefreshCw,
+  UploadCloud,
+  FileCheck,
+  FileText,
+  User,
+  ShieldCheck,
+  MapPin,
+  Briefcase,
+  PhoneCall,
+  Save,
+  Lock,
+  Sparkles,
+  FileSignature,
+  Download,
 } from 'lucide-react';
+import {
+  AgreementDocumentViewerModal,
+  AgreementDocumentData,
+} from '@/components/agreements/AgreementDocumentViewerModal';
+import { formatIdProofDisplay } from '@/components/agreements/AgreementSignModal';
+
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api/v1';
+
+interface ExtendedTenantDto extends TenantDto {
+  gender?: string | null;
+  currentStay?: {
+    id: string;
+    checkInDate: string;
+    monthlyRent: number;
+    bedId: string;
+    bedNumber: string;
+    roomId: string;
+    roomNumber: string;
+    floorName: string;
+    propertyId: string;
+    propertyName: string;
+  } | null;
+  currentLease?: {
+    id: string;
+    status?: string;
+    startDate: string;
+    endDate: string;
+    monthlyRent: number;
+    unitNumber: string;
+    propertyId: string;
+    propertyName: string;
+  } | null;
+  stayHistories?: {
+    id: string;
+    checkInDate: string;
+    checkOutDate?: string | null;
+    monthlyRent: number;
+    bedId: string;
+    bedNumber: string;
+    roomId?: string;
+    roomNumber?: string;
+    propertyId?: string;
+    propertyName?: string;
+    createdAt?: string | Date;
+  }[];
+  leases?: {
+    id: string;
+    status: string;
+    startDate: string;
+    endDate?: string | null;
+    monthlyRent: number;
+    rentalUnitId?: string;
+    unitNumber?: string;
+    propertyId?: string;
+    propertyName?: string;
+    createdAt?: string | Date;
+    updatedAt?: string | Date;
+  }[];
+  stayHistoriesCount?: number;
+  pastStaysCount?: number;
+  documents?: {
+    id: string;
+    documentType: string;
+    documentNumber?: string | null;
+    fileUrl?: string | null;
+  }[];
+}
+
+// Individual Tenancy / Stay Record
+interface TenancyRecord {
+  recordId: string;
+  tenantId: string;
+  tenantName: string;
+  firstName: string;
+  lastName: string;
+  phone: string;
+  email: string | null;
+  gender?: string | null;
+  status: 'CHECKED_IN' | 'CHECKED_OUT';
+  isActiveStay: boolean;
+  propertyId: string;
+  propertyName: string;
+  unitOrBedNumber: string;
+  isRentalUnit: boolean;
+  checkInDate: string | Date | null;
+  checkOutDate: string | Date | null;
+  monthlyRent: number;
+  securityDeposit: number;
+  actionTimestamp: number;
+  createdAt?: string | Date;
+  updatedAt?: string | Date;
+  tenantData: ExtendedTenantDto;
+}
 
 export default function TenantsPage() {
   const router = useRouter();
   const { user } = useAuth();
-  const [tenants, setTenants] = useState<TenantDto[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState<string>('ALL');
-  const [showAddModal, setShowAddModal] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  // Form State
-  const [formData, setFormData] = useState({
+  const [tenants, setTenants] = useState<ExtendedTenantDto[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [activeTab, setActiveTab] = useState<'ALL' | 'CHECKED_IN' | 'CHECKED_OUT'>('ALL');
+  const [propertyFilter, setPropertyFilter] = useState<string>('ALL');
+  const [propertiesList, setPropertiesList] = useState<{ id: string; name: string }[]>([]);
+
+  // Modals
+  const [selectedEditTenant, setSelectedEditTenant] = useState<ExtendedTenantDto | null>(null);
+  const [viewingAgreementData, setViewingAgreementData] = useState<AgreementDocumentData | null>(null);
+
+  // Action states
+  const [processingAction, setProcessingAction] = useState(false);
+  const [feedbackMsg, setFeedbackMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  const calculateAge = (dobString?: string | null): string => {
+    if (!dobString) return '';
+    const dob = new Date(dobString);
+    if (isNaN(dob.getTime())) return '';
+    const today = new Date();
+    let age = today.getFullYear() - dob.getFullYear();
+    const m = today.getMonth() - dob.getMonth();
+    if (m < 0 || (m === 0 && today.getDate() < dob.getDate())) {
+      age--;
+    }
+    return age >= 0 ? String(age) : '';
+  };
+
+  // Edit Form State matching Image 3 structure
+  const [editFormData, setEditFormData] = useState({
     firstName: '',
     lastName: '',
-    email: '',
     phone: '',
+    email: '',
     dateOfBirth: '',
+    age: '',
+    documentType: 'AADHAAR_CARD',
+    documentNumber: '',
     permanentAddress: '',
     permanentCity: '',
     permanentState: '',
@@ -54,639 +191,1422 @@ export default function TenantsPage() {
     emergencyContactRelation: '',
   });
 
-  const fetchTenants = useCallback(async () => {
+  const [selectedDocFile, setSelectedDocFile] = useState<File | null>(null);
+
+  const fetchTenantsAndProperties = useCallback(async (isBackground = false) => {
     try {
-      setLoading(true);
-      const params = new URLSearchParams();
-      if (statusFilter !== 'ALL') {
-        params.append('status', statusFilter);
-      }
-      if (searchQuery.trim()) {
-        params.append('search', searchQuery.trim());
-      }
+      if (!isBackground) setLoading(true);
+      else setRefreshing(true);
 
-      const res = await fetch(`/api/v1/tenants?${params.toString()}`, {
-        headers: { 'Content-Type': 'application/json' },
-      });
+      const timestamp = Date.now();
+      const [tenantsRes, propsRes] = await Promise.all([
+        fetch(`${API_BASE}/tenants?_t=${timestamp}`, {
+          credentials: 'include',
+          cache: 'no-store',
+        }),
+        fetch(`${API_BASE}/properties?_t=${timestamp}`, {
+          credentials: 'include',
+          cache: 'no-store',
+        }),
+      ]);
 
-      if (res.ok) {
-        const json = await res.json();
+      if (tenantsRes.ok) {
+        const json = await tenantsRes.json();
         setTenants(json.data || []);
-      } else {
-        // Fallback for dev / unauthenticated
-        setTenants([]);
+      }
+
+      if (propsRes.ok) {
+        const pJson = await propsRes.json();
+        const pMap = new Map<string, { id: string; name: string }>();
+        (pJson.data || []).forEach((p: any) => {
+          if (p && p.id && !pMap.has(p.id)) {
+            pMap.set(p.id, { id: p.id, name: p.name });
+          }
+        });
+        setPropertiesList(Array.from(pMap.values()));
       }
     } catch (err) {
-      console.error('Failed to load tenants:', err);
+      console.error('Failed to load tenants data:', err);
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
-  }, [statusFilter, searchQuery]);
+  }, []);
 
   useEffect(() => {
-    fetchTenants();
-  }, [fetchTenants]);
+    fetchTenantsAndProperties();
 
-  const handleCreateTenant = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setSubmitting(true);
-    setErrorMsg(null);
-
+    let bc: BroadcastChannel | null = null;
     try {
-      const payload = {
-        ...formData,
-        email: formData.email.trim() ? formData.email.trim() : null,
-        dateOfBirth: formData.dateOfBirth ? new Date(formData.dateOfBirth).toISOString() : null,
-        occupation: formData.occupation.trim() ? formData.occupation.trim() : null,
-        employerOrCollege: formData.employerOrCollege.trim() ? formData.employerOrCollege.trim() : null,
+      bc = new BroadcastChannel('propertyos_realtime_events');
+      bc.onmessage = () => {
+        fetchTenantsAndProperties(true);
       };
+    } catch {}
 
-      const res = await fetch('/api/v1/tenants', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === 'propertyos_last_tenancy_event') {
+        fetchTenantsAndProperties(true);
+      }
+    };
+    window.addEventListener('storage', onStorage);
+
+    // 2.5-second polling interval for live real-time synchronization
+    const interval = setInterval(() => {
+      fetchTenantsAndProperties(true);
+    }, 2500);
+
+    return () => {
+      if (bc) bc.close();
+      window.removeEventListener('storage', onStorage);
+      clearInterval(interval);
+    };
+  }, [fetchTenantsAndProperties]);
+
+  // Real-time automatic revalidation when window gets focused or tab becomes visible
+  useEffect(() => {
+    const onFocus = () => fetchTenantsAndProperties(true);
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') fetchTenantsAndProperties(true);
+    };
+
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onVisibilityChange);
+
+    return () => {
+      window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+    };
+  }, [fetchTenantsAndProperties]);
+
+  // Format Dates and Times cleanly (e.g. "28 Aug 2026, 08:20 PM")
+  const formatDateTime = (dateStr?: string | Date | null, timeFallback?: string | Date | null) => {
+    if (!dateStr) return '—';
+    try {
+      const d = new Date(dateStr);
+      if (isNaN(d.getTime())) return '—';
+
+      const datePart = d.toLocaleDateString('en-IN', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
       });
 
-      const json = await res.json();
+      let timeObj: Date | null = null;
+      const isMidnightUtc =
+        (d.getUTCHours() === 0 && d.getUTCMinutes() === 0 && d.getUTCSeconds() === 0) ||
+        (d.getHours() === 0 && d.getMinutes() === 0 && d.getSeconds() === 0);
 
-      if (!res.ok) {
-        throw new Error(json.message || 'Failed to create tenant profile');
+      if (!isMidnightUtc) {
+        timeObj = d;
+      } else if (timeFallback) {
+        const tf = new Date(timeFallback);
+        if (!isNaN(tf.getTime())) {
+          const isTfMidnight =
+            (tf.getUTCHours() === 0 && tf.getUTCMinutes() === 0 && tf.getUTCSeconds() === 0) ||
+            (tf.getHours() === 0 && tf.getMinutes() === 0 && tf.getSeconds() === 0);
+          if (!isTfMidnight) {
+            timeObj = tf;
+          }
+        }
       }
 
-      setShowAddModal(false);
-      setFormData({
-        firstName: '',
-        lastName: '',
-        email: '',
-        phone: '',
-        dateOfBirth: '',
-        permanentAddress: '',
-        permanentCity: '',
-        permanentState: '',
-        permanentPostalCode: '',
-        occupation: '',
-        employerOrCollege: '',
-        emergencyContactName: '',
-        emergencyContactPhone: '',
-        emergencyContactRelation: '',
-      });
-      fetchTenants();
-      if (json.data?.id) {
-        router.push(`/tenants/${json.data.id}`);
+      if (!timeObj && timeFallback) {
+        const tf = new Date(timeFallback);
+        if (!isNaN(tf.getTime())) timeObj = tf;
       }
-    } catch (err: any) {
-      setErrorMsg(err.message || 'Error occurred while saving tenant profile');
-    } finally {
-      setSubmitting(false);
+
+      const timePart = timeObj
+        ? timeObj.toLocaleTimeString('en-IN', {
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: true,
+          })
+        : null;
+
+      return (
+        <div className="space-y-0.5">
+          <div className="font-semibold text-slate-800 text-xs">{datePart}</div>
+          {timePart && <div className="text-[10px] text-slate-500 font-mono">{timePart}</div>}
+        </div>
+      );
+    } catch {
+      return String(dateStr).split('T')[0] || '—';
     }
   };
 
-  // Metrics
-  const totalTenants = tenants.length;
-  const activeTenants = tenants.filter((t) => t.status === TenantStatus.ACTIVE).length;
-  const noticeTenants = tenants.filter((t) => t.status === TenantStatus.NOTICE).length;
-  const prospectTenants = tenants.filter((t) => t.status === TenantStatus.PROSPECT).length;
+  // Smart sanitization to avoid duplicated "Flat Flat 102" or "Bed Bed 101"
+  const formatBedOrUnit = (rawName?: string, isRental?: boolean) => {
+    if (!rawName || rawName === '—' || rawName === 'No active bed') return '—';
+    const cleaned = rawName.trim();
+    if (/^(flat|unit|house|villa|apt|apartment|suite|bed)\b/i.test(cleaned)) {
+      return cleaned;
+    }
+    return isRental ? `Flat ${cleaned}` : `Bed ${cleaned}`;
+  };
 
-  const getStatusBadge = (status: TenantStatus) => {
-    switch (status) {
-      case TenantStatus.ACTIVE:
+  // All Real-Time Tenancy Records (Interleaved Chronological Check-Ins & Check-Outs)
+  const allTenancyRecords = useMemo<TenancyRecord[]>(() => {
+    const records: TenancyRecord[] = [];
+
+    const getSafeTime = (dateVal?: string | Date | null, fallbackDateVal?: string | Date | null): number => {
+      if (dateVal) {
+        const d = new Date(dateVal);
+        const t = d.getTime();
+        if (!isNaN(t) && t > 0) return t;
+      }
+      if (fallbackDateVal) {
+        const f = new Date(fallbackDateVal);
+        const ft = f.getTime();
+        if (!isNaN(ft) && ft > 0) return ft;
+      }
+      return 0;
+    };
+
+    tenants.forEach((t) => {
+      const fullName = `${t.firstName} ${t.lastName === '—' ? '' : t.lastName}`.trim();
+
+      // 1. Process PG Stays from stayHistories
+      if (t.stayHistories && t.stayHistories.length > 0) {
+        t.stayHistories.forEach((s) => {
+          const rent = Number(s.monthlyRent) || 0;
+          const checkInTime = getSafeTime(s.checkInDate) || getSafeTime(s.createdAt) || Date.now();
+          const isActive = !s.checkOutDate && (t.status === 'ACTIVE' || !s.checkOutDate);
+
+          // Check-In Event Record
+          records.push({
+            recordId: `stay-checkin-${s.id}`,
+            tenantId: t.id,
+            tenantName: fullName,
+            firstName: t.firstName,
+            lastName: t.lastName,
+            phone: t.phone,
+            email: t.email,
+            gender: t.gender,
+            status: 'CHECKED_IN',
+            isActiveStay: isActive,
+            propertyId: s.propertyId || '',
+            propertyName: s.propertyName || '—',
+            unitOrBedNumber: formatBedOrUnit(s.bedNumber, false),
+            isRentalUnit: false,
+            checkInDate: s.checkInDate || s.createdAt || null,
+            checkOutDate: s.checkOutDate || null,
+            monthlyRent: rent,
+            securityDeposit: rent * 2,
+            actionTimestamp: checkInTime,
+            createdAt: s.createdAt,
+            updatedAt: t.updatedAt,
+            tenantData: t,
+          });
+
+          // Check-Out Event Record (only if vacated)
+          if (s.checkOutDate) {
+            let checkOutTime = getSafeTime(s.checkOutDate) || (checkInTime + 1);
+            if (checkOutTime <= checkInTime) {
+              checkOutTime = checkInTime + 1;
+            }
+
+            records.push({
+              recordId: `stay-checkout-${s.id}`,
+              tenantId: t.id,
+              tenantName: fullName,
+              firstName: t.firstName,
+              lastName: t.lastName,
+              phone: t.phone,
+              email: t.email,
+              gender: t.gender,
+              status: 'CHECKED_OUT',
+              isActiveStay: false,
+              propertyId: s.propertyId || '',
+              propertyName: s.propertyName || '—',
+              unitOrBedNumber: formatBedOrUnit(s.bedNumber, false),
+              isRentalUnit: false,
+              checkInDate: s.checkInDate || s.createdAt || null,
+              checkOutDate: s.checkOutDate,
+              monthlyRent: rent,
+              securityDeposit: rent * 2,
+              actionTimestamp: checkOutTime,
+              createdAt: s.createdAt,
+              updatedAt: s.checkOutDate,
+              tenantData: t,
+            });
+          }
+        });
+      } else if (t.currentStay) {
+        const rent = Number(t.currentStay.monthlyRent) || 0;
+        const checkInTime = getSafeTime(t.currentStay.checkInDate, t.createdAt) || Date.now();
+        records.push({
+          recordId: `current-stay-${t.currentStay.id || t.id}`,
+          tenantId: t.id,
+          tenantName: fullName,
+          firstName: t.firstName,
+          lastName: t.lastName,
+          phone: t.phone,
+          email: t.email,
+          gender: t.gender,
+          status: 'CHECKED_IN',
+          isActiveStay: true,
+          propertyId: t.currentStay.propertyId || '',
+          propertyName: t.currentStay.propertyName || '—',
+          unitOrBedNumber: formatBedOrUnit(t.currentStay.bedNumber, false),
+          isRentalUnit: false,
+          checkInDate: t.currentStay.checkInDate || null,
+          checkOutDate: null,
+          monthlyRent: rent,
+          securityDeposit: rent * 2,
+          actionTimestamp: checkInTime,
+          createdAt: t.createdAt,
+          updatedAt: t.updatedAt,
+          tenantData: t,
+        });
+      }
+
+      // 2. Process Whole-Unit Leases
+      if (t.leases && t.leases.length > 0) {
+        t.leases.forEach((l) => {
+          const isActive = l.status === 'ACTIVE';
+          const rent = Number(l.monthlyRent) || 0;
+          const checkInTime = getSafeTime(l.startDate) || getSafeTime(l.createdAt) || Date.now();
+
+          const checkOutDateVal = !isActive && l.status !== 'NOTICE' ? (l.endDate || l.updatedAt || null) : null;
+
+          // Lease Check-In Record
+          records.push({
+            recordId: `lease-checkin-${l.id}`,
+            tenantId: t.id,
+            tenantName: fullName,
+            firstName: t.firstName,
+            lastName: t.lastName,
+            phone: t.phone,
+            email: t.email,
+            gender: t.gender,
+            status: 'CHECKED_IN',
+            isActiveStay: isActive,
+            propertyId: l.propertyId || '',
+            propertyName: l.propertyName || '—',
+            unitOrBedNumber: formatBedOrUnit(l.unitNumber, true),
+            isRentalUnit: true,
+            checkInDate: l.startDate || l.createdAt || null,
+            checkOutDate: checkOutDateVal,
+            monthlyRent: rent,
+            securityDeposit: rent * 2,
+            actionTimestamp: checkInTime,
+            createdAt: l.createdAt,
+            updatedAt: t.updatedAt,
+            tenantData: t,
+          });
+
+          // Lease Termination / Check-Out Record
+          if (!isActive && l.status !== 'NOTICE') {
+            let checkOutTime = getSafeTime(l.endDate, l.updatedAt) || (checkInTime + 1);
+            if (checkOutTime <= checkInTime) {
+              checkOutTime = checkInTime + 1;
+            }
+
+            records.push({
+              recordId: `lease-checkout-${l.id}`,
+              tenantId: t.id,
+              tenantName: fullName,
+              firstName: t.firstName,
+              lastName: t.lastName,
+              phone: t.phone,
+              email: t.email,
+              gender: t.gender,
+              status: 'CHECKED_OUT',
+              isActiveStay: false,
+              propertyId: l.propertyId || '',
+              propertyName: l.propertyName || '—',
+              unitOrBedNumber: formatBedOrUnit(l.unitNumber, true),
+              isRentalUnit: true,
+              checkInDate: l.startDate || l.createdAt || null,
+              checkOutDate: l.endDate || l.updatedAt || null,
+              monthlyRent: rent,
+              securityDeposit: rent * 2,
+              actionTimestamp: checkOutTime,
+              createdAt: l.createdAt,
+              updatedAt: l.updatedAt,
+              tenantData: t,
+            });
+          }
+        });
+      } else if (t.currentLease) {
+        const rent = Number(t.currentLease.monthlyRent) || 0;
+        const actionTime = getSafeTime(t.currentLease.startDate, t.createdAt) || Date.now();
+        records.push({
+          recordId: `current-lease-${t.currentLease.id || t.id}`,
+          tenantId: t.id,
+          tenantName: fullName,
+          firstName: t.firstName,
+          lastName: t.lastName,
+          phone: t.phone,
+          email: t.email,
+          gender: t.gender,
+          status: 'CHECKED_IN',
+          isActiveStay: true,
+          propertyId: t.currentLease.propertyId || '',
+          propertyName: t.currentLease.propertyName || '—',
+          unitOrBedNumber: formatBedOrUnit(t.currentLease.unitNumber, true),
+          isRentalUnit: true,
+          checkInDate: t.currentLease.startDate || null,
+          checkOutDate: null,
+          monthlyRent: rent,
+          securityDeposit: rent * 2,
+          actionTimestamp: actionTime,
+          createdAt: t.createdAt,
+          updatedAt: t.updatedAt,
+          tenantData: t,
+        });
+      }
+    });
+
+    return records.sort((a, b) => b.actionTimestamp - a.actionTimestamp);
+  }, [tenants]);
+
+  // Strict Filter for Table Records
+  const filteredRecords = useMemo(() => {
+    return allTenancyRecords.filter((rec) => {
+      // 1. Tab filter
+      if (activeTab === 'CHECKED_IN' && rec.status !== 'CHECKED_IN') return false;
+      if (activeTab === 'CHECKED_OUT' && rec.status !== 'CHECKED_OUT') return false;
+
+      // 2. Exact Property ID filter (Strict property match, avoiding partial name match)
+      if (propertyFilter !== 'ALL' && rec.propertyId !== propertyFilter) {
+        return false;
+      }
+
+      // 3. Search query
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase().trim();
         return (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
-            <CheckCircle2 className="w-3.5 h-3.5" />
-            Active
-          </span>
+          rec.tenantName.toLowerCase().includes(q) ||
+          rec.phone.toLowerCase().includes(q) ||
+          (rec.email || '').toLowerCase().includes(q) ||
+          rec.unitOrBedNumber.toLowerCase().includes(q) ||
+          rec.propertyName.toLowerCase().includes(q)
         );
-      case TenantStatus.NOTICE:
+      }
+
+      return true;
+    });
+  }, [allTenancyRecords, activeTab, propertyFilter, searchQuery]);
+
+  // Tab Badge Counts for All Tenancies, Checked In, Checked Out
+  const tabCounts = useMemo(() => {
+    const propertyScoped =
+      propertyFilter === 'ALL'
+        ? allTenancyRecords
+        : allTenancyRecords.filter((r) => r.propertyId === propertyFilter);
+    return {
+      ALL: propertyScoped.length,
+      CHECKED_IN: propertyScoped.filter((r) => r.status === 'CHECKED_IN').length,
+      CHECKED_OUT: propertyScoped.filter((r) => r.status === 'CHECKED_OUT').length,
+    };
+  }, [allTenancyRecords, propertyFilter]);
+
+  // Deduplicated Tenant Metrics (No Duplicates)
+  const metrics = useMemo(() => {
+    // Only count tenants who actually have at least 1 check-in or stay record
+    const tenantsWithRecords = tenants.filter(
+      (t) =>
+        (t.stayHistories && t.stayHistories.length > 0) ||
+        (t.leases && t.leases.length > 0) ||
+        Boolean(t.currentStay) ||
+        Boolean(t.currentLease)
+    );
+
+    const relevantTenants =
+      propertyFilter === 'ALL'
+        ? tenantsWithRecords
+        : tenantsWithRecords.filter(
+            (t) =>
+              (t.stayHistories && t.stayHistories.some((s) => s.propertyId === propertyFilter)) ||
+              (t.leases && t.leases.some((l) => l.propertyId === propertyFilter)) ||
+              t.currentStay?.propertyId === propertyFilter ||
+              t.currentLease?.propertyId === propertyFilter
+          );
+
+    const checkedInTenants = relevantTenants.filter((t) => {
+      if (propertyFilter === 'ALL') {
         return (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200">
-            <Clock className="w-3.5 h-3.5" />
-            In Notice
-          </span>
+          t.status === TenantStatus.ACTIVE ||
+          Boolean(t.currentStay) ||
+          (t.stayHistories && t.stayHistories.some((s: any) => !s.checkOutDate)) ||
+          t.currentLease?.status === 'ACTIVE' ||
+          (t.leases && t.leases.some((l: any) => l.status === 'ACTIVE'))
         );
-      case TenantStatus.PROSPECT:
-        return (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200">
-            <AlertCircle className="w-3.5 h-3.5" />
-            Prospect
-          </span>
-        );
-      case TenantStatus.CHECKED_OUT:
-        return (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-700 border border-slate-200">
-            Checked Out
-          </span>
-        );
-      case TenantStatus.ARCHIVED:
-        return (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200">
-            Archived
-          </span>
-        );
-      default:
-        return null;
+      }
+      return (
+        (t.status === TenantStatus.ACTIVE &&
+          ((t.stayHistories && t.stayHistories.some((s: any) => s.propertyId === propertyFilter && !s.checkOutDate)) ||
+            t.currentStay?.propertyId === propertyFilter)) ||
+        (t.currentLease?.propertyId === propertyFilter && t.currentLease?.status === 'ACTIVE') ||
+        (t.leases && t.leases.some((l: any) => l.propertyId === propertyFilter && l.status === 'ACTIVE'))
+      );
+    });
+
+    const checkedOutTenants = relevantTenants.filter(
+      (t) => !checkedInTenants.some((active) => active.id === t.id)
+    );
+
+    return {
+      totalTenants: relevantTenants.length,
+      checkedIn: checkedInTenants.length,
+      checkedOut: checkedOutTenants.length,
+    };
+  }, [tenants, propertyFilter]);
+
+  // Edit Modal Handlers
+  const handleOpenEditModal = (t: ExtendedTenantDto) => {
+    setSelectedEditTenant(t);
+    setSelectedDocFile(null);
+
+    const doc = t.documents && t.documents[0];
+    const dobFormatted = t.dateOfBirth ? getLocalDateString(t.dateOfBirth) : '';
+    
+    let docType = 'AADHAAR_CARD';
+    if (doc?.documentType) {
+      const dt = String(doc.documentType).toUpperCase();
+      if (dt.includes('PAN')) docType = 'PAN_CARD';
+      else if (dt.includes('PASS')) docType = 'PASSPORT';
+      else if (dt.includes('DRIV')) docType = 'DRIVING_LICENSE';
+      else if (dt.includes('VOTE')) docType = 'VOTER_ID';
+      else if (dt.includes('AADHAAR')) docType = 'AADHAAR_CARD';
+      else docType = 'OTHER';
+    }
+
+    const docNum = doc?.documentNumber || (t as any).documentNumber || (t as any).governmentIdNumber || '';
+
+    setEditFormData({
+      firstName: t.firstName || '',
+      lastName: t.lastName === '—' ? '' : t.lastName || '',
+      phone: t.phone || '',
+      email: t.email || '',
+      dateOfBirth: dobFormatted,
+      age: calculateAge(dobFormatted),
+      documentType: docType,
+      documentNumber: docNum,
+      permanentAddress: t.permanentAddress || '',
+      permanentCity: t.permanentCity || '',
+      permanentState: t.permanentState || '',
+      permanentPostalCode: t.permanentPostalCode || '',
+      occupation: t.occupation || '',
+      employerOrCollege: t.employerOrCollege || '',
+      emergencyContactName: t.emergencyContactName || '',
+      emergencyContactPhone: t.emergencyContactPhone || '',
+      emergencyContactRelation: t.emergencyContactRelation || '',
+    });
+  };
+
+  const handleOpenAgreementDoc = (rec: TenancyRecord) => {
+    const t = rec.tenantData;
+    const doc = t.documents?.find(
+      (d) =>
+        d.documentType?.includes('AADHAAR') ||
+        d.documentType?.includes('PAN') ||
+        d.documentType?.includes('PASS')
+    );
+    const docNum = doc?.documentNumber || (t as any).documentNumber || (t as any).governmentIdNumber;
+    const docType = doc?.documentType || 'Aadhaar Card';
+
+    const agreement: AgreementDocumentData = {
+      id: rec.recordId,
+      tenantName: rec.tenantName,
+      tenantPhone: rec.phone,
+      tenantEmail: rec.email || undefined,
+      tenantAddress: t.permanentAddress
+        ? `${t.permanentAddress}, ${t.permanentCity || 'Bengaluru'}, ${t.permanentState || 'Karnataka'} — ${t.permanentPostalCode || '560001'}`
+        : 'Resident Address on Record',
+      tenantAadhaar: formatIdProofDisplay(docType, docNum) || 'Government Photo ID Verified',
+      ownerName: undefined,
+      ownerPhone: undefined,
+      ownerAddress: undefined,
+      ownerSignature: undefined,
+      residentSignature: (t as any).signature || undefined,
+      propertyName: rec.propertyName !== '—' ? rec.propertyName : 'Property Residency',
+      propertyAddress: `${rec.propertyName !== '—' ? rec.propertyName : 'Property Residency'}, Bengaluru, Karnataka`,
+      unitOrBedName: rec.unitOrBedNumber !== '—' ? rec.unitOrBedNumber : 'Allocated Space',
+      propertyType: rec.isRentalUnit ? 'RENTAL_HOUSE' : 'PG',
+      monthlyRent: rec.monthlyRent || 8500,
+      securityDeposit: rec.securityDeposit || (rec.monthlyRent ? rec.monthlyRent * 2 : 17000),
+      lockInMonths: 1,
+      noticePeriodDays: 30,
+      startDate: rec.checkInDate
+        ? new Date(rec.checkInDate).toISOString().split('T')[0]
+        : getLocalDateString(),
+      endDate: rec.checkOutDate
+        ? new Date(rec.checkOutDate).toISOString().split('T')[0]
+        : undefined,
+      signedAt: rec.checkInDate
+        ? new Date(rec.checkInDate).toISOString()
+        : new Date().toISOString(),
+      status: rec.status,
+    };
+
+    setViewingAgreementData(agreement);
+  };
+
+  const handleSaveEditProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedEditTenant) return;
+
+    if (!editFormData.dateOfBirth) {
+      setFeedbackMsg({ type: 'error', text: 'Date of Birth is mandatory. Please provide a valid date of birth.' });
+      return;
+    }
+
+    if (!editFormData.documentNumber.trim()) {
+      setFeedbackMsg({ type: 'error', text: 'Document / ID Number is mandatory. Please provide the official ID number.' });
+      return;
+    }
+
+    try {
+      setProcessingAction(true);
+
+      const updatePayload: any = {
+        firstName: editFormData.firstName.trim(),
+        lastName: editFormData.lastName.trim() || '—',
+        phone: editFormData.phone.trim(),
+        email: editFormData.email.trim() || null,
+        dateOfBirth: editFormData.dateOfBirth ? new Date(editFormData.dateOfBirth).toISOString() : null,
+        documentType: editFormData.documentType || 'AADHAAR',
+        documentNumber: editFormData.documentNumber.trim() || null,
+        permanentAddress: editFormData.permanentAddress.trim() || null,
+        permanentCity: editFormData.permanentCity.trim() || null,
+        permanentState: editFormData.permanentState.trim() || null,
+        permanentPostalCode: editFormData.permanentPostalCode.trim() || null,
+        occupation: editFormData.occupation.trim() || null,
+        employerOrCollege: editFormData.employerOrCollege.trim() || null,
+        emergencyContactName: editFormData.emergencyContactName.trim() || null,
+        emergencyContactPhone: editFormData.emergencyContactPhone.trim() || null,
+        emergencyContactRelation: editFormData.emergencyContactRelation.trim() || null,
+      };
+
+      const res = await fetch(`${API_BASE}/tenants/${selectedEditTenant.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(updatePayload),
+      });
+
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        setFeedbackMsg({ type: 'error', text: errJson.message || 'Failed to update tenant profile' });
+        setProcessingAction(false);
+        return;
+      }
+
+      // If document file is attached, upload to KYC document endpoint
+      if (selectedDocFile) {
+        const formData = new FormData();
+        formData.append('file', selectedDocFile);
+        formData.append('documentType', editFormData.documentType);
+        if (editFormData.documentNumber.trim()) {
+          formData.append('documentNumber', editFormData.documentNumber.trim());
+        }
+
+        await fetch(`${API_BASE}/tenants/${selectedEditTenant.id}/documents`, {
+          method: 'POST',
+          credentials: 'include',
+          body: formData,
+        }).catch((err) => console.error('Document upload error:', err));
+      }
+
+      setFeedbackMsg({ type: 'success', text: 'Tenant profile and KYC details updated successfully.' });
+      setSelectedEditTenant(null);
+      fetchTenantsAndProperties(true);
+    } catch {
+      setFeedbackMsg({ type: 'error', text: 'Network error while updating tenant profile' });
+    } finally {
+      setProcessingAction(false);
     }
   };
 
   return (
     <AppShell activePath="/tenants">
-      <div className="space-y-6 max-w-7xl mx-auto pb-12">
-        {/* Page Header */}
+      {/* Full-width responsive container scaling seamlessly at any screen resolution and zoom level */}
+      <div className="space-y-6 w-full px-4 sm:px-6 lg:px-8 pb-16">
+        {/* Top Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
+          <div className="space-y-1">
+            <div className="mb-2">
+              <BackButton fallbackHref="/" label="Back to Dashboard" />
+            </div>
             <h1 className="text-2xl font-bold text-slate-900 tracking-tight flex items-center gap-2.5">
               <Users className="w-7 h-7 text-brand-teal" />
-              Tenant Directory & KYC
+              Tenant Directory
             </h1>
-            <p className="text-sm text-slate-500 mt-1">
-              Manage tenant profiles, KYC document validations, and stay history across all properties.
+            <p className="text-xs text-slate-500">
+              Live lifecycle directory of all active and historical tenant check-ins and check-outs across your properties.
             </p>
           </div>
 
-          <button
-            onClick={() => setShowAddModal(true)}
-            className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-brand-teal text-white font-medium text-sm hover:bg-teal-700 transition shadow-sm"
-          >
-            <UserPlus className="w-4 h-4" />
-            Onboard Tenant
-          </button>
+          <div className="flex items-center gap-2.5">
+            <Link
+              href="/properties"
+              className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-brand-teal text-white font-semibold text-xs hover:bg-teal-700 transition shadow-sm"
+            >
+              <Building2 className="w-4 h-4" />
+              Manage Properties
+              <ArrowUpRight className="w-3.5 h-3.5" />
+            </Link>
+          </div>
         </div>
 
-        {/* Metrics Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                Total Tenants
-              </span>
-              <Users className="w-5 h-5 text-slate-400" />
+        {/* Global Feedback Banner */}
+        {feedbackMsg && (
+          <div
+            className={`p-3.5 rounded-xl border flex items-center justify-between text-xs font-semibold ${
+              feedbackMsg.type === 'success'
+                ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                : 'bg-rose-50 border-rose-200 text-rose-800'
+            }`}
+          >
+            <div className="flex items-center gap-2">
+              {feedbackMsg.type === 'success' ? (
+                <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+              ) : (
+                <AlertCircle className="w-4 h-4 text-rose-600" />
+              )}
+              <span>{feedbackMsg.text}</span>
             </div>
-            <p className="text-2xl font-bold text-slate-900 mt-2">{totalTenants}</p>
-            <p className="text-xs text-slate-500 mt-1">Registered in organization</p>
+            <button onClick={() => setFeedbackMsg(null)} className="text-slate-400 hover:text-slate-600 cursor-pointer">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        )}
+
+        {/* Balanced & Polished KPI Metrics Banner (3 Clean, Proportionate Cards - Deduplicated Zero Duplicates) */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 w-full">
+          {/* 1. Total Tenants */}
+          <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-2xs flex flex-col justify-between space-y-2 hover:border-slate-300 transition">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Total Tenants</span>
+              <div className="w-8 h-8 rounded-lg bg-teal-50 border border-teal-100 flex items-center justify-center text-brand-teal">
+                <Users className="w-4 h-4" />
+              </div>
+            </div>
+            <div>
+              <p className="text-2xl font-black text-slate-900">{metrics.totalTenants}</p>
+              <p className="text-[11px] text-slate-400 font-medium mt-0.5">Total registered occupants</p>
+            </div>
           </div>
 
-          <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+          {/* 2. Checked In */}
+          <div className="bg-white p-5 rounded-2xl border border-emerald-100 shadow-2xs flex flex-col justify-between space-y-2 hover:border-emerald-200 transition bg-gradient-to-br from-white to-emerald-50/20">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                Active Residents
-              </span>
-              <CheckCircle2 className="w-5 h-5 text-emerald-500" />
+              <span className="text-[11px] font-bold text-emerald-700 uppercase tracking-wider">Checked In</span>
+              <div className="w-8 h-8 rounded-lg bg-emerald-50 border border-emerald-200 flex items-center justify-center text-emerald-600">
+                <UserCheck className="w-4 h-4" />
+              </div>
             </div>
-            <p className="text-2xl font-bold text-emerald-600 mt-2">{activeTenants}</p>
-            <p className="text-xs text-slate-500 mt-1">Currently residing</p>
+            <div>
+              <p className="text-2xl font-black text-emerald-700">{metrics.checkedIn}</p>
+              <p className="text-[11px] text-emerald-600/90 font-medium mt-0.5">Currently active occupants</p>
+            </div>
           </div>
 
-          <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+          {/* 3. Checked Out */}
+          <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-2xs flex flex-col justify-between space-y-2 hover:border-slate-300 transition bg-gradient-to-br from-white to-slate-50/40">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                Notice Period
-              </span>
-              <Clock className="w-5 h-5 text-amber-500" />
+              <span className="text-[11px] font-bold text-slate-600 uppercase tracking-wider">Checked Out</span>
+              <div className="w-8 h-8 rounded-lg bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-600">
+                <UserMinus className="w-4 h-4" />
+              </div>
             </div>
-            <p className="text-2xl font-bold text-amber-600 mt-2">{noticeTenants}</p>
-            <p className="text-xs text-slate-500 mt-1">Move-out scheduled</p>
-          </div>
-
-          <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                Prospects
-              </span>
-              <FileCheck2 className="w-5 h-5 text-blue-500" />
+            <div>
+              <p className="text-2xl font-black text-slate-700">{metrics.checkedOut}</p>
+              <p className="text-[11px] text-slate-400 font-medium mt-0.5">Past / vacated occupants</p>
             </div>
-            <p className="text-2xl font-bold text-blue-600 mt-2">{prospectTenants}</p>
-            <p className="text-xs text-slate-500 mt-1">Pending allocation & KYC</p>
           </div>
         </div>
 
         {/* Filter & Search Bar */}
-        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col md:flex-row gap-4 justify-between items-center">
-          <div className="relative flex-1 w-full">
-            <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input
-              type="text"
-              placeholder="Search by name, phone, or email..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-teal/20 focus:border-brand-teal"
-            />
+        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs space-y-3.5 w-full">
+          <div className="flex flex-col md:flex-row gap-3 items-center justify-between">
+            <div className="relative flex-1 w-full">
+              <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                placeholder="Search by tenant name, phone, bed (e.g. 101-A), flat, or property..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-9 pr-4 py-2 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-teal text-slate-800 placeholder-slate-400"
+              />
+            </div>
+
+            <div className="flex items-center gap-2 w-full md:w-auto shrink-0">
+              <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-700 shrink-0">
+                <Building className="w-3.5 h-3.5 text-slate-400" />
+                <select
+                  value={propertyFilter}
+                  onChange={(e) => setPropertyFilter(e.target.value)}
+                  className="bg-transparent text-xs font-semibold text-slate-800 focus:outline-none cursor-pointer"
+                >
+                  <option value="ALL">All Properties ({propertiesList.length})</option>
+                  {propertiesList.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
           </div>
 
-          <div className="flex items-center gap-1.5 overflow-x-auto w-full md:w-auto pb-1 md:pb-0">
-            {['ALL', TenantStatus.PROSPECT, TenantStatus.ACTIVE, TenantStatus.NOTICE, TenantStatus.CHECKED_OUT].map(
-              (status) => (
-                <button
-                  key={status}
-                  onClick={() => setStatusFilter(status)}
-                  className={`px-3 py-1.5 text-xs font-medium rounded-lg transition shrink-0 ${
-                    statusFilter === status
-                      ? 'bg-slate-900 text-white'
-                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+          {/* Clean Tabs: All Tenancies | Checked In | Checked Out */}
+          <div className="flex items-center gap-2 border-t border-slate-100 pt-3">
+            {[
+              { id: 'ALL', label: 'All Tenancies', count: tabCounts.ALL },
+              { id: 'CHECKED_IN', label: 'Checked In', count: tabCounts.CHECKED_IN },
+              { id: 'CHECKED_OUT', label: 'Checked Out', count: tabCounts.CHECKED_OUT },
+            ].map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id as any)}
+                className={`px-3.5 py-1.5 rounded-lg font-semibold transition text-xs flex items-center gap-2 cursor-pointer ${
+                  activeTab === tab.id
+                    ? 'bg-brand-teal text-white shadow-2xs font-bold'
+                    : 'bg-slate-50 text-slate-600 hover:bg-slate-100 hover:text-slate-900 border border-slate-200'
+                }`}
+              >
+                <span>{tab.label}</span>
+                <span
+                  className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
+                    activeTab === tab.id ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-600'
                   }`}
                 >
-                  {status === 'ALL' ? 'All Tenants' : status.replace('_', ' ')}
-                </button>
-              )
-            )}
+                  {tab.count}
+                </span>
+              </button>
+            ))}
           </div>
         </div>
 
-        {/* Tenants Table */}
-        <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+        {/* Directory Table (Full-Width, Status-First, Distinct Tenancy Record Rows) */}
+        <div className="bg-white rounded-xl border border-slate-200 shadow-2xs overflow-hidden w-full">
           {loading ? (
-            <div className="py-16 text-center text-slate-500 flex flex-col items-center justify-center">
-              <Loader2 className="w-8 h-8 text-brand-teal animate-spin mb-3" />
-              <p className="text-sm font-medium">Loading tenant profiles...</p>
+            <div className="py-20 text-center text-slate-500 flex flex-col items-center justify-center space-y-2">
+              <Loader2 className="w-8 h-8 text-brand-teal animate-spin" />
+              <p className="text-xs font-semibold text-slate-700">Loading tenant directory...</p>
             </div>
-          ) : tenants.length === 0 ? (
-            <div className="py-16 text-center text-slate-500">
-              <Users className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-              <h3 className="text-base font-semibold text-slate-800">No tenants found</h3>
-              <p className="text-sm text-slate-500 mt-1 max-w-sm mx-auto">
-                {searchQuery
-                  ? 'No tenant matches your search criteria.'
-                  : 'Start by onboarding your first tenant profile to manage KYC and stays.'}
-              </p>
-              {!searchQuery && (
-                <button
-                  onClick={() => setShowAddModal(true)}
-                  className="mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-brand-teal text-white text-sm font-medium hover:bg-teal-700 transition"
-                >
-                  <UserPlus className="w-4 h-4" />
-                  Onboard Tenant
-                </button>
-              )}
+          ) : filteredRecords.length === 0 ? (
+            <div className="py-16 text-center text-slate-500 space-y-3">
+              <Users className="w-12 h-12 text-slate-300 mx-auto" />
+              <div className="space-y-1">
+                <h3 className="text-sm font-bold text-slate-800">No records found</h3>
+                <p className="text-xs text-slate-400 max-w-sm mx-auto">
+                  {searchQuery
+                    ? `No record matches "${searchQuery}". Try a different name, phone, or bed number.`
+                    : propertyFilter !== 'ALL'
+                    ? 'No tenants have checked into this property yet.'
+                    : 'Whenever you check in a tenant to a bed or flat in any property, each stay record will appear here in real time.'}
+                </p>
+              </div>
+              <Link
+                href="/properties"
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-teal-50 border border-teal-200 text-brand-teal text-xs font-bold hover:bg-teal-100 transition"
+              >
+                <BedDouble className="w-3.5 h-3.5" />
+                Go to Properties to Add / Check-In Tenants
+              </Link>
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm text-slate-600">
-                <thead className="bg-slate-50 text-xs font-semibold text-slate-500 uppercase border-b border-slate-200">
+            <div className="overflow-x-auto w-full">
+              <table className="w-full text-left text-xs text-slate-600">
+                <thead className="bg-slate-50/90 text-[11px] font-bold text-slate-500 uppercase tracking-wider border-b border-slate-200">
                   <tr>
-                    <th className="px-6 py-4">Tenant Name</th>
-                    <th className="px-6 py-4">Contact Details</th>
-                    <th className="px-6 py-4">Status</th>
-                    <th className="px-6 py-4">Location</th>
-                    <th className="px-6 py-4">Occupation / Organization</th>
-                    <th className="px-6 py-4 text-right">Actions</th>
+                    {/* 1. Status Column First */}
+                    <th className="px-5 py-4 w-32">Status</th>
+                    <th className="px-4 py-4">Tenant Name</th>
+                    <th className="px-4 py-4">Contact Details</th>
+                    <th className="px-4 py-4">Property Name</th>
+                    <th className="px-4 py-4">Bed / Unit</th>
+                    <th className="px-4 py-4">Check-In Date</th>
+                    <th className="px-4 py-4">Check-Out Date</th>
+                    <th className="px-4 py-4">Rent & Deposit</th>
+                    <th className="px-5 py-4 text-right">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {tenants.map((t) => (
-                    <tr
-                      key={t.id}
-                      onClick={() => router.push(`/tenants/${t.id}`)}
-                      className="hover:bg-slate-50/80 transition cursor-pointer"
-                    >
-                      <td className="px-6 py-4 font-semibold text-slate-900 whitespace-nowrap">
-                        <div className="flex items-center gap-3">
-                          <div className="w-9 h-9 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center font-bold text-slate-700 text-xs shrink-0">
-                            {t.firstName.charAt(0)}
-                            {t.lastName.charAt(0)}
-                          </div>
-                          <div>
-                            <div className="font-semibold text-slate-900">
-                              {t.firstName} {t.lastName}
-                            </div>
-                            <div className="text-xs text-slate-400 font-normal">
-                              ID: {t.id.slice(0, 8)}...
-                            </div>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="space-y-0.5">
-                          <div className="flex items-center gap-1.5 text-slate-700">
-                            <Phone className="w-3.5 h-3.5 text-slate-400" />
-                            <span>{t.phone}</span>
-                          </div>
-                          {t.email && (
-                            <div className="flex items-center gap-1.5 text-slate-500 text-xs">
-                              <Mail className="w-3.5 h-3.5 text-slate-400" />
-                              <span>{t.email}</span>
-                            </div>
+                <tbody className="divide-y divide-slate-100 font-medium">
+                  {filteredRecords.map((rec) => {
+                    const isCheckedIn = rec.status === 'CHECKED_IN';
+
+                    return (
+                      <tr key={rec.recordId} className="hover:bg-slate-50/80 transition">
+                        {/* 1. Status Column (First Column - Checked In / Checked Out alone) */}
+                        <td className="px-5 py-4 whitespace-nowrap">
+                          {isCheckedIn ? (
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-teal-50 text-teal-700 border border-teal-200">
+                              Checked In
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-700 border border-slate-200">
+                              Checked Out
+                            </span>
                           )}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">{getStatusBadge(t.status)}</td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex items-center gap-1.5 text-slate-600 text-xs">
-                          <MapPin className="w-3.5 h-3.5 text-slate-400" />
-                          <span>
-                            {t.permanentCity}, {t.permanentState}
-                          </span>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-xs">
-                          <div className="font-medium text-slate-800">
-                            {t.occupation || 'Not specified'}
+                        </td>
+
+                        {/* 2. Tenant Name */}
+                        <td className="px-4 py-4 whitespace-nowrap">
+                          <div className="flex items-center gap-3">
+                            <div
+                              className={`w-8.5 h-8.5 rounded-full flex items-center justify-center font-bold text-xs shrink-0 ${
+                                isCheckedIn
+                                  ? 'bg-teal-50 border border-teal-200 text-brand-teal'
+                                  : 'bg-slate-100 border border-slate-200 text-slate-600'
+                              }`}
+                            >
+                              {(rec.firstName || 'T').charAt(0).toUpperCase()}
+                              {(rec.lastName || '').charAt(0).toUpperCase()}
+                            </div>
+                            <div>
+                              <div className="font-bold text-slate-900 text-xs">
+                                {rec.tenantName}
+                              </div>
+                              <div className="text-[10px] text-slate-400 font-mono mt-0.5">
+                                {rec.gender || 'Resident'}
+                              </div>
+                            </div>
                           </div>
-                          <div className="text-slate-500">{t.employerOrCollege || '—'}</div>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 text-right whitespace-nowrap">
-                        <Link
-                          href={`/tenants/${t.id}`}
-                          onClick={(e) => e.stopPropagation()}
-                          className="inline-flex items-center gap-1 text-xs font-semibold text-brand-teal hover:text-teal-800"
-                        >
-                          View Profile
-                          <ChevronRight className="w-3.5 h-3.5" />
-                        </Link>
-                      </td>
-                    </tr>
-                  ))}
+                        </td>
+
+                        {/* 3. Contact Details */}
+                        <td className="px-4 py-4 whitespace-nowrap">
+                          <div className="space-y-0.5 text-xs">
+                            <div className="flex items-center gap-1.5 text-slate-800 font-semibold font-mono">
+                              <Phone className="w-3 h-3 text-slate-400 shrink-0" />
+                              <span>{rec.phone}</span>
+                            </div>
+                            {rec.email ? (
+                              <div className="flex items-center gap-1.5 text-slate-500 text-[11px]">
+                                <Mail className="w-3 h-3 text-slate-400 shrink-0" />
+                                <span className="truncate max-w-[150px]">{rec.email}</span>
+                              </div>
+                            ) : (
+                              <span className="text-slate-400 text-[11px] italic">No email</span>
+                            )}
+                          </div>
+                        </td>
+
+                        {/* 4. Property Name */}
+                        <td className="px-4 py-4 whitespace-nowrap">
+                          {rec.propertyName && rec.propertyName !== '—' ? (
+                            <div className="flex items-center gap-1.5 text-slate-800 font-semibold">
+                              <Building2 className="w-3.5 h-3.5 text-brand-teal shrink-0" />
+                              <span>{rec.propertyName}</span>
+                            </div>
+                          ) : (
+                            <span className="text-slate-400 text-xs italic">—</span>
+                          )}
+                        </td>
+
+                        {/* 5. Bed / Flat Number (Clean normalized format e.g. "Flat 102" or "Bed 201-A") */}
+                        <td className="px-4 py-4 whitespace-nowrap">
+                          {rec.unitOrBedNumber && rec.unitOrBedNumber !== '—' ? (
+                            <div
+                              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md font-bold text-xs font-mono border ${
+                                rec.isRentalUnit
+                                  ? 'bg-blue-50 text-blue-900 border-blue-200'
+                                  : 'bg-teal-50 text-teal-900 border-teal-200'
+                              }`}
+                            >
+                              {rec.isRentalUnit ? (
+                                <Home className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                              ) : (
+                                <BedDouble className="w-3.5 h-3.5 text-brand-teal shrink-0" />
+                              )}
+                              <span>{rec.unitOrBedNumber}</span>
+                            </div>
+                          ) : (
+                            <span className="text-slate-400 text-xs italic">No bed assigned</span>
+                          )}
+                        </td>
+
+                        {/* 6. Check-In Date & Time */}
+                        <td className="px-4 py-4 whitespace-nowrap">
+                          {rec.checkInDate ? (
+                            <div className="flex items-start gap-2 font-mono text-xs">
+                              <Calendar className="w-3.5 h-3.5 text-slate-400 shrink-0 mt-0.5" />
+                              {formatDateTime(rec.checkInDate, rec.createdAt)}
+                            </div>
+                          ) : (
+                            <span className="text-slate-400 text-xs italic">—</span>
+                          )}
+                        </td>
+
+                        {/* 7. Check-Out Date & Time (Active Tenant/Resident if staying, or checked-out date/time) */}
+                        <td className="px-4 py-4 whitespace-nowrap">
+                          {rec.isActiveStay ? (
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 font-bold text-xs border border-emerald-200 shadow-2xs">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                              {rec.isRentalUnit ? 'Active Tenant' : 'Active Tenant'}
+                            </span>
+                          ) : rec.checkOutDate ? (
+                            <div className="flex items-start gap-2 font-mono text-xs">
+                              <Calendar className="w-3.5 h-3.5 text-slate-400 shrink-0 mt-0.5" />
+                              {formatDateTime(rec.checkOutDate, rec.updatedAt || rec.createdAt)}
+                            </div>
+                          ) : (
+                            <span className="text-slate-400 text-xs italic">—</span>
+                          )}
+                        </td>
+
+                        {/* 8. Rent and Deposit */}
+                        <td className="px-4 py-4 whitespace-nowrap">
+                          {rec.monthlyRent > 0 ? (
+                            <div className="space-y-0.5 text-xs">
+                              <div className="font-bold text-slate-900">
+                                ₹{rec.monthlyRent.toLocaleString('en-IN')}/mo
+                              </div>
+                              <div className="text-[11px] text-slate-500">
+                                Deposit: ₹{rec.securityDeposit.toLocaleString('en-IN')}
+                              </div>
+                            </div>
+                          ) : (
+                            <span className="text-slate-400 text-xs italic">—</span>
+                          )}
+                        </td>
+
+                        {/* 9. Actions (View Tenant, Agreement PDF, Edit Profile) */}
+                        <td className="px-5 py-4 text-right whitespace-nowrap">
+                          <div className="flex items-center justify-end gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => handleOpenAgreementDoc(rec)}
+                              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-800 font-bold text-xs hover:bg-emerald-100 hover:border-emerald-300 transition shadow-2xs cursor-pointer"
+                              title="View & Download Filled Tenancy Agreement PDF"
+                            >
+                              <FileText className="w-3.5 h-3.5 text-emerald-700" />
+                              <span>Agreement PDF</span>
+                            </button>
+
+                            <Link
+                              href={`/tenants/${rec.tenantId}`}
+                              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-teal-200 bg-teal-50/70 text-brand-teal font-semibold text-xs hover:bg-teal-100 transition shadow-2xs"
+                              title="View Tenant Profile"
+                            >
+                              <Eye className="w-3.5 h-3.5" />
+                              View Tenant
+                            </Link>
+
+                            <button
+                              type="button"
+                              onClick={() => handleOpenEditModal(rec.tenantData)}
+                              title="Edit Tenant Profile & KYC"
+                              className="p-1.5 rounded-lg border border-slate-200 text-slate-600 hover:text-brand-teal hover:bg-teal-50 transition cursor-pointer"
+                            >
+                              <Edit className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
           )}
         </div>
 
-        {/* Add Tenant Modal Dialog */}
-        {showAddModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm overflow-y-auto">
-            <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-2xl w-full max-h-[90vh] flex flex-col my-8">
+        {/* ========================================================================= */}
+        {/* MODAL: EDIT RESIDENT PROFILE & KYC DIALOG (Matches PG Model Layout)       */}
+        {/* ========================================================================= */}
+        {selectedEditTenant && (
+          <div className="fixed inset-0 z-50 bg-brand-navy/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-xl w-full p-6 space-y-4 max-h-[90vh] flex flex-col animate-in fade-in zoom-in-95">
               {/* Modal Header */}
-              <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3 shrink-0">
                 <div className="flex items-center gap-2.5">
-                  <div className="p-2 rounded-lg bg-teal-50 text-brand-teal">
-                    <UserPlus className="w-5 h-5" />
+                  <div className="w-9 h-9 rounded-xl bg-teal-50 text-brand-teal flex items-center justify-center font-bold border border-teal-100">
+                    <User className="w-5 h-5" />
                   </div>
                   <div>
-                    <h2 className="text-lg font-bold text-slate-900">Onboard New Tenant</h2>
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-sm font-bold text-slate-900">
+                        Edit Profile — {selectedEditTenant.firstName} {selectedEditTenant.lastName === '—' ? '' : selectedEditTenant.lastName}
+                      </h3>
+                      <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                        KYC Verified
+                      </span>
+                    </div>
                     <p className="text-xs text-slate-500">
-                      Create tenant profile with verified contact and emergency details
+                      Update resident identity, official ID proof, address, and emergency contact.
                     </p>
                   </div>
                 </div>
                 <button
-                  onClick={() => setShowAddModal(false)}
-                  className="text-slate-400 hover:text-slate-600 transition"
+                  type="button"
+                  onClick={() => setSelectedEditTenant(null)}
+                  className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-100 transition cursor-pointer"
                 >
                   <X className="w-5 h-5" />
                 </button>
               </div>
 
-              {/* Modal Body */}
-              <form onSubmit={handleCreateTenant} className="flex-1 overflow-y-auto p-6 space-y-6">
-                {errorMsg && (
-                  <div className="p-3.5 rounded-lg bg-rose-50 border border-rose-200 text-rose-700 text-sm flex items-center gap-2">
-                    <AlertCircle className="w-4 h-4 shrink-0" />
-                    <span>{errorMsg}</span>
-                  </div>
-                )}
-
-                {/* Personal Information */}
+              {/* Form Content (Matches PG Model 1-to-1) */}
+              <form onSubmit={handleSaveEditProfile} className="space-y-4 overflow-y-auto pr-1 flex-1 text-xs">
+                {/* SECTION 1: PERSONAL INFORMATION */}
                 <div>
-                  <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">
+                  <h5 className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2.5 pb-1 border-b border-slate-200">
                     Personal Information
-                  </h3>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-xs font-medium text-slate-700 mb-1">
-                        First Name *
-                      </label>
-                      <input
-                        type="text"
-                        required
-                        value={formData.firstName}
-                        onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
-                        className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-teal/20 focus:border-brand-teal"
-                        placeholder="e.g. Rahul"
-                      />
+                  </h5>
+                  <div className="space-y-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="font-semibold text-slate-700 block mb-1">
+                          First Name <span className="text-rose-500">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          placeholder="e.g. Rahul"
+                          value={editFormData.firstName}
+                          onChange={(e) => setEditFormData({ ...editFormData, firstName: e.target.value })}
+                          className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs font-medium text-slate-800 focus:ring-1 focus:ring-brand-teal"
+                        />
+                      </div>
+                      <div>
+                        <label className="font-semibold text-slate-700 block mb-1">
+                          Last Name <span className="text-rose-500">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          placeholder="e.g. Sharma"
+                          value={editFormData.lastName}
+                          onChange={(e) => setEditFormData({ ...editFormData, lastName: e.target.value })}
+                          className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs font-medium text-slate-800 focus:ring-1 focus:ring-brand-teal"
+                        />
+                      </div>
                     </div>
-                    <div>
-                      <label className="block text-xs font-medium text-slate-700 mb-1">
-                        Last Name *
-                      </label>
-                      <input
-                        type="text"
-                        required
-                        value={formData.lastName}
-                        onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
-                        className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-teal/20 focus:border-brand-teal"
-                        placeholder="e.g. Sharma"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium text-slate-700 mb-1">
-                        Phone Number *
-                      </label>
-                      <input
-                        type="tel"
-                        required
-                        value={formData.phone}
-                        onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                        className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-teal/20 focus:border-brand-teal"
-                        placeholder="10-digit mobile number"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium text-slate-700 mb-1">
-                        Email Address
-                      </label>
-                      <input
-                        type="email"
-                        value={formData.email}
-                        onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                        className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-teal/20 focus:border-brand-teal"
-                        placeholder="rahul@example.com"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium text-slate-700 mb-1">
-                        Date of Birth
-                      </label>
-                      <input
-                        type="date"
-                        value={formData.dateOfBirth}
-                        onChange={(e) => setFormData({ ...formData, dateOfBirth: e.target.value })}
-                        className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-teal/20 focus:border-brand-teal"
-                      />
+
+                    <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                      <div>
+                        <label className="font-semibold text-slate-700 block mb-1">
+                          Phone Number <span className="text-rose-500">*</span>
+                        </label>
+                        <input
+                          type="tel"
+                          required
+                          placeholder="10 digit mobile number"
+                          value={editFormData.phone}
+                          onChange={(e) => setEditFormData({ ...editFormData, phone: e.target.value })}
+                          className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs font-medium text-slate-800 focus:ring-1 focus:ring-brand-teal font-mono"
+                        />
+                      </div>
+                      <div>
+                        <label className="font-semibold text-slate-700 block mb-1">Email Address</label>
+                        <input
+                          type="email"
+                          placeholder="rahul@example.com"
+                          value={editFormData.email}
+                          onChange={(e) => setEditFormData({ ...editFormData, email: e.target.value })}
+                          className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs font-medium text-slate-800 focus:ring-1 focus:ring-brand-teal"
+                        />
+                      </div>
+                      <div>
+                        <label className="font-semibold text-slate-700 block mb-1">
+                          Date of Birth <span className="text-rose-500">*</span>
+                        </label>
+                        <input
+                          type="date"
+                          required
+                          value={editFormData.dateOfBirth}
+                          onChange={(e) => {
+                            const dob = e.target.value;
+                            setEditFormData({
+                              ...editFormData,
+                              dateOfBirth: dob,
+                              age: calculateAge(dob),
+                            });
+                          }}
+                          className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs font-medium text-slate-800 focus:ring-1 focus:ring-brand-teal"
+                        />
+                      </div>
+                      <div>
+                        <label className="font-semibold text-slate-700 block mb-1">
+                          Age <span className="text-rose-500">*</span>
+                        </label>
+                        <input
+                          type="number"
+                          required
+                          min="1"
+                          max="120"
+                          placeholder="e.g. 24"
+                          value={editFormData.age}
+                          onChange={(e) => setEditFormData({ ...editFormData, age: e.target.value })}
+                          className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs font-medium text-slate-800 focus:ring-1 focus:ring-brand-teal"
+                        />
+                      </div>
                     </div>
                   </div>
                 </div>
 
-                {/* Permanent Address */}
+                {/* SECTION 2: OFFICIAL PROOF & GOVERNMENT ID */}
                 <div>
-                  <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">
+                  <h5 className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2.5 pb-1 border-b border-slate-200">
+                    Official Proof & Government ID
+                  </h5>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="font-semibold text-slate-700 block mb-1">
+                        Official Document Type <span className="text-rose-500">*</span>
+                      </label>
+                      <select
+                        value={editFormData.documentType}
+                        onChange={(e) => setEditFormData({ ...editFormData, documentType: e.target.value })}
+                        className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs font-medium text-slate-800 focus:ring-1 focus:ring-brand-teal cursor-pointer"
+                      >
+                        <option value="AADHAAR_CARD">Aadhaar Card (UIDAI)</option>
+                        <option value="PAN_CARD">PAN Card</option>
+                        <option value="PASSPORT">Passport</option>
+                        <option value="DRIVING_LICENSE">Driving License</option>
+                        <option value="VOTER_ID">Voter ID Card</option>
+                        <option value="OTHER">Other Official ID</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="font-semibold text-slate-700 block mb-1">
+                        Document / ID Number <span className="text-rose-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="e.g. XXXX-XXXX-4892 / ABCDE1234F"
+                        value={editFormData.documentNumber}
+                        onChange={(e) => setEditFormData({ ...editFormData, documentNumber: e.target.value })}
+                        className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs font-medium text-slate-800 focus:ring-1 focus:ring-brand-teal font-mono"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Document File Upload */}
+                  <div className="mt-3">
+                    <label className="font-semibold text-slate-700 block mb-1">
+                      Upload Official Proof Document (Aadhaar / Passport / ID)
+                    </label>
+                    <div className="border-2 border-dashed border-slate-300 rounded-xl p-3.5 bg-white hover:border-brand-teal/50 transition text-center">
+                      <input
+                        type="file"
+                        ref={fileInputRef}
+                        id="edit-profile-document-upload"
+                        accept=".pdf,.jpg,.jpeg,.png"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            setSelectedDocFile(file);
+                          }
+                        }}
+                      />
+                      {selectedDocFile ? (
+                        <div className="flex items-center justify-between bg-teal-50/70 p-2 rounded-lg border border-teal-200 text-left">
+                          <div className="flex items-center gap-2">
+                            <div className="w-7 h-7 rounded bg-teal-100 text-brand-teal flex items-center justify-center font-bold">
+                              <FileCheck className="w-3.5 h-3.5" />
+                            </div>
+                            <div>
+                              <p className="text-xs font-bold text-slate-800">{selectedDocFile.name}</p>
+                              <p className="text-[10px] text-slate-500">
+                                {(selectedDocFile.size / 1024).toFixed(1)} KB • Ready for upload
+                              </p>
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setSelectedDocFile(null)}
+                            className="p-1 text-slate-400 hover:text-rose-600 rounded"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                      ) : (
+                        <label
+                          htmlFor="edit-profile-document-upload"
+                          className="cursor-pointer flex flex-col items-center justify-center gap-1"
+                        >
+                          <UploadCloud className="w-5 h-5 text-brand-teal" />
+                          <span className="text-xs font-bold text-brand-navy">
+                            Click to upload document or browse files
+                          </span>
+                          <span className="text-[10px] text-slate-400">PDF, JPG, PNG up to 10MB</span>
+                        </label>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* SECTION 3: PERMANENT ADDRESS */}
+                <div>
+                  <h5 className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2.5 pb-1 border-b border-slate-200">
                     Permanent Address
-                  </h3>
-                  <div className="space-y-4">
+                  </h5>
+                  <div className="space-y-3">
                     <div>
-                      <label className="block text-xs font-medium text-slate-700 mb-1">
-                        Street Address *
+                      <label className="font-semibold text-slate-700 block mb-1">
+                        Street Address <span className="text-rose-500">*</span>
                       </label>
                       <input
                         type="text"
                         required
-                        value={formData.permanentAddress}
-                        onChange={(e) =>
-                          setFormData({ ...formData, permanentAddress: e.target.value })
-                        }
-                        className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-teal/20 focus:border-brand-teal"
                         placeholder="House No, Street, Landmark"
+                        value={editFormData.permanentAddress}
+                        onChange={(e) => setEditFormData({ ...editFormData, permanentAddress: e.target.value })}
+                        className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs font-medium text-slate-800 focus:ring-1 focus:ring-brand-teal"
                       />
                     </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                       <div>
-                        <label className="block text-xs font-medium text-slate-700 mb-1">
-                          City *
+                        <label className="font-semibold text-slate-700 block mb-1">
+                          City <span className="text-rose-500">*</span>
                         </label>
                         <input
                           type="text"
                           required
-                          value={formData.permanentCity}
-                          onChange={(e) =>
-                            setFormData({ ...formData, permanentCity: e.target.value })
-                          }
-                          className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-teal/20 focus:border-brand-teal"
                           placeholder="e.g. Bengaluru"
+                          value={editFormData.permanentCity}
+                          onChange={(e) => setEditFormData({ ...editFormData, permanentCity: e.target.value })}
+                          className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs font-medium text-slate-800 focus:ring-1 focus:ring-brand-teal"
                         />
                       </div>
+
                       <div>
-                        <label className="block text-xs font-medium text-slate-700 mb-1">
-                          State *
+                        <label className="font-semibold text-slate-700 block mb-1">
+                          State <span className="text-rose-500">*</span>
                         </label>
                         <input
                           type="text"
                           required
-                          value={formData.permanentState}
-                          onChange={(e) =>
-                            setFormData({ ...formData, permanentState: e.target.value })
-                          }
-                          className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-teal/20 focus:border-brand-teal"
                           placeholder="e.g. Karnataka"
+                          value={editFormData.permanentState}
+                          onChange={(e) => setEditFormData({ ...editFormData, permanentState: e.target.value })}
+                          className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs font-medium text-slate-800 focus:ring-1 focus:ring-brand-teal"
                         />
                       </div>
+
                       <div>
-                        <label className="block text-xs font-medium text-slate-700 mb-1">
-                          Postal Code *
+                        <label className="font-semibold text-slate-700 block mb-1">
+                          Postal Code <span className="text-rose-500">*</span>
                         </label>
                         <input
                           type="text"
                           required
-                          value={formData.permanentPostalCode}
-                          onChange={(e) =>
-                            setFormData({ ...formData, permanentPostalCode: e.target.value })
-                          }
-                          className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-teal/20 focus:border-brand-teal"
                           placeholder="e.g. 560001"
+                          value={editFormData.permanentPostalCode}
+                          onChange={(e) => setEditFormData({ ...editFormData, permanentPostalCode: e.target.value })}
+                          className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs font-medium text-slate-800 focus:ring-1 focus:ring-brand-teal"
                         />
                       </div>
                     </div>
                   </div>
                 </div>
 
-                {/* Professional / Education Details */}
+                {/* SECTION 4: PROFESSIONAL / EDUCATION DETAILS */}
                 <div>
-                  <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">
+                  <h5 className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2.5 pb-1 border-b border-slate-200">
                     Professional / Education Details
-                  </h3>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  </h5>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-xs font-medium text-slate-700 mb-1">
-                        Occupation
-                      </label>
+                      <label className="font-semibold text-slate-700 block mb-1">Occupation</label>
                       <input
                         type="text"
-                        value={formData.occupation}
-                        onChange={(e) => setFormData({ ...formData, occupation: e.target.value })}
-                        className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-teal/20 focus:border-brand-teal"
                         placeholder="e.g. Software Engineer / Student"
+                        value={editFormData.occupation}
+                        onChange={(e) => setEditFormData({ ...editFormData, occupation: e.target.value })}
+                        className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs font-medium text-slate-800 focus:ring-1 focus:ring-brand-teal"
                       />
                     </div>
+
                     <div>
-                      <label className="block text-xs font-medium text-slate-700 mb-1">
-                        Employer or College Name
-                      </label>
+                      <label className="font-semibold text-slate-700 block mb-1">Employer or College Name</label>
                       <input
                         type="text"
-                        value={formData.employerOrCollege}
-                        onChange={(e) =>
-                          setFormData({ ...formData, employerOrCollege: e.target.value })
-                        }
-                        className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-teal/20 focus:border-brand-teal"
                         placeholder="e.g. Infosys / RV College"
+                        value={editFormData.employerOrCollege}
+                        onChange={(e) => setEditFormData({ ...editFormData, employerOrCollege: e.target.value })}
+                        className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs font-medium text-slate-800 focus:ring-1 focus:ring-brand-teal"
                       />
                     </div>
                   </div>
                 </div>
 
-                {/* Emergency Contact */}
+                {/* SECTION 5: EMERGENCY CONTACT DETAILS */}
                 <div>
-                  <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">
+                  <h5 className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2.5 pb-1 border-b border-slate-200">
                     Emergency Contact Details
-                  </h3>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  </h5>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <div>
-                      <label className="block text-xs font-medium text-slate-700 mb-1">
-                        Contact Name *
+                      <label className="font-semibold text-slate-700 block mb-1">
+                        Contact Name <span className="text-rose-500">*</span>
                       </label>
                       <input
                         type="text"
                         required
-                        value={formData.emergencyContactName}
-                        onChange={(e) =>
-                          setFormData({ ...formData, emergencyContactName: e.target.value })
-                        }
-                        className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-teal/20 focus:border-brand-teal"
                         placeholder="e.g. Ramesh Sharma"
+                        value={editFormData.emergencyContactName}
+                        onChange={(e) => setEditFormData({ ...editFormData, emergencyContactName: e.target.value })}
+                        className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs font-medium text-slate-800 focus:ring-1 focus:ring-brand-teal"
                       />
                     </div>
+
                     <div>
-                      <label className="block text-xs font-medium text-slate-700 mb-1">
-                        Contact Phone *
+                      <label className="font-semibold text-slate-700 block mb-1">
+                        Contact Phone <span className="text-rose-500">*</span>
                       </label>
                       <input
                         type="tel"
                         required
-                        value={formData.emergencyContactPhone}
-                        onChange={(e) =>
-                          setFormData({ ...formData, emergencyContactPhone: e.target.value })
-                        }
-                        className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-teal/20 focus:border-brand-teal"
                         placeholder="e.g. 9876543210"
+                        value={editFormData.emergencyContactPhone}
+                        onChange={(e) => setEditFormData({ ...editFormData, emergencyContactPhone: e.target.value })}
+                        className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs font-medium text-slate-800 focus:ring-1 focus:ring-brand-teal"
                       />
                     </div>
+
                     <div>
-                      <label className="block text-xs font-medium text-slate-700 mb-1">
-                        Relationship *
+                      <label className="font-semibold text-slate-700 block mb-1">
+                        Relationship <span className="text-rose-500">*</span>
                       </label>
                       <input
                         type="text"
                         required
-                        value={formData.emergencyContactRelation}
-                        onChange={(e) =>
-                          setFormData({ ...formData, emergencyContactRelation: e.target.value })
-                        }
-                        className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-teal/20 focus:border-brand-teal"
                         placeholder="e.g. Father / Mother"
+                        value={editFormData.emergencyContactRelation}
+                        onChange={(e) => setEditFormData({ ...editFormData, emergencyContactRelation: e.target.value })}
+                        className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs font-medium text-slate-800 focus:ring-1 focus:ring-brand-teal"
                       />
                     </div>
                   </div>
                 </div>
 
-                {/* Modal Actions */}
-                <div className="pt-4 border-t border-slate-100 flex items-center justify-end gap-3">
+                {/* Form Action Buttons */}
+                <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2 shrink-0">
                   <button
                     type="button"
-                    onClick={() => setShowAddModal(false)}
-                    className="px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 rounded-lg transition"
+                    onClick={() => setSelectedEditTenant(null)}
+                    className="px-4 py-2 border border-slate-300 text-slate-700 hover:bg-slate-100 rounded-lg font-semibold text-xs transition cursor-pointer"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
-                    disabled={submitting}
-                    className="inline-flex items-center gap-2 px-5 py-2 rounded-lg bg-brand-teal text-white font-medium text-sm hover:bg-teal-700 transition disabled:opacity-50"
+                    disabled={processingAction}
+                    className="px-5 py-2 bg-brand-teal hover:bg-teal-700 text-white rounded-lg font-bold text-xs transition flex items-center gap-1.5 shadow-sm cursor-pointer disabled:opacity-50"
                   >
-                    {submitting ? (
+                    {processingAction ? (
                       <>
                         <Loader2 className="w-4 h-4 animate-spin" />
-                        Saving Profile...
+                        Saving...
                       </>
                     ) : (
-                      'Save & Proceed to KYC'
+                      <>
+                        <Save className="w-4 h-4" />
+                        Save Changes
+                      </>
                     )}
                   </button>
                 </div>
@@ -694,6 +1614,13 @@ export default function TenantsPage() {
             </div>
           </div>
         )}
+
+        {/* AGREEMENT DOCUMENT PDF VIEWER & DOWNLOADER MODAL */}
+        <AgreementDocumentViewerModal
+          isOpen={!!viewingAgreementData}
+          onClose={() => setViewingAgreementData(null)}
+          agreementData={viewingAgreementData}
+        />
       </div>
     </AppShell>
   );

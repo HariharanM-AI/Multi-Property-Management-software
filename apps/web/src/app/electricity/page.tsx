@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { AppShell } from '@/components/layout/AppShell';
 import { useAuth } from '@/lib/auth-context';
+import { getLocalDateString } from '@/lib/date-utils';
 import {
   ElectricityMeterDto,
   ElectricityReadingDto,
@@ -76,7 +77,7 @@ export default function ElectricityManagementPage() {
   // Record Reading Modal State
   const [showReadingModal, setShowReadingModal] = useState(false);
   const [readingMeterId, setReadingMeterId] = useState('');
-  const [readingDate, setReadingDate] = useState(new Date().toISOString().split('T')[0]);
+  const [readingDate, setReadingDate] = useState(getLocalDateString());
   const [currentReading, setCurrentReading] = useState('');
   const [isResetOverride, setIsResetOverride] = useState(false);
   const [resetReason, setResetReason] = useState('');
@@ -86,7 +87,7 @@ export default function ElectricityManagementPage() {
   // Add Rate Modal State
   const [showRateModal, setShowRateModal] = useState(false);
   const [ratePerUnit, setRatePerUnit] = useState('');
-  const [rateEffectiveFrom, setRateEffectiveFrom] = useState(new Date().toISOString().split('T')[0]);
+  const [rateEffectiveFrom, setRateEffectiveFrom] = useState(getLocalDateString());
   const [rateEffectiveTo, setRateEffectiveTo] = useState('');
   const [savingRate, setSavingRate] = useState(false);
 

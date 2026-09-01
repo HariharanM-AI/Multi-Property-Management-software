@@ -1,6 +1,7 @@
 import React from 'react';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
+import { BackButton } from './BackButton';
 
 export interface PageHeaderProps {
   title: string;
@@ -9,6 +10,9 @@ export interface PageHeaderProps {
   badge?: React.ReactNode;
   actions?: React.ReactNode;
   className?: string;
+  showBack?: boolean;
+  backHref?: string;
+  backLabel?: string;
 }
 
 export const PageHeader: React.FC<PageHeaderProps> = ({
@@ -18,6 +22,9 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
   badge,
   actions,
   className,
+  showBack,
+  backHref,
+  backLabel,
 }) => {
   return (
     <div
@@ -29,6 +36,11 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
       )}
     >
       <div className="space-y-1">
+        {showBack && (
+          <div className="mb-2">
+            <BackButton fallbackHref={backHref} label={backLabel} />
+          </div>
+        )}
         <div className="flex items-center gap-2.5 flex-wrap">
           {IconOrElement && (
             <div className="p-2 rounded-xl bg-teal-50 border border-teal-200 text-brand-teal shrink-0">

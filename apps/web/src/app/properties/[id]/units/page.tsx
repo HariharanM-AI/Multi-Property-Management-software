@@ -6,6 +6,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { AppShell } from '@/components/layout/AppShell';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
+import { BackButton } from '@/components/ui/BackButton';
 import { useAuth } from '@/lib/auth-context';
 import {
   PropertyDto,
@@ -660,15 +661,18 @@ export default function RentalUnitsPage() {
     <AppShell>
       <div className="p-6 max-w-7xl mx-auto space-y-6">
         
-        {/* Header Section */}
+        {/* Navigation & Header Section */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
-            <div className="flex items-center space-x-2 text-slate-500 text-sm">
-              <Link href="/properties" className="hover:text-slate-900">Properties</Link>
-              <span>/</span>
-              <Link href={`/properties/${propertyId}`} className="hover:text-slate-900">{property?.name}</Link>
-              <span>/</span>
-              <span className="text-slate-900 font-medium">Inventory</span>
+            <div className="flex items-center justify-between gap-4 mb-2">
+              <div className="flex items-center space-x-2 text-slate-500 text-xs">
+                <Link href="/properties" className="hover:text-slate-900">Properties</Link>
+                <span>/</span>
+                <Link href={`/properties/${propertyId}`} className="hover:text-slate-900">{property?.name}</Link>
+                <span>/</span>
+                <span className="text-slate-900 font-medium">Inventory</span>
+              </div>
+              <BackButton fallbackHref={`/properties/${propertyId}`} label="Back to Property" />
             </div>
             <h1 className="text-2xl font-bold text-slate-900 mt-1">Whole-Unit Rental Inventory</h1>
             <p className="text-sm text-slate-500 mt-0.5">Manage flats, villas, specs, active leases, and escalations.</p>
@@ -911,9 +915,11 @@ export default function RentalUnitsPage() {
                     <label className="text-xs font-semibold text-slate-500 block mb-1">Monthly Rent * (₹)</label>
                     <input
                       type="number"
+                      min="0"
                       required
-                      value={unitRent}
-                      onChange={(e) => setUnitRent(Number(e.target.value))}
+                      value={unitRent === 0 ? '' : unitRent}
+                      placeholder="0"
+                      onChange={(e) => setUnitRent(e.target.value === '' ? 0 : Number(e.target.value))}
                       className="w-full px-3 py-2 border border-slate-200 rounded text-sm outline-none focus:border-slate-400"
                     />
                   </div>
@@ -921,9 +927,11 @@ export default function RentalUnitsPage() {
                     <label className="text-xs font-semibold text-slate-500 block mb-1">Security Deposit * (₹)</label>
                     <input
                       type="number"
+                      min="0"
                       required
-                      value={unitDeposit}
-                      onChange={(e) => setUnitDeposit(Number(e.target.value))}
+                      value={unitDeposit === 0 ? '' : unitDeposit}
+                      placeholder="0"
+                      onChange={(e) => setUnitDeposit(e.target.value === '' ? 0 : Number(e.target.value))}
                       className="w-full px-3 py-2 border border-slate-200 rounded text-sm outline-none focus:border-slate-400"
                     />
                   </div>
@@ -996,8 +1004,10 @@ export default function RentalUnitsPage() {
                     <label className="text-xs font-semibold text-slate-500 block mb-1">Lock-In Period (Months)</label>
                     <input
                       type="number"
-                      value={lockInMonths}
-                      onChange={(e) => setLockInMonths(Number(e.target.value))}
+                      min="0"
+                      value={lockInMonths === 0 ? '' : lockInMonths}
+                      placeholder="0"
+                      onChange={(e) => setLockInMonths(e.target.value === '' ? 0 : Number(e.target.value))}
                       className="w-full px-3 py-2 border border-slate-200 rounded text-sm outline-none focus:border-slate-400"
                     />
                   </div>
@@ -1005,8 +1015,10 @@ export default function RentalUnitsPage() {
                     <label className="text-xs font-semibold text-slate-500 block mb-1">Notice Period (Days)</label>
                     <input
                       type="number"
-                      value={noticePeriodDays}
-                      onChange={(e) => setNoticePeriodDays(Number(e.target.value))}
+                      min="0"
+                      value={noticePeriodDays === 0 ? '' : noticePeriodDays}
+                      placeholder="0"
+                      onChange={(e) => setNoticePeriodDays(e.target.value === '' ? 0 : Number(e.target.value))}
                       className="w-full px-3 py-2 border border-slate-200 rounded text-sm outline-none focus:border-slate-400"
                     />
                   </div>
@@ -1017,9 +1029,11 @@ export default function RentalUnitsPage() {
                     <label className="text-xs font-semibold text-slate-500 block mb-1">Monthly Lease Rent (₹)</label>
                     <input
                       type="number"
+                      min="0"
                       required
-                      value={leaseRent}
-                      onChange={(e) => setLeaseRent(Number(e.target.value))}
+                      value={leaseRent === 0 ? '' : leaseRent}
+                      placeholder="0"
+                      onChange={(e) => setLeaseRent(e.target.value === '' ? 0 : Number(e.target.value))}
                       className="w-full px-3 py-2 border border-slate-200 rounded text-sm outline-none focus:border-slate-400"
                     />
                   </div>
@@ -1027,9 +1041,11 @@ export default function RentalUnitsPage() {
                     <label className="text-xs font-semibold text-slate-500 block mb-1">Security Deposit (₹)</label>
                     <input
                       type="number"
+                      min="0"
                       required
-                      value={leaseDeposit}
-                      onChange={(e) => setLeaseDeposit(Number(e.target.value))}
+                      value={leaseDeposit === 0 ? '' : leaseDeposit}
+                      placeholder="0"
+                      onChange={(e) => setLeaseDeposit(e.target.value === '' ? 0 : Number(e.target.value))}
                       className="w-full px-3 py-2 border border-slate-200 rounded text-sm outline-none focus:border-slate-400"
                     />
                   </div>

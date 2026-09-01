@@ -58,3 +58,4 @@ prisma/migrations/dev.db
 # TypeScript build cache
 *.tsbuildinfo
 uploads/
+scratch/

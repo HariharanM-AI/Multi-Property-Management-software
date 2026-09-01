@@ -8,6 +8,7 @@ import { StatusBadge } from '@/components/ui/StatusBadge';
 import { Button } from '@/components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { getLocalDateString } from '@/lib/date-utils';
 import {
   Users,
   UserCheck,
@@ -59,7 +60,7 @@ export default function StaffManagementPage() {
   const [attendanceRecords, setAttendanceRecords] = useState<StaffAttendanceDto[]>([]);
   const [isLoadingAttendance, setIsLoadingAttendance] = useState(false);
   const [attendanceDateFilter, setAttendanceDateFilter] = useState(() => {
-    return new Date().toISOString().split('T')[0];
+    return getLocalDateString();
   });
   const [attendanceStatusFilter, setAttendanceStatusFilter] = useState<string>('all');
 
@@ -75,14 +76,14 @@ export default function StaffManagementPage() {
     roleTitle: '',
     phone: '',
     salaryMonthly: '',
-    joinedDate: new Date().toISOString().split('T')[0],
+    joinedDate: getLocalDateString(),
     propertyId: '',
     isActive: true,
   });
 
   const [attendanceForm, setAttendanceForm] = useState({
     staffMemberId: '',
-    date: new Date().toISOString().split('T')[0],
+    date: getLocalDateString(),
     status: StaffAttendanceStatus.PRESENT,
     checkInTime: '',
     checkOutTime: '',
@@ -215,7 +216,7 @@ export default function StaffManagementPage() {
         roleTitle: '',
         phone: '',
         salaryMonthly: '',
-        joinedDate: new Date().toISOString().split('T')[0],
+        joinedDate: getLocalDateString(),
         propertyId: '',
         isActive: true,
       });
@@ -298,7 +299,7 @@ export default function StaffManagementPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           staffMemberId: staffId,
-          date: new Date().toISOString().split('T')[0],
+          date: getLocalDateString(),
           status: StaffAttendanceStatus.PRESENT,
         }),
       });
@@ -324,7 +325,7 @@ export default function StaffManagementPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           staffMemberId: staffId,
-          date: new Date().toISOString().split('T')[0],
+          date: getLocalDateString(),
         }),
       });
 
@@ -402,6 +403,9 @@ export default function StaffManagementPage() {
         <PageHeader
           title="Staff & Attendance Management"
           subtitle="Manage operational staff directory, property assignments, daily check-in/out, and monthly payroll."
+          showBack={true}
+          backHref="/"
+          backLabel="Back to Dashboard"
           actions={
             <div className="flex items-center gap-3">
               <Button
@@ -409,7 +413,7 @@ export default function StaffManagementPage() {
                 onClick={() => {
                   setAttendanceForm({
                     staffMemberId: staffList[0]?.id || '',
-                    date: new Date().toISOString().split('T')[0],
+                    date: getLocalDateString(),
                     status: StaffAttendanceStatus.PRESENT,
                     checkInTime: '09:00',
                     checkOutTime: '18:00',
@@ -428,7 +432,7 @@ export default function StaffManagementPage() {
                     roleTitle: '',
                     phone: '',
                     salaryMonthly: '',
-                    joinedDate: new Date().toISOString().split('T')[0],
+                    joinedDate: getLocalDateString(),
                     propertyId: '',
                     isActive: true,
                   });

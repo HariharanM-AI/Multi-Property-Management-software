@@ -50,8 +50,12 @@ export class JobsRedisProvider implements OnApplicationShutdown {
       password,
       maxRetriesPerRequest: null,
       enableReadyCheck: false,
-      retryStrategy: (times: number) => Math.min(times * 100, 3000),
-      lazyConnect: false,
+      retryStrategy: (times: number) => {
+        if (times > 2) return null; // do not loop infinitely if Redis is offline
+        return Math.min(times * 200, 1000);
+      },
+      lazyConnect: true,
+      enableOfflineQueue: false,
     };
   }
 
@@ -67,9 +71,12 @@ export class JobsRedisProvider implements OnApplicationShutdown {
    */
   public getClient(): Redis {
     if (!this.redisClient) {
-      this.redisClient = new Redis(this.getRedisOptions());
+      this.redisClient = new Redis({
+        ...this.getRedisOptions(),
+        retryStrategy: (times) => (times > 2 ? null : 1000),
+      });
       this.redisClient.on('error', (err) => {
-        this.logger.error(`Redis connection error: ${err.message}`);
+        this.logger.debug?.(`Redis client status: ${err.message}`);
       });
     }
     return this.redisClient;
@@ -80,8 +87,19 @@ export class JobsRedisProvider implements OnApplicationShutdown {
    */
   public async isHealthy(): Promise<boolean> {
     try {
-      const client = this.getClient();
-      const res = await client.ping();
+      const testClient = new Redis({
+        ...this.getRedisOptions(),
+        maxRetriesPerRequest: 1,
+        connectTimeout: 500,
+        retryStrategy: () => null,
+      });
+      testClient.on('error', () => {});
+      const pingPromise = testClient.ping();
+      const timeoutPromise = new Promise<string>((_, reject) =>
+        setTimeout(() => reject(new Error('timeout')), 500)
+      );
+      const res = await Promise.race([pingPromise, timeoutPromise]);
+      testClient.disconnect();
       return res === 'PONG';
     } catch {
       return false;

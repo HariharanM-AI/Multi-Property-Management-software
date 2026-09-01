@@ -345,38 +345,14 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
           )}
         </div>
-
-        {/* Operating Model Toggle */}
-        <div className="flex items-center bg-surface-subtle p-1 rounded-lg border border-surface-border text-xs font-medium">
-          <button
-            onClick={() => onPropertyTypeChange(PropertyType.PG)}
-            className={`px-3 py-1 rounded-md transition-all ${
-              currentPropertyType === PropertyType.PG
-                ? 'bg-brand-navy text-brand-white shadow-sm font-semibold'
-                : 'text-surface-textSecondary hover:text-brand-navy'
-            }`}
-          >
-            PG Model
-          </button>
-          <button
-            onClick={() => onPropertyTypeChange(PropertyType.RENTAL_HOUSE)}
-            className={`px-3 py-1 rounded-md transition-all ${
-              currentPropertyType === PropertyType.RENTAL_HOUSE
-                ? 'bg-brand-navy text-brand-white shadow-sm font-semibold'
-                : 'text-surface-textSecondary hover:text-brand-navy'
-            }`}
-          >
-            Rental House Model
-          </button>
-        </div>
       </div>
 
       {/* Right Actions & Auth Status */}
       <div className="flex items-center gap-4">
-        {/* Zero-AI Deterministic Guarantee Badge */}
+        {/* Verified Enterprise Operations Badge */}
         <div className="hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-teal-50 border border-teal-200 text-[11px] font-semibold text-brand-teal">
           <Shield className="w-3.5 h-3.5" />
-          <span>Deterministic Core Active</span>
+          <span>Enterprise Operations</span>
         </div>
 
         {/* Notification Bell Control */}

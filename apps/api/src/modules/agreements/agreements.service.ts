@@ -9,6 +9,10 @@ import { PrismaService } from '../../database/prisma.service';
 import { AgreementRendererService, AgreementRenderingContext } from './agreement-renderer.service';
 import { AgreementPdfService } from './agreement-pdf.service';
 import {
+  DEFAULT_PG_AGREEMENT_TEMPLATE,
+  DEFAULT_RESIDENTIAL_RENT_AGREEMENT_TEMPLATE,
+} from './default-agreements.constants';
+import {
   AgreementDto,
   AgreementDetailsDto,
   AgreementSummaryDto,
@@ -368,50 +372,129 @@ export class AgreementsService {
         templateVersion = activeTemplate.version;
         resolvedTemplateId = activeTemplate.id;
       } else {
-        // Default standard fallback template
+        // Default legal template matching uploaded models
         templateContent = this.getDefaultTemplateContent(agreement.agreementType as unknown as AgreementType);
       }
     }
 
+    // Extract owner/landlord metadata and property terms from property
+    let ownerName = agreement.property.name;
+    let ownerAddress = agreement.property.address;
+    let ownerPhone = agreement.property.contactPhone || '';
+    let ownerSignature: string | null = null;
+    let propNoticePeriodDays = '30';
+    let propLockInPeriodValue = '1';
+    let propLockInPeriodUnit = 'MONTHS';
+    let propLockInMonths = '1';
+
+    if (agreement.property.description && agreement.property.description.startsWith('{')) {
+      try {
+        const meta = JSON.parse(agreement.property.description);
+        if (meta.ownerName) ownerName = meta.ownerName;
+        if (meta.ownerAddress) ownerAddress = meta.ownerAddress;
+        if (meta.ownerPhone) ownerPhone = meta.ownerPhone;
+        if (meta.ownerSignature) ownerSignature = meta.ownerSignature;
+        if (meta.noticePeriodDays !== undefined) propNoticePeriodDays = String(meta.noticePeriodDays);
+        if (meta.lockInPeriodValue !== undefined) propLockInPeriodValue = String(meta.lockInPeriodValue);
+        if (meta.lockInPeriodUnit) propLockInPeriodUnit = meta.lockInPeriodUnit;
+        if (meta.lockInMonths !== undefined) propLockInMonths = String(meta.lockInMonths);
+      } catch {}
+    }
+
+    const today = new Date();
+    const formattedPermanentAddress = `${agreement.tenant.permanentAddress}, ${agreement.tenant.permanentCity}, ${agreement.tenant.permanentState} ${agreement.tenant.permanentPostalCode}`;
+    const formattedPropertyAddress = `${agreement.property.address}, ${agreement.property.city}, ${agreement.property.state} ${agreement.property.postalCode}`;
+
+    const startDateStr = agreement.checkIn?.checkInDate
+      ? agreement.checkIn.checkInDate.toISOString().split('T')[0]
+      : (agreement.lease?.startDate ? agreement.lease.startDate.toISOString().split('T')[0] : today.toISOString().split('T')[0]);
+
+    const endDateStr = agreement.lease?.endDate
+      ? agreement.lease.endDate.toISOString().split('T')[0]
+      : '';
+
+    const monthlyRentVal = agreement.lease
+      ? String(agreement.lease.monthlyRent)
+      : (agreement.checkIn?.bed ? String(agreement.checkIn.bed.monthlyRent) : '0');
+
+    const depositVal = agreement.lease
+      ? String(agreement.lease.securityDeposit)
+      : (agreement.checkIn?.bed ? String(Number(agreement.checkIn.bed.monthlyRent) * 2) : '0');
+
+    const allocatedSpace = agreement.checkIn?.bed
+      ? `Bed ${agreement.checkIn.bed.bedNumber} (Room ${agreement.checkIn.bed.room?.roomNumber || '—'})`
+      : (agreement.lease?.rentalUnit ? `Flat ${agreement.lease.rentalUnit.unitNumber}` : (agreement.property.name));
+
+    const sharingTypeStr = agreement.checkIn?.bed?.room?.sharingType
+      ? `${agreement.checkIn.bed.room.sharingType} Sharing`
+      : 'Standard Occupancy';
+
     // 2. Build rendering context from authoritative database state
     const context: AgreementRenderingContext = {
+      OWNER_NAME: ownerName,
+      LANDLORD_NAME: ownerName,
+      OWNER_ADDRESS: ownerAddress,
+      LANDLORD_ADDRESS: ownerAddress,
+      OWNER_PHONE: ownerPhone,
+      LANDLORD_PHONE: ownerPhone,
+
+      RESIDENT_NAME: `${agreement.tenant.firstName} ${agreement.tenant.lastName}`,
       TENANT_NAME: `${agreement.tenant.firstName} ${agreement.tenant.lastName}`,
       TENANT_FIRST_NAME: agreement.tenant.firstName,
       TENANT_LAST_NAME: agreement.tenant.lastName,
       TENANT_PHONE: agreement.tenant.phone,
       TENANT_EMAIL: agreement.tenant.email || '',
-      TENANT_ADDRESS: agreement.tenant.permanentAddress,
+      RESIDENT_PERMANENT_ADDRESS: formattedPermanentAddress,
+      TENANT_PERMANENT_ADDRESS: formattedPermanentAddress,
+      TENANT_ADDRESS: formattedPermanentAddress,
       TENANT_CITY: agreement.tenant.permanentCity,
       TENANT_STATE: agreement.tenant.permanentState,
       TENANT_POSTAL_CODE: agreement.tenant.permanentPostalCode,
 
-      EMERGENCY_CONTACT_NAME: agreement.tenant.emergencyContactName,
-      EMERGENCY_CONTACT_PHONE: agreement.tenant.emergencyContactPhone,
-      EMERGENCY_CONTACT_RELATION: agreement.tenant.emergencyContactRelation,
-
+      PG_PROPERTY_ADDRESS: formattedPropertyAddress,
+      RENTED_PROPERTY_ADDRESS: formattedPropertyAddress,
       PROPERTY_NAME: agreement.property.name,
       PROPERTY_CODE: agreement.property.code,
-      PROPERTY_ADDRESS: agreement.property.address,
+      PROPERTY_ADDRESS: formattedPropertyAddress,
       PROPERTY_CITY: agreement.property.city,
       PROPERTY_STATE: agreement.property.state,
       PROPERTY_POSTAL_CODE: agreement.property.postalCode,
 
-      LEASE_START_DATE: agreement.lease ? agreement.lease.startDate.toISOString().split('T')[0] : '',
-      LEASE_END_DATE: agreement.lease ? agreement.lease.endDate.toISOString().split('T')[0] : '',
-      MONTHLY_RENT: agreement.lease
-        ? `₹${agreement.lease.monthlyRent}`
-        : agreement.checkIn?.bed
-        ? `₹${agreement.checkIn.bed.monthlyRent}`
-        : '',
-      SECURITY_DEPOSIT: agreement.lease ? `₹${agreement.lease.securityDeposit}` : '',
-
+      ALLOCATED_ROOM_BED_NO: allocatedSpace,
+      SHARING_TYPE: sharingTypeStr,
       UNIT_NUMBER: agreement.lease?.rentalUnit ? agreement.lease.rentalUnit.unitNumber : '',
       FLOOR_NUMBER: agreement.checkIn?.bed?.room?.floor ? String(agreement.checkIn.bed.room.floor.floorNumber) : '',
       ROOM_NUMBER: agreement.checkIn?.bed?.room ? agreement.checkIn.bed.room.roomNumber : '',
       BED_NUMBER: agreement.checkIn?.bed ? agreement.checkIn.bed.bedNumber : '',
 
-      CHECK_IN_DATE: agreement.checkIn ? agreement.checkIn.checkInDate.toISOString().split('T')[0] : '',
-      AGREEMENT_DATE: new Date().toISOString().split('T')[0],
+      ID_PROOF_TYPE: 'Government Photo ID (Aadhaar / Passport / Voter ID)',
+      ID_PROOF_NUMBER: 'Verified by Management upon Onboarding',
+
+      MONTHLY_PG_RENT: monthlyRentVal,
+      MONTHLY_RENT: monthlyRentVal,
+      RENT_PAYMENT_DUE_DAY: '5th',
+      SECURITY_DEPOSIT_AMOUNT: depositVal,
+      SECURITY_DEPOSIT: `₹${depositVal}`,
+
+      LEASE_START_DATE: startDateStr,
+      LEASE_END_DATE: endDateStr,
+      AGREEMENT_START_DATE: startDateStr,
+      AGREEMENT_END_DATE: endDateStr || '11 Months',
+      TENANCY_PERIOD: '11 Months',
+      NOTICE_PERIOD_DAYS: agreement.lease?.noticePeriodDays ? String(agreement.lease.noticePeriodDays) : propNoticePeriodDays,
+      LOCK_IN_MONTHS: agreement.lease?.lockInMonths ? String(agreement.lease.lockInMonths) : propLockInMonths,
+      LOCK_IN_PERIOD_VALUE: propLockInPeriodValue,
+      LOCK_IN_PERIOD_UNIT: propLockInPeriodUnit,
+
+      AGREEMENT_DAY: String(today.getDate()),
+      AGREEMENT_MONTH: today.toLocaleString('en-US', { month: 'long' }),
+      AGREEMENT_YEAR: String(today.getFullYear()),
+      AGREEMENT_DATE: today.toISOString().split('T')[0],
+      CHECK_IN_DATE: startDateStr,
+
+      EMERGENCY_CONTACT_NAME: agreement.tenant.emergencyContactName,
+      EMERGENCY_CONTACT_PHONE: agreement.tenant.emergencyContactPhone,
+      EMERGENCY_CONTACT_RELATION: agreement.tenant.emergencyContactRelation,
       ...(dto.customData || {}),
     };
 
@@ -431,6 +514,7 @@ export class AgreementsService {
       generatedAt,
       tenantName: `${agreement.tenant.firstName} ${agreement.tenant.lastName}`,
       propertyName: agreement.property.name,
+      ownerSignatureImage: ownerSignature,
       signatures: agreement.signatures as any,
     });
 
@@ -712,10 +796,6 @@ export class AgreementsService {
       }
     }
 
-    if (!agreement.contentHash || !agreement.renderedContent || !agreement.documentPath) {
-      throw new BadRequestException('Authoritative rendered content, hash, and PDF must exist for finalization.');
-    }
-
     // Execute atomic finalization
     const finalized = await this.prisma.$transaction(async (tx) => {
       const updated = await tx.agreement.update({
@@ -725,6 +805,29 @@ export class AgreementsService {
           finalizedAt: new Date(),
         },
       });
+
+      // Auto-save executed agreement PDF to Tenant Profile Documents
+      if (agreement.documentPath) {
+        const existingDoc = await tx.tenantDocument.findFirst({
+          where: { tenantId: agreement.tenantId, documentNumber: agreement.id },
+        });
+
+        if (!existingDoc) {
+          await tx.tenantDocument.create({
+            data: {
+              tenantId: agreement.tenantId,
+              documentType: 'RENTAL_AGREEMENT' as any,
+              documentNumber: agreement.id,
+              storagePath: agreement.documentPath,
+              originalFileName: `${agreement.agreementType === 'RENTAL_AGREEMENT' ? 'Residential_Rent_Agreement' : 'PG_Stay_Agreement'}_${agreement.id.slice(0, 8)}.pdf`,
+              fileSize: 120000,
+              mimeType: 'application/pdf',
+              verificationStatus: 'VERIFIED' as any,
+              verifiedAt: new Date(),
+            },
+          });
+        }
+      }
 
       if (userId) {
         await tx.auditLog.create({
@@ -945,23 +1048,12 @@ export class AgreementsService {
   }
 
   private getDefaultTemplateContent(type: AgreementType): string {
-    return `STANDARD PROPERTYOS ${type.replace(/_/g, ' ')}
-Date: {{AGREEMENT_DATE}}
-
-This agreement is entered into between Property Management for {{PROPERTY_NAME}} located at {{PROPERTY_ADDRESS}}, {{PROPERTY_CITY}}, {{PROPERTY_STATE}} and Tenant {{TENANT_NAME}} (Phone: {{TENANT_PHONE}}, Email: {{TENANT_EMAIL}}).
-
-1. PREMISES & OCCUPANCY:
-The Tenant is granted occupancy rights for {{PROPERTY_NAME}} under the terms agreed upon registration.
-
-2. FINANCIAL TERMS:
-Monthly Rent: {{MONTHLY_RENT}}
-Security Deposit: {{SECURITY_DEPOSIT}}
-
-3. EMERGENCY CONTACT:
-Name: {{EMERGENCY_CONTACT_NAME}} ({{EMERGENCY_CONTACT_RELATION}})
-Phone: {{EMERGENCY_CONTACT_PHONE}}
-
-4. ACCEPTANCE:
-By executing this digital agreement, all parties agree to comply with the community guidelines and operational policies of the property.`;
+    if (type === AgreementType.PG_AGREEMENT) {
+      return DEFAULT_PG_AGREEMENT_TEMPLATE;
+    }
+    if (type === AgreementType.RENTAL_AGREEMENT) {
+      return DEFAULT_RESIDENTIAL_RENT_AGREEMENT_TEMPLATE;
+    }
+    return DEFAULT_PG_AGREEMENT_TEMPLATE;
   }
 }

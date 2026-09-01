@@ -200,6 +200,127 @@ export class TenantsController {
     };
   }
 
+  @Post(':id/assign-bed')
+  @RequirePermissions(Permission.TENANT_UPDATE)
+  async assignBed(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') tenantId: string,
+    @Body() body: any
+  ) {
+    if (!body.propertyId || !body.bedId) {
+      throw new BadRequestException('propertyId and bedId are required');
+    }
+
+    const result = await this.tenantsService.assignBed(
+      user.organizationId,
+      tenantId,
+      user.id,
+      {
+        propertyId: body.propertyId,
+        bedId: body.bedId,
+        monthlyRent: body.monthlyRent !== undefined ? Number(body.monthlyRent) : undefined,
+        securityDeposit: body.securityDeposit !== undefined ? Number(body.securityDeposit) : undefined,
+        checkInDate: body.checkInDate,
+      }
+    );
+
+    return {
+      success: true,
+      data: result,
+    };
+  }
+
+  @Post(':id/vacate-bed')
+  @RequirePermissions(Permission.TENANT_UPDATE)
+  async vacateBed(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') tenantId: string,
+    @Body() body: any
+  ) {
+    const result = await this.tenantsService.vacateBed(
+      user.organizationId,
+      tenantId,
+      user.id,
+      {
+        bedId: body?.bedId,
+        checkoutDate: body?.checkoutDate,
+      }
+    );
+
+    return {
+      success: true,
+      data: result,
+    };
+  }
+
+  @Post('vacate-bed-by-bed/:bedId')
+  @RequirePermissions(Permission.TENANT_UPDATE)
+  async vacateBedByBedId(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('bedId') bedId: string,
+    @Body() body: any
+  ) {
+    const result = await this.tenantsService.vacateBedByBedId(
+      user.organizationId,
+      bedId,
+      user.id,
+      body?.checkoutDate
+    );
+
+    return {
+      success: true,
+      data: result,
+    };
+  }
+
+  @Post(':id/quick-verify-kyc')
+  @RequirePermissions(Permission.TENANT_KYC_VERIFY)
+  async quickVerifyKyc(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') tenantId: string,
+    @Body() body: any
+  ) {
+    const result = await this.tenantsService.quickVerifyKyc(
+      user.organizationId,
+      tenantId,
+      user.id,
+      {
+        note: body?.note,
+      }
+    );
+
+    return {
+      success: true,
+      data: result,
+    };
+  }
+
+  @Post(':id/quick-reject-kyc')
+  @RequirePermissions(Permission.TENANT_KYC_VERIFY)
+  async quickRejectKyc(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') tenantId: string,
+    @Body() body: any
+  ) {
+    if (!body.reason) {
+      throw new BadRequestException('Rejection reason is required');
+    }
+
+    const result = await this.tenantsService.quickRejectKyc(
+      user.organizationId,
+      tenantId,
+      user.id,
+      {
+        reason: body.reason,
+      }
+    );
+
+    return {
+      success: true,
+      data: result,
+    };
+  }
+
   @Delete(':id/documents/:docId')
   @RequirePermissions(Permission.TENANT_KYC_DELETE)
   async deleteDocument(

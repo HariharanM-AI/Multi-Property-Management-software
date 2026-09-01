@@ -5,6 +5,7 @@ import { useAuth } from '@/lib/auth-context';
 import { AppShell } from '@/components/layout/AppShell';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
+import { BackButton } from '@/components/ui/BackButton';
 import {
   TeamMemberDto,
   TeamInvitationDto,
@@ -210,6 +211,11 @@ export default function TeamSettingsPage() {
   return (
     <AppShell activePath="/settings">
       <div className="space-y-6 max-w-5xl mx-auto">
+        {/* Navigation Back Button */}
+        <div className="flex items-center justify-between">
+          <BackButton fallbackHref="/" label="Back to Dashboard" />
+        </div>
+
         {/* Header & Tabs */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>

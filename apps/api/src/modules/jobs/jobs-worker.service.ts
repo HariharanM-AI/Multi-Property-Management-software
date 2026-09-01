@@ -57,6 +57,12 @@ export class JobsWorkerService implements OnModuleInit, OnApplicationShutdown {
    * Spawns BullMQ workers and dead-letter queue routing on application startup
    */
   async onModuleInit(): Promise<void> {
+    const isRedisHealthy = await this.redisProvider.isHealthy();
+    if (!isRedisHealthy) {
+      this.logger.warn('Redis is offline. BullMQ background workers will run in standby mode.');
+      return;
+    }
+
     const connection = this.redisProvider.getRedisOptions();
 
     this.jobsQueue = new Queue(JOB_QUEUES.JOBS, { prefix: JOB_QUEUE_PREFIX, connection });

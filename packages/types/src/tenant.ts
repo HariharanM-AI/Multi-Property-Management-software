@@ -18,7 +18,13 @@ export interface TenantDto {
   emergencyContactName: string;
   emergencyContactPhone: string;
   emergencyContactRelation: string;
+  gender?: string | null;
   status: TenantStatus;
+  propertyId?: string | null;
+  currentStay?: any;
+  currentLease?: any;
+  stayHistories?: any[];
+  leases?: any[];
   createdAt: Date;
   updatedAt: Date;
   deletedAt: Date | null;
@@ -30,15 +36,18 @@ export interface CreateTenantDto {
   email?: string | null;
   phone: string;
   dateOfBirth?: string | null; // ISO Date String
-  permanentAddress: string;
-  permanentCity: string;
-  permanentState: string;
-  permanentPostalCode: string;
+  gender?: string;
+  documentType?: string | null;
+  documentNumber?: string | null;
+  permanentAddress?: string | null;
+  permanentCity?: string | null;
+  permanentState?: string | null;
+  permanentPostalCode?: string | null;
   occupation?: string | null;
   employerOrCollege?: string | null;
-  emergencyContactName: string;
-  emergencyContactPhone: string;
-  emergencyContactRelation: string;
+  emergencyContactName?: string | null;
+  emergencyContactPhone?: string | null;
+  emergencyContactRelation?: string | null;
 }
 
 export interface UpdateTenantDto {
@@ -47,15 +56,18 @@ export interface UpdateTenantDto {
   email?: string | null;
   phone?: string;
   dateOfBirth?: string | null;
-  permanentAddress?: string;
-  permanentCity?: string;
-  permanentState?: string;
-  permanentPostalCode?: string;
+  gender?: string;
+  documentType?: string | null;
+  documentNumber?: string | null;
+  permanentAddress?: string | null;
+  permanentCity?: string | null;
+  permanentState?: string | null;
+  permanentPostalCode?: string | null;
   occupation?: string | null;
   employerOrCollege?: string | null;
-  emergencyContactName?: string;
-  emergencyContactPhone?: string;
-  emergencyContactRelation?: string;
+  emergencyContactName?: string | null;
+  emergencyContactPhone?: string | null;
+  emergencyContactRelation?: string | null;
   status?: TenantStatus;
 }
 

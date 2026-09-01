@@ -333,6 +333,9 @@ export default function VisitorsPage() {
           title="Visitors & Gatepass Console"
           subtitle="Real-time security desk check-ins, resident guest pre-approvals, and verified audit roster"
           icon={ShieldCheck}
+          showBack={true}
+          backHref="/"
+          backLabel="Back to Dashboard"
           actions={
             <Button
               variant="primary"

@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import './globals.css';
 import { AuthProvider } from '@/lib/auth-context';
+import { ConsentBanner } from '@/components/common/ConsentBanner';
 
 export const metadata: Metadata = {
   title: 'PropertyOS — Enterprise Property Management Platform',
@@ -24,7 +25,10 @@ export default function RootLayout({
         />
       </head>
       <body suppressHydrationWarning>
-        <AuthProvider>{children}</AuthProvider>
+        <AuthProvider>
+          {children}
+          <ConsentBanner />
+        </AuthProvider>
       </body>
     </html>
   );

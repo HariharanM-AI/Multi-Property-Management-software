@@ -51,6 +51,12 @@ export class JobsService implements OnModuleInit, OnApplicationShutdown {
    * Initializes BullMQ queues on startup with propertyos prefix
    */
   async onModuleInit(): Promise<void> {
+    const isRedisHealthy = await this.redisProvider.isHealthy();
+    if (!isRedisHealthy) {
+      this.logger.warn('Redis is offline. BullMQ queues will run in standby mode.');
+      return;
+    }
+
     const connection = this.redisProvider.getRedisOptions();
 
     this.jobsQueue = new Queue(JOB_QUEUES.JOBS, {

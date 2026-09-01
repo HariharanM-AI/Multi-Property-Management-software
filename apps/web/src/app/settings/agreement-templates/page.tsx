@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { AppShell } from '@/components/layout/AppShell';
+import { BackButton } from '@/components/ui/BackButton';
 import { useAuth } from '@/lib/auth-context';
 import {
   AgreementTemplateDto,
@@ -244,12 +245,7 @@ All parties agree to the property community guidelines.`);
         {/* Navigation & Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <Link
-              href="/agreements"
-              className="p-2 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 transition shadow-sm"
-            >
-              <ArrowLeft className="w-5 h-5" />
-            </Link>
+            <BackButton fallbackHref="/agreements" label="Back to Agreements" />
             <div>
               <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
                 Agreement Templates Management

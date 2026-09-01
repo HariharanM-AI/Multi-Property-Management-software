@@ -18,6 +18,7 @@ import {
   PropertyType,
   RentalUnitStatus,
   LeaseStatus,
+  TenantStatus,
 } from '@propertyos/types';
 
 @Injectable()
@@ -136,22 +137,49 @@ export class RentalService {
       throw new ConflictException(`Unit number ${input.unitNumber} already exists in this property.`);
     }
 
+    const existingSoftDeleted = await this.prisma.rentalUnit.findFirst({
+      where: {
+        propertyId,
+        unitNumber: input.unitNumber.trim(),
+        deletedAt: { not: null },
+      },
+    });
+
     const unit = await this.prisma.$transaction(async (tx) => {
-      const created = await tx.rentalUnit.create({
-        data: {
-          propertyId,
-          unitNumber: input.unitNumber.trim(),
-          unitType: input.unitType.trim(),
-          floorNumber: input.floorNumber ?? null,
-          superBuiltupAreaSqFt: input.superBuiltupAreaSqFt ?? null,
-          carpetAreaSqFt: input.carpetAreaSqFt ?? null,
-          furnishingStatus: input.furnishingStatus ?? 'SEMI_FURNISHED',
-          monthlyRent: input.monthlyRent,
-          securityDeposit: input.securityDeposit,
-          maintenanceCharges: input.maintenanceCharges ?? 0,
-          status: RentalUnitStatus.AVAILABLE,
-        },
-      });
+      let created: any;
+      if (existingSoftDeleted) {
+        created = await tx.rentalUnit.update({
+          where: { id: existingSoftDeleted.id },
+          data: {
+            unitType: input.unitType.trim(),
+            floorNumber: input.floorNumber ?? null,
+            superBuiltupAreaSqFt: input.superBuiltupAreaSqFt ?? null,
+            carpetAreaSqFt: input.carpetAreaSqFt ?? null,
+            furnishingStatus: input.furnishingStatus ?? 'SEMI_FURNISHED',
+            monthlyRent: input.monthlyRent,
+            securityDeposit: input.securityDeposit,
+            maintenanceCharges: input.maintenanceCharges ?? 0,
+            status: RentalUnitStatus.AVAILABLE,
+            deletedAt: null,
+          },
+        });
+      } else {
+        created = await tx.rentalUnit.create({
+          data: {
+            propertyId,
+            unitNumber: input.unitNumber.trim(),
+            unitType: input.unitType.trim(),
+            floorNumber: input.floorNumber ?? null,
+            superBuiltupAreaSqFt: input.superBuiltupAreaSqFt ?? null,
+            carpetAreaSqFt: input.carpetAreaSqFt ?? null,
+            furnishingStatus: input.furnishingStatus ?? 'SEMI_FURNISHED',
+            monthlyRent: input.monthlyRent,
+            securityDeposit: input.securityDeposit,
+            maintenanceCharges: input.maintenanceCharges ?? 0,
+            status: RentalUnitStatus.AVAILABLE,
+          },
+        });
+      }
 
       await this.writeAuditLog(
         tx,
@@ -178,17 +206,42 @@ export class RentalService {
   async listRentalUnits(organizationId: string, propertyId: string): Promise<RentalUnitDto[]> {
     await this.validateRentalProperty(organizationId, propertyId);
 
-    const units = await this.prisma.rentalUnit.findMany({
+    const units: any = await this.prisma.rentalUnit.findMany({
       where: { propertyId, deletedAt: null },
       include: {
         leases: {
           where: { status: { in: [LeaseStatus.ACTIVE, LeaseStatus.NOTICE] } },
+          include: {
+            tenant: {
+              select: {
+                id: true,
+                firstName: true,
+                lastName: true,
+                phone: true,
+                email: true,
+                permanentAddress: true,
+                occupation: true,
+                employerOrCollege: true,
+                emergencyContactName: true,
+                emergencyContactPhone: true,
+                emergencyContactRelation: true,
+                documents: {
+                  select: {
+                    id: true,
+                    documentType: true,
+                    documentNumber: true,
+                    verificationStatus: true,
+                  },
+                },
+              },
+            },
+          },
         },
       },
       orderBy: { unitNumber: 'asc' },
     });
 
-    return units.map((u) => {
+    return units.map((u: any) => {
       const activeLease = u.leases[0] ? {
         id: u.leases[0].id,
         rentalUnitId: u.leases[0].rentalUnitId,
@@ -201,6 +254,7 @@ export class RentalService {
         lockInMonths: u.leases[0].lockInMonths,
         status: u.leases[0].status as LeaseStatus,
         terms: u.leases[0].terms,
+        tenant: (u.leases[0] as any).tenant || null,
         createdAt: u.leases[0].createdAt,
         updatedAt: u.leases[0].updatedAt,
       } : null;
@@ -229,11 +283,36 @@ export class RentalService {
   async getRentalUnitById(organizationId: string, propertyId: string, unitId: string): Promise<RentalUnitDto> {
     await this.validateRentalProperty(organizationId, propertyId);
 
-    const u = await this.prisma.rentalUnit.findFirst({
+    const u: any = await this.prisma.rentalUnit.findFirst({
       where: { id: unitId, propertyId, deletedAt: null },
       include: {
         leases: {
           where: { status: { in: [LeaseStatus.ACTIVE, LeaseStatus.NOTICE] } },
+          include: {
+            tenant: {
+              select: {
+                id: true,
+                firstName: true,
+                lastName: true,
+                phone: true,
+                email: true,
+                permanentAddress: true,
+                occupation: true,
+                employerOrCollege: true,
+                emergencyContactName: true,
+                emergencyContactPhone: true,
+                emergencyContactRelation: true,
+                documents: {
+                  select: {
+                    id: true,
+                    documentType: true,
+                    documentNumber: true,
+                    verificationStatus: true,
+                  },
+                },
+              },
+            },
+          },
         },
       },
     });
@@ -254,6 +333,7 @@ export class RentalService {
       lockInMonths: u.leases[0].lockInMonths,
       status: u.leases[0].status as LeaseStatus,
       terms: u.leases[0].terms,
+      tenant: (u.leases[0] as any).tenant || null,
       createdAt: u.leases[0].createdAt,
       updatedAt: u.leases[0].updatedAt,
     } : null;
@@ -296,15 +376,33 @@ export class RentalService {
     }
 
     if (input.unitNumber !== undefined && input.unitNumber.trim() !== unit.unitNumber) {
-      const existing = await this.prisma.rentalUnit.findFirst({
+      const newUnitNumber = input.unitNumber.trim();
+      const existingActive = await this.prisma.rentalUnit.findFirst({
         where: {
           propertyId,
-          unitNumber: input.unitNumber.trim(),
+          unitNumber: newUnitNumber,
           deletedAt: null,
+          id: { not: unitId },
         },
       });
-      if (existing) {
-        throw new ConflictException(`Unit number ${input.unitNumber} already exists in this property.`);
+      if (existingActive) {
+        throw new ConflictException(`Unit number ${newUnitNumber} is already in use by an active house.`);
+      }
+
+      // If a soft-deleted unit holds this unitNumber, rename it with an archived suffix so Postgres unique constraint passes
+      const existingSoftDeleted = await this.prisma.rentalUnit.findFirst({
+        where: {
+          propertyId,
+          unitNumber: newUnitNumber,
+          deletedAt: { not: null },
+          id: { not: unitId },
+        },
+      });
+      if (existingSoftDeleted) {
+        await this.prisma.rentalUnit.update({
+          where: { id: existingSoftDeleted.id },
+          data: { unitNumber: `${newUnitNumber}__archived_${existingSoftDeleted.id.substring(0, 8)}` },
+        });
       }
     }
 
@@ -378,7 +476,10 @@ export class RentalService {
 
       await tx.rentalUnit.update({
         where: { id: unitId },
-        data: { deletedAt: timestamp },
+        data: {
+          deletedAt: timestamp,
+          unitNumber: `${unit.unitNumber}__deleted_${Date.now()}`,
+        },
       });
 
       await this.writeAuditLog(
@@ -390,7 +491,86 @@ export class RentalService {
         unitId,
         { unitNumber: unit.unitNumber }
       );
+
+      // Auto re-sequence remaining VACANT rental floors
+      await this.autoResequenceVacantRentalFloors(tx, propertyId);
     });
+  }
+
+  /**
+   * Re-sequences vacant floor levels and flat numbers when intermediate floors are removed,
+   * while strictly preserving all active leased floors and resident records.
+   */
+  private async autoResequenceVacantRentalFloors(tx: any, propertyId: string): Promise<void> {
+    const activeUnits = await tx.rentalUnit.findMany({
+      where: { propertyId, deletedAt: null },
+      include: {
+        leases: {
+          where: { status: { in: [LeaseStatus.ACTIVE, LeaseStatus.NOTICE] } },
+        },
+      },
+      orderBy: [{ floorNumber: 'asc' }, { unitNumber: 'asc' }],
+    });
+
+    if (activeUnits.length === 0) return;
+
+    // Group units by current floorNumber
+    const floorsMap = new Map<number, any[]>();
+    for (const u of activeUnits) {
+      const fNum = typeof u.floorNumber === 'number' && !isNaN(u.floorNumber) ? u.floorNumber : 1;
+      if (!floorsMap.has(fNum)) {
+        floorsMap.set(fNum, []);
+      }
+      floorsMap.get(fNum)!.push(u);
+    }
+
+    const distinctFloors = Array.from(floorsMap.keys()).sort((a, b) => a - b);
+    let nextExpectedFloor = distinctFloors.length > 0 && distinctFloors[0] === 0 ? 0 : 1;
+
+    for (const fNum of distinctFloors) {
+      const unitsOnFloor = floorsMap.get(fNum) || [];
+      const isOccupied = unitsOnFloor.some(
+        (u) => u.status === RentalUnitStatus.OCCUPIED || u.leases.length > 0
+      );
+
+      if (isOccupied) {
+        nextExpectedFloor = Math.max(nextExpectedFloor, fNum + 1);
+      } else {
+        const targetFloorNum = nextExpectedFloor;
+        if (fNum !== targetFloorNum) {
+          for (let uIdx = 0; uIdx < unitsOnFloor.length; uIdx++) {
+            const unit = unitsOnFloor[uIdx];
+            const uCount = uIdx + 1;
+            const newUnitNumber = `Flat ${targetFloorNum}${uCount < 10 ? '0' + uCount : uCount}`;
+
+            // Check if soft-deleted unit occupies this newUnitNumber and rename it
+            const existingSoft = await tx.rentalUnit.findFirst({
+              where: {
+                propertyId,
+                unitNumber: newUnitNumber,
+                deletedAt: { not: null },
+                id: { not: unit.id },
+              },
+            });
+            if (existingSoft) {
+              await tx.rentalUnit.update({
+                where: { id: existingSoft.id },
+                data: { unitNumber: `${newUnitNumber}__archived_${existingSoft.id.substring(0, 8)}` },
+              });
+            }
+
+            await tx.rentalUnit.update({
+              where: { id: unit.id },
+              data: {
+                floorNumber: targetFloorNum,
+                unitNumber: newUnitNumber,
+              },
+            });
+          }
+        }
+        nextExpectedFloor++;
+      }
+    }
   }
 
   // ==========================================================================
@@ -477,7 +657,13 @@ export class RentalService {
         data: { status: RentalUnitStatus.OCCUPIED },
       });
 
-      // 6. Audit Trail
+      // 6. Update Tenant status to ACTIVE
+      await tx.tenant.update({
+        where: { id: input.tenantId },
+        data: { status: TenantStatus.ACTIVE },
+      });
+
+      // 7. Audit Trail
       await this.writeAuditLog(
         tx,
         organizationId,
@@ -643,10 +829,33 @@ export class RentalService {
             data: { status: RentalUnitStatus.AVAILABLE },
           });
         }
+
+        // Check if tenant has other active stays or leases, otherwise mark CHECKED_OUT
+        const otherStays = await tx.tenantStayHistory.findFirst({
+          where: { tenantId: lease.tenantId, checkOutDate: null },
+        });
+        const otherLeases = await tx.lease.findFirst({
+          where: {
+            tenantId: lease.tenantId,
+            id: { not: leaseId },
+            status: { in: [LeaseStatus.ACTIVE, LeaseStatus.NOTICE] },
+          },
+        });
+        if (!otherStays && !otherLeases) {
+          await tx.tenant.update({
+            where: { id: lease.tenantId },
+            data: { status: TenantStatus.CHECKED_OUT },
+          });
+        }
       } else if (input.status === LeaseStatus.ACTIVE) {
         await tx.rentalUnit.update({
           where: { id: lease.rentalUnitId },
           data: { status: RentalUnitStatus.OCCUPIED },
+        });
+
+        await tx.tenant.update({
+          where: { id: lease.tenantId },
+          data: { status: TenantStatus.ACTIVE },
         });
       }
 

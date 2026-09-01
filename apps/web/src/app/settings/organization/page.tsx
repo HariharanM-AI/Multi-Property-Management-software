@@ -5,6 +5,7 @@ import { useAuth } from '@/lib/auth-context';
 import { AppShell } from '@/components/layout/AppShell';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
+import { BackButton } from '@/components/ui/BackButton';
 import { OrganizationDto, ApiResponse, Permission } from '@propertyos/types';
 import {
   Building2,
@@ -111,6 +112,11 @@ export default function OrganizationSettingsPage() {
   return (
     <AppShell activePath="/settings">
       <div className="space-y-6 max-w-5xl mx-auto">
+        {/* Navigation Back Button */}
+        <div className="flex items-center justify-between">
+          <BackButton fallbackHref="/" label="Back to Dashboard" />
+        </div>
+
         {/* Breadcrumb & Navigation Tabs */}
         <div>
           <h1 className="text-2xl font-bold text-brand-navy">Settings</h1>

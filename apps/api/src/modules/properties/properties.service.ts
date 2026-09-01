@@ -75,6 +75,32 @@ export class PropertiesService {
 
       const propertyCode = `PROP-${String(sequence.currentValue).padStart(6, '0')}`;
 
+      // Build composite description with owner metadata & tenancy agreement terms if provided
+      const hasMeta = (
+        propertyData.ownerName ||
+        propertyData.ownerAddress ||
+        propertyData.ownerPhone ||
+        propertyData.ownerSignature ||
+        propertyData.noticePeriodDays !== undefined ||
+        propertyData.lockInPeriodValue !== undefined ||
+        propertyData.lockInPeriodUnit !== undefined ||
+        propertyData.lockInMonths !== undefined
+      );
+
+      const descriptionPayload = hasMeta
+        ? JSON.stringify({
+            text: propertyData.description?.trim() || null,
+            ownerName: propertyData.ownerName?.trim() || null,
+            ownerAddress: propertyData.ownerAddress?.trim() || null,
+            ownerPhone: propertyData.ownerPhone?.trim() || null,
+            ownerSignature: propertyData.ownerSignature || null,
+            noticePeriodDays: propertyData.noticePeriodDays !== undefined ? Number(propertyData.noticePeriodDays) : 30,
+            lockInPeriodValue: propertyData.lockInPeriodValue !== undefined ? Number(propertyData.lockInPeriodValue) : 1,
+            lockInPeriodUnit: propertyData.lockInPeriodUnit || 'MONTHS',
+            lockInMonths: propertyData.lockInMonths !== undefined ? Number(propertyData.lockInMonths) : (propertyData.lockInPeriodUnit === 'YEARS' ? (Number(propertyData.lockInPeriodValue || 1) * 12) : Number(propertyData.lockInPeriodValue || 1)),
+          })
+        : propertyData.description?.trim() || null;
+
       // 2. Create Property
       const created = await tx.property.create({
         data: {
@@ -83,7 +109,7 @@ export class PropertiesService {
           name: propertyData.name.trim(),
           propertyType: propertyData.propertyType,
           status: PropertyStatus.ACTIVE,
-          description: propertyData.description?.trim() || null,
+          description: descriptionPayload,
           address: propertyData.address.trim(),
           addressLine1: propertyData.addressLine1?.trim() || null,
           addressLine2: propertyData.addressLine2?.trim() || null,
@@ -167,34 +193,25 @@ export class PropertiesService {
     };
 
     // Lifecycle status filtering
-    if (filter.status === PropertyStatus.ARCHIVED) {
-      whereClause.status = PropertyStatus.ARCHIVED;
-      whereClause.deletedAt = { not: null };
-    } else if (filter.status) {
+    if (filter.status) {
       whereClause.status = filter.status;
-      whereClause.deletedAt = null;
     } else {
-      // Default: show active non-archived properties
-      whereClause.status = { not: PropertyStatus.ARCHIVED };
+      // Default: exclude soft-deleted properties unless specifically requested
       whereClause.deletedAt = null;
     }
 
+    // Operating model filter
     if (filter.propertyType) {
       whereClause.propertyType = filter.propertyType;
     }
 
+    // Location based multi-field filtering
     if (filter.city) {
-      whereClause.city = {
-        contains: filter.city.trim(),
-        mode: 'insensitive',
-      };
+      whereClause.city = { contains: filter.city.trim(), mode: 'insensitive' };
     }
 
     if (filter.state) {
-      whereClause.state = {
-        contains: filter.state.trim(),
-        mode: 'insensitive',
-      };
+      whereClause.state = { contains: filter.state.trim(), mode: 'insensitive' };
     }
 
     if (filter.search) {
@@ -293,26 +310,70 @@ export class PropertiesService {
     const { amenityIds, ...updateData } = input;
 
     await this.prisma.$transaction(async (tx) => {
-      // 1. Update Core Fields
+      // 1. Resolve composite description if owner or terms fields are touched
+      let descriptionPayload = updateData.description !== undefined ? updateData.description?.trim() : undefined;
+      if (
+        updateData.ownerName !== undefined ||
+        updateData.ownerAddress !== undefined ||
+        updateData.ownerPhone !== undefined ||
+        updateData.ownerSignature !== undefined ||
+        updateData.noticePeriodDays !== undefined ||
+        updateData.lockInPeriodValue !== undefined ||
+        updateData.lockInPeriodUnit !== undefined ||
+        updateData.lockInMonths !== undefined
+      ) {
+        let existingMeta: any = {};
+        if (existing.description && existing.description.startsWith('{')) {
+          try {
+            existingMeta = JSON.parse(existing.description);
+          } catch {}
+        }
+
+        const text = updateData.description !== undefined ? updateData.description?.trim() : existingMeta.text || existing.description || null;
+        const ownerName = updateData.ownerName !== undefined ? updateData.ownerName?.trim() : existingMeta.ownerName || null;
+        const ownerAddress = updateData.ownerAddress !== undefined ? updateData.ownerAddress?.trim() : existingMeta.ownerAddress || null;
+        const ownerPhone = updateData.ownerPhone !== undefined ? updateData.ownerPhone?.trim() : existingMeta.ownerPhone || null;
+        const ownerSignature = updateData.ownerSignature !== undefined ? updateData.ownerSignature : existingMeta.ownerSignature || null;
+        const noticePeriodDays = updateData.noticePeriodDays !== undefined ? Number(updateData.noticePeriodDays) : (existingMeta.noticePeriodDays ?? 30);
+        const lockInPeriodValue = updateData.lockInPeriodValue !== undefined ? Number(updateData.lockInPeriodValue) : (existingMeta.lockInPeriodValue ?? 1);
+        const lockInPeriodUnit = updateData.lockInPeriodUnit !== undefined ? updateData.lockInPeriodUnit : (existingMeta.lockInPeriodUnit || 'MONTHS');
+        const lockInMonths = updateData.lockInMonths !== undefined ? Number(updateData.lockInMonths) : (existingMeta.lockInMonths ?? (lockInPeriodUnit === 'YEARS' ? lockInPeriodValue * 12 : lockInPeriodValue));
+
+        descriptionPayload = (ownerName || ownerAddress || ownerPhone || ownerSignature || noticePeriodDays !== undefined)
+          ? JSON.stringify({
+              text,
+              ownerName,
+              ownerAddress,
+              ownerPhone,
+              ownerSignature,
+              noticePeriodDays,
+              lockInPeriodValue,
+              lockInPeriodUnit,
+              lockInMonths,
+            })
+          : text;
+      }
+
+      // Update Core Fields
       await tx.property.update({
         where: { id: propertyId },
         data: {
-          name: updateData.name?.trim(),
-          status: updateData.status,
-          description: updateData.description !== undefined ? updateData.description?.trim() : undefined,
-          address: updateData.address?.trim(),
-          addressLine1: updateData.addressLine1 !== undefined ? updateData.addressLine1?.trim() : undefined,
-          addressLine2: updateData.addressLine2 !== undefined ? updateData.addressLine2?.trim() : undefined,
-          locality: updateData.locality !== undefined ? updateData.locality?.trim() : undefined,
-          city: updateData.city?.trim(),
-          district: updateData.district !== undefined ? updateData.district?.trim() : undefined,
-          state: updateData.state?.trim(),
-          country: updateData.country?.trim(),
-          postalCode: updateData.postalCode?.trim(),
-          latitude: updateData.latitude,
-          longitude: updateData.longitude,
-          contactPhone: updateData.contactPhone !== undefined ? updateData.contactPhone?.trim() : undefined,
-          contactEmail: updateData.contactEmail !== undefined ? updateData.contactEmail?.trim().toLowerCase() : undefined,
+          name: updateData.name !== undefined ? (updateData.name ? updateData.name.trim() : undefined) : undefined,
+          status: updateData.status !== undefined ? updateData.status : undefined,
+          description: descriptionPayload !== undefined ? descriptionPayload : undefined,
+          address: updateData.address !== undefined ? (updateData.address ? updateData.address.trim() : undefined) : undefined,
+          addressLine1: updateData.addressLine1 !== undefined ? (updateData.addressLine1 ? updateData.addressLine1.trim() : null) : undefined,
+          addressLine2: updateData.addressLine2 !== undefined ? (updateData.addressLine2 ? updateData.addressLine2.trim() : null) : undefined,
+          locality: updateData.locality !== undefined ? (updateData.locality ? updateData.locality.trim() : null) : undefined,
+          city: updateData.city !== undefined ? (updateData.city ? updateData.city.trim() : undefined) : undefined,
+          district: updateData.district !== undefined ? (updateData.district ? updateData.district.trim() : null) : undefined,
+          state: updateData.state !== undefined ? (updateData.state ? updateData.state.trim() : undefined) : undefined,
+          country: updateData.country !== undefined ? (updateData.country ? updateData.country.trim() : undefined) : undefined,
+          postalCode: updateData.postalCode !== undefined ? (updateData.postalCode ? updateData.postalCode.trim() : undefined) : undefined,
+          latitude: updateData.latitude !== undefined ? updateData.latitude : undefined,
+          longitude: updateData.longitude !== undefined ? updateData.longitude : undefined,
+          contactPhone: updateData.contactPhone !== undefined ? (updateData.contactPhone ? updateData.contactPhone.trim() : null) : undefined,
+          contactEmail: updateData.contactEmail !== undefined ? (updateData.contactEmail ? updateData.contactEmail.trim().toLowerCase() : null) : undefined,
         },
       });
 
@@ -345,7 +406,7 @@ export class PropertiesService {
         }
       }
 
-      // 3. Record Audit Log
+      // 3. Audit Log
       await tx.auditLog.create({
         data: {
           organizationId,
@@ -356,13 +417,91 @@ export class PropertiesService {
           ipAddress,
           userAgent,
           metadata: {
-            updatedFields: Object.keys(input),
+            updatedFields: Object.keys(updateData),
           },
         },
       });
     });
 
     return this.getPropertyById(organizationId, propertyId);
+  }
+
+  /**
+   * Maps Prisma Property entity to PropertyDto including capability resolution
+   */
+  private mapToDto(property: any): PropertyDto {
+    const capabilities = getPropertyCapabilities(property.propertyType as PropertyType);
+
+    const amenities: AmenityDto[] =
+      property.amenities?.map((pa: any) => ({
+        id: pa.amenity.id,
+        name: pa.amenity.name,
+        category: pa.amenity.category,
+        icon: pa.amenity.icon,
+      })) || [];
+
+    let cleanDescription = property.description;
+    let ownerName: string | null = null;
+    let ownerAddress: string | null = null;
+    let ownerPhone: string | null = null;
+    let ownerSignature: string | null = null;
+    let noticePeriodDays: number | null = 30;
+    let lockInPeriodValue: number | null = 1;
+    let lockInPeriodUnit: 'DAYS' | 'MONTHS' | 'YEARS' | null = 'MONTHS';
+    let lockInMonths: number | null = 1;
+
+    if (property.description && property.description.startsWith('{')) {
+      try {
+        const meta = JSON.parse(property.description);
+        cleanDescription = meta.text ?? null;
+        ownerName = meta.ownerName ?? null;
+        ownerAddress = meta.ownerAddress ?? null;
+        ownerPhone = meta.ownerPhone ?? null;
+        ownerSignature = meta.ownerSignature ?? null;
+        if (meta.noticePeriodDays !== undefined) noticePeriodDays = Number(meta.noticePeriodDays);
+        if (meta.lockInPeriodValue !== undefined) lockInPeriodValue = Number(meta.lockInPeriodValue);
+        if (meta.lockInPeriodUnit) lockInPeriodUnit = meta.lockInPeriodUnit;
+        if (meta.lockInMonths !== undefined) lockInMonths = Number(meta.lockInMonths);
+      } catch {}
+    }
+
+    return {
+      id: property.id,
+      organizationId: property.organizationId,
+      code: property.code,
+      name: property.name,
+      propertyType: property.propertyType,
+      status: property.status,
+      description: cleanDescription,
+      address: property.address,
+      addressLine1: property.addressLine1,
+      addressLine2: property.addressLine2,
+      locality: property.locality,
+      city: property.city,
+      district: property.district,
+      state: property.state,
+      country: property.country,
+      postalCode: property.postalCode,
+      latitude: property.latitude,
+      longitude: property.longitude,
+      contactPhone: property.contactPhone,
+      contactEmail: property.contactEmail,
+      ownerName,
+      ownerAddress,
+      ownerPhone,
+      ownerSignature,
+      noticePeriodDays,
+      lockInPeriodValue,
+      lockInPeriodUnit,
+      lockInMonths,
+      images: property.images || [],
+      amenities,
+      media: property.media || [],
+      capabilities: [...capabilities],
+      createdAt: property.createdAt,
+      updatedAt: property.updatedAt,
+      deletedAt: property.deletedAt,
+    };
   }
 
   /**
@@ -576,50 +715,5 @@ export class PropertiesService {
     });
 
     return { message: 'Media removed successfully', mediaId };
-  }
-
-  /**
-   * Maps Prisma Property entity to PropertyDto including capability resolution
-   */
-  private mapToDto(property: any): PropertyDto {
-    const capabilities = getPropertyCapabilities(property.propertyType as PropertyType);
-
-    const amenities: AmenityDto[] =
-      property.amenities?.map((pa: any) => ({
-        id: pa.amenity.id,
-        name: pa.amenity.name,
-        category: pa.amenity.category,
-        icon: pa.amenity.icon,
-      })) || [];
-
-    return {
-      id: property.id,
-      organizationId: property.organizationId,
-      code: property.code,
-      name: property.name,
-      propertyType: property.propertyType,
-      status: property.status,
-      description: property.description,
-      address: property.address,
-      addressLine1: property.addressLine1,
-      addressLine2: property.addressLine2,
-      locality: property.locality,
-      city: property.city,
-      district: property.district,
-      state: property.state,
-      country: property.country,
-      postalCode: property.postalCode,
-      latitude: property.latitude,
-      longitude: property.longitude,
-      contactPhone: property.contactPhone,
-      contactEmail: property.contactEmail,
-      images: property.images || [],
-      amenities,
-      media: property.media || [],
-      capabilities: [...capabilities],
-      createdAt: property.createdAt,
-      updatedAt: property.updatedAt,
-      deletedAt: property.deletedAt,
-    };
   }
 }
