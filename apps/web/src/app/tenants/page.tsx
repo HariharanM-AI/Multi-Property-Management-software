@@ -47,6 +47,10 @@ import {
   AgreementDocumentData,
 } from '@/components/agreements/AgreementDocumentViewerModal';
 import { formatIdProofDisplay } from '@/components/agreements/AgreementSignModal';
+import {
+  getOrGenerateAgreementSignature,
+  generateDigitalSignatureDataUrl,
+} from '@/lib/agreementStorage';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api/v1';
 
@@ -148,6 +152,7 @@ export default function TenantsPage() {
   const [activeTab, setActiveTab] = useState<'ALL' | 'CHECKED_IN' | 'CHECKED_OUT'>('ALL');
   const [propertyFilter, setPropertyFilter] = useState<string>('ALL');
   const [propertiesList, setPropertiesList] = useState<{ id: string; name: string }[]>([]);
+  const [fullPropertiesMap, setFullPropertiesMap] = useState<Map<string, any>>(new Map());
 
   // Modals
   const [selectedEditTenant, setSelectedEditTenant] = useState<ExtendedTenantDto | null>(null);
@@ -218,11 +223,17 @@ export default function TenantsPage() {
       if (propsRes.ok) {
         const pJson = await propsRes.json();
         const pMap = new Map<string, { id: string; name: string }>();
+        const fullMap = new Map<string, any>();
         (pJson.data || []).forEach((p: any) => {
-          if (p && p.id && !pMap.has(p.id)) {
-            pMap.set(p.id, { id: p.id, name: p.name });
+          if (p && p.id) {
+            fullMap.set(p.id, p);
+            if (p.name) fullMap.set(p.name.toLowerCase().trim(), p);
+            if (!pMap.has(p.id)) {
+              pMap.set(p.id, { id: p.id, name: p.name });
+            }
           }
         });
+        setFullPropertiesMap(fullMap);
         setPropertiesList(Array.from(pMap.values()));
       }
     } catch (err) {
@@ -708,6 +719,43 @@ export default function TenantsPage() {
     const docNum = doc?.documentNumber || (t as any).documentNumber || (t as any).governmentIdNumber;
     const docType = doc?.documentType || 'Aadhaar Card';
 
+    const prop =
+      (rec.propertyId && fullPropertiesMap.get(rec.propertyId)) ||
+      (rec.propertyName && fullPropertiesMap.get(rec.propertyName.toLowerCase().trim()));
+
+    const userName = user ? `${user.firstName} ${user.lastName}`.trim() : 'Arun Sharma';
+    const effectiveOwnerName = prop?.ownerName?.trim() || (userName && userName !== '—' ? userName : 'Arun Sharma');
+    const effectiveOwnerPhone = prop?.ownerPhone || prop?.contactPhone || user?.phone || '+91 98765 43210';
+    const effectiveOwnerAddress =
+      prop?.ownerAddress ||
+      (prop
+        ? `${prop.address}, ${prop.city || 'Coimbatore'}, ${prop.state || 'Tamil Nadu'}`
+        : '#12, Royal Palm Residency, Coimbatore, Tamil Nadu');
+    const effectiveOwnerSignature =
+      prop?.ownerSignature || generateDigitalSignatureDataUrl(effectiveOwnerName, 'Authorized Landlord / Owner');
+
+    const sigPkg = getOrGenerateAgreementSignature({
+      tenantId: rec.recordId,
+      tenantName: rec.tenantName,
+      tenantPhone: rec.phone,
+      unitName: rec.unitOrBedNumber,
+      emergencyContactName: t.emergencyContactName,
+      emergencyContactPhone: t.emergencyContactPhone,
+      moveInDate: rec.checkInDate
+        ? typeof rec.checkInDate === 'string'
+          ? rec.checkInDate
+          : new Date(rec.checkInDate).toISOString().split('T')[0]
+        : undefined,
+      ownerName: effectiveOwnerName,
+      ownerPhone: effectiveOwnerPhone,
+      ownerAddress: effectiveOwnerAddress,
+      ownerSignature: effectiveOwnerSignature,
+    });
+
+    const propDisplayAddress = prop?.address
+      ? `${prop.address}, ${prop.city || 'Coimbatore'}, ${prop.state || 'Tamil Nadu'}`
+      : `${rec.propertyName !== '—' ? rec.propertyName : 'Test PG'}, Coimbatore, Tamil Nadu`;
+
     const agreement: AgreementDocumentData = {
       id: rec.recordId,
       tenantName: rec.tenantName,
@@ -717,28 +765,29 @@ export default function TenantsPage() {
         ? `${t.permanentAddress}, ${t.permanentCity || 'Bengaluru'}, ${t.permanentState || 'Karnataka'} — ${t.permanentPostalCode || '560001'}`
         : 'Resident Address on Record',
       tenantAadhaar: formatIdProofDisplay(docType, docNum) || 'Government Photo ID Verified',
-      ownerName: undefined,
-      ownerPhone: undefined,
-      ownerAddress: undefined,
-      ownerSignature: undefined,
-      residentSignature: (t as any).signature || undefined,
-      propertyName: rec.propertyName !== '—' ? rec.propertyName : 'Property Residency',
-      propertyAddress: `${rec.propertyName !== '—' ? rec.propertyName : 'Property Residency'}, Bengaluru, Karnataka`,
+      ownerName: effectiveOwnerName,
+      ownerPhone: effectiveOwnerPhone,
+      ownerAddress: effectiveOwnerAddress,
+      ownerSignature: effectiveOwnerSignature,
+      residentSignature: sigPkg.signatureImage,
+      witnesses: sigPkg.witnesses,
+      propertyName: rec.propertyName !== '—' ? rec.propertyName : (prop?.name || 'Test PG'),
+      propertyAddress: propDisplayAddress,
       unitOrBedName: rec.unitOrBedNumber !== '—' ? rec.unitOrBedNumber : 'Allocated Space',
       propertyType: rec.isRentalUnit ? 'RENTAL_HOUSE' : 'PG',
-      monthlyRent: rec.monthlyRent || 8500,
-      securityDeposit: rec.securityDeposit || (rec.monthlyRent ? rec.monthlyRent * 2 : 17000),
-      lockInMonths: 1,
-      noticePeriodDays: 30,
+      monthlyRent: rec.monthlyRent || 10000,
+      securityDeposit: rec.securityDeposit || (rec.monthlyRent ? rec.monthlyRent * 2 : 20000),
+      lockInMonths: prop?.lockInMonths ?? 1,
+      noticePeriodDays: prop?.noticePeriodDays ?? 30,
       startDate: rec.checkInDate
         ? new Date(rec.checkInDate).toISOString().split('T')[0]
         : getLocalDateString(),
       endDate: rec.checkOutDate
         ? new Date(rec.checkOutDate).toISOString().split('T')[0]
         : undefined,
-      signedAt: rec.checkInDate
+      signedAt: sigPkg.signedAt || (rec.checkInDate
         ? new Date(rec.checkInDate).toISOString()
-        : new Date().toISOString(),
+        : new Date().toISOString()),
       status: rec.status,
     };
 

@@ -50,6 +50,7 @@ import {
   AgreementDocumentData,
 } from '@/components/agreements/AgreementDocumentViewerModal';
 import { formatIdProofDisplay } from '@/components/agreements/AgreementSignModal';
+import { getOrGenerateAgreementSignature } from '@/lib/agreementStorage';
 
 export default function TenantDetailsPage() {
   const params = useParams();
@@ -307,6 +308,26 @@ export default function TenantDetailsPage() {
         ? `${tenant.permanentAddress}, ${tenant.permanentCity || 'Bengaluru'}, ${tenant.permanentState || 'Karnataka'} — ${tenant.permanentPostalCode || '560001'}`
         : 'Resident Address on Record',
       tenantAadhaar: formatIdProofDisplay(docType, docNum) || 'Government Photo ID Verified',
+      ownerName: isRental ? 'Property Landlord' : 'PG Facility Management',
+      ownerPhone: '+91 98765 43210',
+      ownerAddress: `${propName}, Coimbatore, Tamil Nadu`,
+      ownerSignature: 'DIGITAL_STAMP_DEFAULT',
+      residentSignature: getOrGenerateAgreementSignature({
+        tenantId: tenant.id,
+        tenantName: `${tenant.firstName} ${tenant.lastName === '—' ? '' : tenant.lastName}`.trim(),
+        tenantPhone: tenant.phone,
+        unitName,
+        emergencyContactName: tenant.emergencyContactName,
+        emergencyContactPhone: tenant.emergencyContactPhone,
+      }).signatureImage,
+      witnesses: getOrGenerateAgreementSignature({
+        tenantId: tenant.id,
+        tenantName: `${tenant.firstName} ${tenant.lastName === '—' ? '' : tenant.lastName}`.trim(),
+        tenantPhone: tenant.phone,
+        unitName,
+        emergencyContactName: tenant.emergencyContactName,
+        emergencyContactPhone: tenant.emergencyContactPhone,
+      }).witnesses,
       propertyName: propName,
       propertyAddress: `${propName}, Bengaluru, Karnataka`,
       unitOrBedName: unitName,

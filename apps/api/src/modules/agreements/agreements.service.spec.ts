@@ -44,6 +44,11 @@ describe('AgreementsService', () => {
         updateMany: jest.fn(),
         findMany: jest.fn(),
       },
+      tenantDocument: {
+        findFirst: jest.fn(),
+        create: jest.fn(),
+        update: jest.fn(),
+      },
       auditLog: { create: jest.fn() },
       $transaction: jest.fn((cb) => cb(prisma)),
     };

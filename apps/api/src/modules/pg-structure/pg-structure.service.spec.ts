@@ -3,6 +3,7 @@ import { PgStructureService } from './pg-structure.service';
 import { PrismaService } from '../../database/prisma.service';
 import { PropertyType, BedStatus, RoomSharingType, BedDto } from '@propertyos/types';
 import { NotFoundException, BadRequestException, ConflictException } from '@nestjs/common';
+import { Decimal } from '@prisma/client/runtime/library';
 
 describe('PgStructureService', () => {
   let service: PgStructureService;
@@ -206,21 +207,34 @@ describe('PgStructureService', () => {
   });
 
   describe('Bed CRUD & Lifecycle Validation', () => {
-    it('should block adding bed if capacity limit is reached', async () => {
+    it('should dynamically expand room capacity when adding bed beyond initial limit', async () => {
       mockPrismaService.property.findFirst.mockResolvedValue({ propertyType: PropertyType.PG });
       mockPrismaService.room.findFirst.mockResolvedValue({
         id: 'room-1',
         capacity: 2,
         beds: [{ id: 'b1' }, { id: 'b2' }],
       });
+      mockPrismaService.room.update = jest.fn().mockResolvedValue({ id: 'room-1', capacity: 3 });
+      mockPrismaService.bed.findFirst.mockResolvedValue(null);
+      mockPrismaService.bed.create = jest.fn().mockResolvedValue({
+        id: 'b3',
+        roomId: 'room-1',
+        bedNumber: '101-C',
+        monthlyRent: new Decimal(5000),
+        status: BedStatus.AVAILABLE,
+      });
 
-      await expect(
-        service.createBed('org-1', 'prop-1', 'user-1', {
-          roomId: 'room-1',
-          bedNumber: '101-C',
-          monthlyRent: 5000,
-        })
-      ).rejects.toThrow(BadRequestException);
+      const res = await service.createBed('org-1', 'prop-1', 'user-1', {
+        roomId: 'room-1',
+        bedNumber: '101-C',
+        monthlyRent: 5000,
+      });
+
+      expect(res.bedNumber).toBe('101-C');
+      expect(mockPrismaService.room.update).toHaveBeenCalledWith({
+        where: { id: 'room-1' },
+        data: { capacity: 3 },
+      });
     });
 
     it('should block invalid status transitions', async () => {

@@ -32,6 +32,11 @@ describe('RentalService', () => {
     },
     tenant: {
       findFirst: jest.fn(),
+      update: jest.fn(),
+    },
+    tenantStayHistory: {
+      findFirst: jest.fn(),
+      findMany: jest.fn(),
     },
     auditLog: {
       create: jest.fn(),

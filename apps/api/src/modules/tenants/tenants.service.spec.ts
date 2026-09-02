@@ -120,23 +120,31 @@ describe('TenantsService', () => {
       expect(prisma.auditLog.create).toHaveBeenCalled();
     });
 
-    it('should reject tenant creation with 409 Conflict if duplicate phone in org', async () => {
+    it('should update existing tenant profile if duplicate phone in org', async () => {
       prisma.tenant.findFirst.mockResolvedValue(mockTenant);
+      prisma.tenant.update.mockResolvedValue({
+        ...mockTenant,
+        firstName: 'Another',
+        lastName: 'User',
+      });
+      prisma.tenantDocument.findFirst.mockResolvedValue(null);
 
-      await expect(
-        service.createTenant(mockOrgId, mockUserId, {
-          firstName: 'Another',
-          lastName: 'User',
-          phone: '9876543210',
-          permanentAddress: '456 Side Street',
-          permanentCity: 'Bengaluru',
-          permanentState: 'Karnataka',
-          permanentPostalCode: '560001',
-          emergencyContactName: 'Jane Doe',
-          emergencyContactPhone: '9876543211',
-          emergencyContactRelation: 'Friend',
-        })
-      ).rejects.toThrow(ConflictException);
+      const result = await service.createTenant(mockOrgId, mockUserId, {
+        firstName: 'Another',
+        lastName: 'User',
+        phone: '9876543210',
+        email: 'another@example.com',
+        permanentAddress: '456 Secondary St',
+        permanentCity: 'Bengaluru',
+        permanentState: 'Karnataka',
+        permanentPostalCode: '560002',
+        emergencyContactName: 'Jane Doe',
+        emergencyContactPhone: '9876543211',
+        emergencyContactRelation: 'Friend',
+      });
+
+      expect(result.firstName).toBe('Another');
+      expect(prisma.tenant.update).toHaveBeenCalled();
     });
   });
 
@@ -146,19 +154,21 @@ describe('TenantsService', () => {
 
       const list = await service.listTenants(mockOrgId, { search: 'John' });
       expect(list).toHaveLength(1);
-      expect(prisma.tenant.findMany).toHaveBeenCalledWith({
-        where: {
-          organizationId: mockOrgId,
-          deletedAt: null,
-          OR: [
-            { firstName: { contains: 'John', mode: 'insensitive' } },
-            { lastName: { contains: 'John', mode: 'insensitive' } },
-            { phone: { contains: 'John' } },
-            { email: { contains: 'John', mode: 'insensitive' } },
-          ],
-        },
-        orderBy: { createdAt: 'desc' },
-      });
+      expect(prisma.tenant.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            organizationId: mockOrgId,
+            deletedAt: null,
+            OR: [
+              { firstName: { contains: 'John', mode: 'insensitive' } },
+              { lastName: { contains: 'John', mode: 'insensitive' } },
+              { phone: { contains: 'John' } },
+              { email: { contains: 'John', mode: 'insensitive' } },
+            ],
+          },
+          orderBy: { createdAt: 'desc' },
+        })
+      );
     });
 
     it('should throw NotFoundException if tenant not in organization', async () => {

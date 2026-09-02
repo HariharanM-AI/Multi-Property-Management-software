@@ -301,13 +301,22 @@ export default function PropertiesListPage() {
               const isPG = property.propertyType === PropertyType.PG;
               const isArchived = property.status === PropertyStatus.ARCHIVED;
 
+              // Theme palette: PG (Teal) vs House Rental (Blue)
+              const cardTheme = {
+                hoverBorder: isPG ? 'hover:border-teal-400/80 hover:shadow-teal-900/5' : 'hover:border-blue-400/80 hover:shadow-blue-900/5',
+                badgeBg: isPG ? 'bg-teal-50 text-teal-800 border-teal-200' : 'bg-blue-50 text-blue-800 border-blue-200',
+                pinColor: isPG ? 'text-teal-600' : 'text-blue-600',
+                manageBtn: isPG ? 'bg-brand-teal hover:bg-teal-700 text-white' : 'bg-blue-600 hover:bg-blue-700 text-white',
+                footerAccent: isPG ? 'text-slate-600' : 'text-slate-600 font-medium',
+              };
+
               return (
                 <div
                   key={property.id}
                   className={`bg-brand-white rounded-2xl border transition-all duration-200 hover:shadow-md flex flex-col justify-between overflow-hidden ${
                     isArchived
                       ? 'border-slate-300 opacity-80'
-                      : 'border-surface-border hover:border-brand-teal/40'
+                      : `border-surface-border ${cardTheme.hoverBorder}`
                   }`}
                 >
                   <div className="p-6 space-y-4">
@@ -315,11 +324,7 @@ export default function PropertiesListPage() {
                     <div className="flex items-center justify-between gap-2">
                       <div className="flex items-center gap-1.5 flex-wrap">
                         <span
-                          className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${
-                            isPG
-                              ? 'bg-teal-50 text-brand-teal border-teal-200'
-                              : 'bg-blue-50 text-blue-700 border-blue-200'
-                          }`}
+                          className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${cardTheme.badgeBg}`}
                         >
                           {isPG ? 'PG / Co-Living' : 'Whole-Unit Rental'}
                         </span>
@@ -347,7 +352,7 @@ export default function PropertiesListPage() {
                         {property.name}
                       </h3>
                       <div className="flex items-center gap-1.5 text-xs text-surface-textSecondary mt-1">
-                        <MapPin className="w-3.5 h-3.5 shrink-0 text-brand-teal" />
+                        <MapPin className={`w-3.5 h-3.5 shrink-0 ${cardTheme.pinColor}`} />
                         <span className="truncate">
                           {property.locality ? `${property.locality}, ` : ''}
                           {property.city}, {property.state} — {property.postalCode}
@@ -384,7 +389,7 @@ export default function PropertiesListPage() {
 
                   {/* Card Footer with Delete Option and Manage link */}
                   <div className="px-5 py-3 bg-surface-subtle border-t border-surface-border flex items-center justify-between gap-3">
-                    <span className="text-[11px] font-medium text-surface-textSecondary truncate">
+                    <span className={`text-[11px] truncate ${cardTheme.footerAccent}`}>
                       {isPG ? 'Room & Bed Inventory' : 'Unit & Lease Inventory'}
                     </span>
                     <div className="flex items-center gap-2 shrink-0">
@@ -405,7 +410,7 @@ export default function PropertiesListPage() {
                       </Button>
                       <Link
                         href={`/properties/${property.id}`}
-                        className="inline-flex items-center gap-1 px-3 py-1.5 h-8 bg-brand-teal hover:bg-teal-700 text-white rounded-xl text-xs font-bold shadow-2xs transition shrink-0"
+                        className={`inline-flex items-center gap-1 px-3 py-1.5 h-8 rounded-xl text-xs font-bold shadow-2xs transition shrink-0 ${cardTheme.manageBtn}`}
                       >
                         <span>Manage</span>
                         <ChevronRight className="w-3.5 h-3.5" />

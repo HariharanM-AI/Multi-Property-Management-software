@@ -54,6 +54,7 @@ describe('Shared Validation Schemas', () => {
     const payload = {
       name: 'Sunrise Co-Living Residency',
       propertyType: PropertyType.PG,
+      description: 'Premium co-living PG with high-speed internet and security',
       address: 'Plot 42, 14th Main, Sector 4, HSR Layout',
       city: 'Bengaluru',
       state: 'Karnataka',
@@ -62,6 +63,10 @@ describe('Shared Validation Schemas', () => {
       longitude: 77.6446,
       contactPhone: '9876543210',
       contactEmail: 'contact@sunrisecoliving.in',
+      ownerName: 'Arun Sharma',
+      ownerAddress: 'Plot 42, 14th Main, HSR Layout, Bengaluru',
+      ownerPhone: '9876543210',
+      ownerSignature: 'DIGITAL_STAMP_DEFAULT',
     };
 
     const parsed = CreatePropertySchema.safeParse(payload);

@@ -28,6 +28,13 @@ import {
   AgreementDocumentViewerModal,
   AgreementDocumentData,
 } from '@/components/agreements/AgreementDocumentViewerModal';
+import { downloadAgreementPdf } from '@/components/agreements/downloadAgreementPdf';
+import {
+  saveAgreementSignature,
+  getAgreementSignature,
+  getOrGenerateAgreementSignature,
+  generateDigitalSignatureDataUrl,
+} from '@/lib/agreementStorage';
 import {
   Building2,
   BedDouble,
@@ -534,6 +541,12 @@ export default function PropertyDetailPage() {
         signedAt: string;
         agreementType: string;
         isSigned: boolean;
+        witnesses?: Array<{
+          name?: string;
+          date?: string;
+          address?: string;
+          signature?: string;
+        }>;
       }
     >
   >({});
@@ -555,6 +568,7 @@ export default function PropertyDetailPage() {
 
   // Filled Agreement Document PDF Viewer Modal State
   const [viewingAgreementDoc, setViewingAgreementDoc] = useState<AgreementDocumentData | null>(null);
+  const [isDownloadingPostCheckInPdf, setIsDownloadingPostCheckInPdf] = useState(false);
 
   const handleOpenAgreementSignModal = () => {
     setShowAgreementModal(true);
@@ -566,8 +580,28 @@ export default function PropertyDetailPage() {
     signatureImage?: string;
     signedAt: string;
     agreementType: string;
+    witnesses?: Array<{
+      name?: string;
+      date?: string;
+      address?: string;
+      signature?: string;
+    }>;
   }) => {
     const key = selectedBed ? selectedBed.id : selectedRentalUnit ? selectedRentalUnit.id : 'current';
+    const bedId = selectedBed?.id;
+    const unitId = selectedRentalUnit?.id;
+    const unitName = selectedBed ? `Bed ${selectedBed.bedNumber}` : selectedRentalUnit?.unitNumber;
+
+    saveAgreementSignature({
+      ...sigData,
+      isSigned: true,
+      bedId,
+      unitId,
+      unitName,
+      tenantName: sigData.signerName,
+      propertyName: property?.name,
+    });
+
     setAgreementSignatureMap((prev) => ({
       ...prev,
       [key]: {
@@ -1509,6 +1543,26 @@ export default function PropertyDetailPage() {
         emergencyContactRelation,
         notes: checkInTerms.notes,
       };
+
+      // Save agreement signature & witnesses to persistent storage
+      const existingSig = agreementSignatureMap[selectedBed.id];
+      const finalSigPkg = existingSig || getOrGenerateAgreementSignature({
+        bedId: selectedBed.id,
+        unitName: `Bed ${selectedBed.bedNumber}`,
+        tenantName,
+        tenantPhone: phone,
+        emergencyContactName,
+        emergencyContactPhone,
+        moveInDate: checkInTerms.moveInDate,
+      });
+      saveAgreementSignature({
+        ...finalSigPkg,
+        bedId: selectedBed.id,
+        unitName: `Bed ${selectedBed.bedNumber}`,
+        tenantName,
+        tenantPhone: phone,
+        propertyName: property?.name,
+      });
 
       setBedOccupantMap((prev) => ({
         ...prev,
@@ -3466,6 +3520,7 @@ export default function PropertyDetailPage() {
     }
 
     const existingSig = selectedBed ? agreementSignatureMap[selectedBed.id]?.signatureImage : undefined;
+    const existingWitnesses = selectedBed ? agreementSignatureMap[selectedBed.id]?.witnesses : undefined;
 
     return {
       tenantName: tName || 'Resident',
@@ -3478,6 +3533,7 @@ export default function PropertyDetailPage() {
       ownerPhone: property?.contactPhone || '',
       ownerSignature: property?.ownerSignature || 'DIGITAL_STAMP_DEFAULT',
       residentSignature: existingSig,
+      witnesses: existingWitnesses,
       propertyName: property?.name || 'PG Facility',
       propertyAddress: fullPropertyAddress || property?.address || '',
       propertyType: 'PG',
@@ -3541,6 +3597,7 @@ export default function PropertyDetailPage() {
     }
 
     const existingSig = selectedRentalUnit ? agreementSignatureMap[selectedRentalUnit.id]?.signatureImage : undefined;
+    const existingWitnesses = selectedRentalUnit ? agreementSignatureMap[selectedRentalUnit.id]?.witnesses : undefined;
 
     return {
       tenantName: tName || 'Resident',
@@ -3553,6 +3610,7 @@ export default function PropertyDetailPage() {
       ownerPhone: property?.contactPhone || '',
       ownerSignature: property?.ownerSignature || 'DIGITAL_STAMP_DEFAULT',
       residentSignature: existingSig,
+      witnesses: existingWitnesses,
       propertyName: property?.name || 'Residential Property',
       propertyAddress: fullPropertyAddress || property?.address || '',
       propertyType: 'RENTAL_HOUSE',
@@ -5802,10 +5860,10 @@ export default function PropertyDetailPage() {
                     /* OCCUPIED TENANT PROFILE DETAILS VIEW */
                     <div className="space-y-4 animate-in fade-in">
                       {/* Resident Profile Card */}
-                      <div className="p-4 rounded-xl border border-blue-200 bg-blue-50/40 space-y-4">
+                      <div className={`p-4 rounded-xl border ${isPG ? 'border-teal-200 bg-teal-50/40' : 'border-blue-200 bg-blue-50/40'} space-y-4`}>
                         <div className="flex items-start justify-between gap-3">
                           <div className="flex items-center gap-3">
-                            <div className="w-12 h-12 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold text-base shadow-sm">
+                            <div className={`w-12 h-12 rounded-full ${isPG ? 'bg-brand-teal' : 'bg-blue-600'} text-white flex items-center justify-center font-bold text-base shadow-sm`}>
                               {bedOccupantMap[selectedBed.id]?.tenantName
                                 ? bedOccupantMap[selectedBed.id].tenantName.substring(0, 2).toUpperCase()
                                 : 'HM'}
@@ -5840,7 +5898,18 @@ export default function PropertyDetailPage() {
                               onClick={() => {
                                 const occ = bedOccupantMap[selectedBed.id];
                                 if (!occ) return;
+                                const sigPkg = getOrGenerateAgreementSignature({
+                                  bedId: selectedBed.id,
+                                  tenantName: occ.tenantName,
+                                  tenantPhone: occ.phone,
+                                  unitName: `Bed ${selectedBed.bedNumber}`,
+                                  emergencyContactName: occ.emergencyContactName,
+                                  emergencyContactPhone: occ.emergencyContactPhone,
+                                  moveInDate: occ.moveInDate,
+                                });
+                                const baseDetails = isPG ? getPgAgreementDetails() : getRentalAgreementDetails();
                                 setViewingAgreementDoc({
+                                  ...baseDetails,
                                   tenantName: occ.tenantName,
                                   tenantPhone: occ.phone,
                                   tenantEmail: occ.email || undefined,
@@ -5856,13 +5925,14 @@ export default function PropertyDetailPage() {
                                   lockInPeriodValue: property?.lockInPeriodValue ?? property?.lockInMonths ?? 1,
                                   lockInPeriodUnit: (property?.lockInPeriodUnit as any) || 'MONTHS',
                                   noticePeriodDays: property?.noticePeriodDays ?? 30,
-                                  startDate: occ.moveInDate || getLocalDateString(),
-                                  ownerName: property?.ownerName || (property?.name ? `${property.name} Management` : undefined),
-                                  ownerPhone: property?.ownerPhone || property?.contactPhone || undefined,
-                                  ownerAddress: property?.ownerAddress || fullPropertyAddress || undefined,
-                                  ownerSignature: property?.ownerSignature || undefined,
-                                  residentSignature: (occ as any).signature || undefined,
-                                  signedAt: occ.moveInDate || new Date().toISOString(),
+                                  ownerName: property?.ownerName || 'Arun Sharma',
+                                  ownerPhone: property?.ownerPhone || property?.contactPhone || '+91 98765 43210',
+                                  ownerAddress: property?.ownerAddress || fullPropertyAddress,
+                                  ownerSignature: property?.ownerSignature || generateDigitalSignatureDataUrl(property?.ownerName || 'Arun Sharma', 'Authorized Landlord / Owner'),
+                                  residentSignature: sigPkg.signatureImage,
+                                  sharingType: selectedBedRoom?.sharingType,
+                                  witnesses: sigPkg.witnesses,
+                                  signedAt: sigPkg.signedAt || occ.moveInDate || new Date().toISOString(),
                                   status: 'OCCUPIED',
                                 });
                               }}
@@ -5872,35 +5942,35 @@ export default function PropertyDetailPage() {
                               <FileText className="w-3.5 h-3.5 text-emerald-700" />
                               <span>Agreement PDF</span>
                             </button>
-                            <span className="px-2.5 py-1 rounded-lg text-xs font-bold bg-blue-100 text-blue-800 border border-blue-200">
+                            <span className={`px-2.5 py-1 rounded-lg text-xs font-bold ${isPG ? 'bg-teal-100 text-teal-800 border border-teal-200' : 'bg-blue-100 text-blue-800 border border-blue-200'}`}>
                               Active Resident
                             </span>
                           </div>
                         </div>
 
                         {/* Additional Details Grid */}
-                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 pt-3 border-t border-blue-100 text-xs">
-                          <div className="bg-white p-2.5 rounded-lg border border-blue-100">
+                        <div className={`grid grid-cols-2 sm:grid-cols-3 gap-2.5 pt-3 border-t ${isPG ? 'border-teal-100' : 'border-blue-100'} text-xs`}>
+                          <div className={`bg-white p-2.5 rounded-lg border ${isPG ? 'border-teal-100' : 'border-blue-100'}`}>
                             <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block">Check-In Date</span>
                             <span className="font-bold text-slate-800">{bedOccupantMap[selectedBed.id]?.moveInDate || '2026-08-01'}</span>
                           </div>
 
-                          <div className="bg-white p-2.5 rounded-lg border border-blue-100">
+                          <div className={`bg-white p-2.5 rounded-lg border ${isPG ? 'border-teal-100' : 'border-blue-100'}`}>
                             <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block">Agreed Monthly Rent</span>
                             <span className="font-bold text-brand-teal">₹{(bedOccupantMap[selectedBed.id]?.monthlyRent || Number(selectedBed.monthlyRent || selectedBedRoom.baseRent)).toLocaleString('en-IN')}/mo</span>
                           </div>
 
-                          <div className="bg-white p-2.5 rounded-lg border border-blue-100">
+                          <div className={`bg-white p-2.5 rounded-lg border ${isPG ? 'border-teal-100' : 'border-blue-100'}`}>
                             <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block">Deposit Held</span>
                             <span className="font-bold text-teal-700">₹{(bedOccupantMap[selectedBed.id]?.securityDeposit || 17000).toLocaleString('en-IN')}</span>
                           </div>
 
-                          <div className="bg-white p-2.5 rounded-lg border border-blue-100 col-span-2 sm:col-span-1">
+                          <div className={`bg-white p-2.5 rounded-lg border ${isPG ? 'border-teal-100' : 'border-blue-100'} col-span-2 sm:col-span-1`}>
                             <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block">Rent Dues</span>
                             <span className="font-bold text-emerald-700">₹0 (All Cleared)</span>
                           </div>
 
-                          <div className="bg-white p-2.5 rounded-lg border border-blue-100 col-span-2">
+                          <div className={`bg-white p-2.5 rounded-lg border ${isPG ? 'border-teal-100' : 'border-blue-100'} col-span-2`}>
                             <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block">Emergency Contact</span>
                             <span className="font-medium text-slate-800">
                               {bedOccupantMap[selectedBed.id]?.emergencyContactName || 'Murugan (Father)'} • {bedOccupantMap[selectedBed.id]?.emergencyContactPhone || '+91 98401 23456'}
@@ -6659,15 +6729,17 @@ export default function PropertyDetailPage() {
                                   setViewingAgreementDoc({
                                     ...signDetails,
                                     tenantPhone: signDetails.tenantPhone || '',
-                                    ownerName: property?.ownerName || 'Property Landlord',
-                                    ownerPhone: property?.contactPhone || '',
-                                    ownerAddress: fullPropertyAddress,
-                                    ownerSignature: property?.ownerSignature || 'DIGITAL_STAMP_DEFAULT',
+                                    ownerName: property?.ownerName || 'Arun Sharma',
+                                    ownerPhone: property?.ownerPhone || property?.contactPhone || '+91 98765 43210',
+                                    ownerAddress: property?.ownerAddress || fullPropertyAddress,
+                                    ownerSignature: property?.ownerSignature || generateDigitalSignatureDataUrl(property?.ownerName || 'Arun Sharma', 'Authorized Landlord / Owner'),
                                     residentSignature: agreementSignatureMap[selectedBed.id]?.signatureImage || `SIGNED:${agreementSignatureMap[selectedBed.id]?.signerName}`,
                                     sharingType: selectedBedRoom?.sharingType,
                                     noticePeriodDays: property?.noticePeriodDays ?? 30,
+                                    startDate: getLocalDateString(),
                                     lockInPeriodValue: property?.lockInPeriodValue ?? property?.lockInMonths ?? 1,
                                     lockInPeriodUnit: property?.lockInPeriodUnit || 'MONTHS',
+                                    witnesses: agreementSignatureMap[selectedBed.id]?.witnesses,
                                   });
                                 }}
                                 className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg text-xs transition shadow-2xs flex items-center gap-1.5 cursor-pointer"
@@ -9257,6 +9329,7 @@ export default function PropertyDetailPage() {
                                     noticePeriodDays: Number(rentalCheckInTerms.noticePeriodDays) || property?.noticePeriodDays || 30,
                                     lockInPeriodValue: Number(rentalCheckInTerms.lockInMonths) || property?.lockInPeriodValue || 6,
                                     lockInPeriodUnit: 'MONTHS',
+                                    witnesses: agreementSignatureMap[selectedRentalUnit.id]?.witnesses,
                                   });
                                 }}
                                 className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg text-xs transition shadow-2xs flex items-center gap-1.5 cursor-pointer"
@@ -9788,30 +9861,16 @@ export default function PropertyDetailPage() {
                 </p>
               </div>
 
-              {/* WhatsApp Sharing Button */}
+              {/* Action Buttons: 1st View Document, 2nd Download PDF */}
               <div className="space-y-3 pt-1">
-                <button
-                  type="button"
-                  onClick={() => {
-                    const cleanPhone = postCheckInAgreement.tenantPhone.replace(/\D/g, '').slice(-10);
-                    const waText = encodeURIComponent(
-                      `Hello ${postCheckInAgreement.tenantName},\n\nWelcome to ${postCheckInAgreement.propertyName}! Your Tenancy Agreement for ${postCheckInAgreement.unitName} has been officially recorded and executed.\n\n🏡 Property: ${postCheckInAgreement.propertyName}\n📍 Address: ${postCheckInAgreement.propertyAddress}\n💰 Monthly Rent: ₹${postCheckInAgreement.monthlyRent.toLocaleString('en-IN')}\n🛡️ Security Deposit: ₹${postCheckInAgreement.securityDeposit.toLocaleString('en-IN')}\n\nA verified PDF copy has been added to your Tenant Profile.\n\nThank you for choosing PropertyOS!`
-                    );
-                    const waUrl = `https://wa.me/91${cleanPhone}?text=${waText}`;
-                    window.open(waUrl, '_blank');
-                  }}
-                  className="w-full py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm flex items-center justify-center gap-2 shadow-sm transition cursor-pointer"
-                >
-                  <MessageCircle className="w-5 h-5" />
-                  <span>Send Agreement to Tenant via WhatsApp</span>
-                </button>
-
                 <button
                   type="button"
                   onClick={() => {
                     const key = selectedBed ? selectedBed.id : selectedRentalUnit ? selectedRentalUnit.id : 'current';
                     const sig = agreementSignatureMap[key];
+                    const baseDetails = isPG ? getPgAgreementDetails() : getRentalAgreementDetails();
                     setViewingAgreementDoc({
+                      ...baseDetails,
                       tenantName: postCheckInAgreement.tenantName,
                       tenantPhone: postCheckInAgreement.tenantPhone,
                       tenantEmail: postCheckInAgreement.tenantEmail,
@@ -9820,32 +9879,78 @@ export default function PropertyDetailPage() {
                       unitOrBedName: postCheckInAgreement.unitName,
                       propertyType: isPG ? 'PG' : 'RENTAL_HOUSE',
                       monthlyRent: postCheckInAgreement.monthlyRent,
-                      securityDeposit: postCheckInAgreement.securityDeposit,
-                      lockInMonths: property?.lockInMonths ?? 1,
-                      lockInPeriodValue: property?.lockInPeriodValue ?? property?.lockInMonths ?? 1,
-                      lockInPeriodUnit: property?.lockInPeriodUnit || 'MONTHS',
-                      noticePeriodDays: property?.noticePeriodDays ?? 30,
-                      ownerName: property?.ownerName || 'Property Landlord',
-                      ownerPhone: property?.contactPhone || '',
-                      ownerAddress: fullPropertyAddress,
-                      ownerSignature: property?.ownerSignature || 'DIGITAL_STAMP_DEFAULT',
+                      ownerName: property?.ownerName || 'Arun Sharma',
+                      ownerPhone: property?.ownerPhone || property?.contactPhone || '+91 98765 43210',
+                      ownerAddress: property?.ownerAddress || fullPropertyAddress,
+                      ownerSignature: property?.ownerSignature || generateDigitalSignatureDataUrl(property?.ownerName || 'Arun Sharma', 'Authorized Landlord / Owner'),
                       residentSignature: sig?.signatureImage || `SIGNED:${postCheckInAgreement.tenantName}`,
                       sharingType: selectedBedRoom?.sharingType,
+                      witnesses: sig?.witnesses,
                     });
                   }}
-                  className="w-full py-2.5 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs flex items-center justify-center gap-2 border border-slate-300 transition cursor-pointer"
+                  className="w-full py-3 px-4 rounded-xl bg-white hover:bg-slate-50 text-black font-bold text-sm flex items-center justify-center gap-2 border-2 border-black shadow-xs transition cursor-pointer"
                 >
-                  <FileText className="w-4 h-4 text-slate-500" />
+                  <FileText className="w-5 h-5 text-black" />
                   <span>View Filled Agreement Document (PDF)</span>
+                </button>
+
+                <button
+                  type="button"
+                  disabled={isDownloadingPostCheckInPdf}
+                  onClick={async () => {
+                    setIsDownloadingPostCheckInPdf(true);
+                    try {
+                      const key = selectedBed ? selectedBed.id : selectedRentalUnit ? selectedRentalUnit.id : 'current';
+                      const sig = agreementSignatureMap[key];
+                      const baseDetails = isPG ? getPgAgreementDetails() : getRentalAgreementDetails();
+                      const agreementDocData: AgreementDocumentData = {
+                        ...baseDetails,
+                        tenantName: postCheckInAgreement.tenantName,
+                        tenantPhone: postCheckInAgreement.tenantPhone,
+                        tenantEmail: postCheckInAgreement.tenantEmail,
+                        propertyName: postCheckInAgreement.propertyName,
+                        propertyAddress: fullPropertyAddress,
+                        unitOrBedName: postCheckInAgreement.unitName,
+                        propertyType: isPG ? 'PG' : 'RENTAL_HOUSE',
+                        monthlyRent: postCheckInAgreement.monthlyRent,
+                        securityDeposit: postCheckInAgreement.securityDeposit,
+                        ownerName: property?.ownerName || 'Arun Sharma',
+                        ownerPhone: property?.ownerPhone || property?.contactPhone || '+91 98765 43210',
+                        ownerAddress: property?.ownerAddress || fullPropertyAddress,
+                        ownerSignature: property?.ownerSignature || generateDigitalSignatureDataUrl(property?.ownerName || 'Arun Sharma', 'Authorized Landlord / Owner'),
+                        residentSignature: sig?.signatureImage || `SIGNED:${postCheckInAgreement.tenantName}`,
+                        sharingType: selectedBedRoom?.sharingType,
+                        witnesses: sig?.witnesses,
+                      };
+                      await downloadAgreementPdf(agreementDocData);
+                    } catch (err) {
+                      console.error('Failed to download PDF:', err);
+                    } finally {
+                      setIsDownloadingPostCheckInPdf(false);
+                    }
+                  }}
+                  className="w-full py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm flex items-center justify-center gap-2 shadow-sm transition cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+                >
+                  {isDownloadingPostCheckInPdf ? (
+                    <>
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                      <span>Downloading Agreement PDF...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Download className="w-5 h-5" />
+                      <span>Download Agreement (PDF)</span>
+                    </>
+                  )}
                 </button>
               </div>
 
               <div className="flex items-center justify-end pt-2 border-t border-slate-100">
                 <Button
                   variant="primary"
-                  size="sm"
+                  size="md"
                   onClick={() => setPostCheckInAgreement(null)}
-                  className="font-bold text-xs"
+                  className="font-bold text-sm px-6 py-2.5 shadow-sm"
                 >
                   Done
                 </Button>
