@@ -2,7 +2,7 @@
 
 import React, { useEffect, useRef } from 'react';
 import { AgreementDocumentData } from './AgreementDocumentViewerModal';
-import { generateDigitalSignatureDataUrl } from '@/lib/agreementStorage';
+import { generateDigitalSignatureDataUrl } from '../../lib/agreementStorage';
 
 export interface AgreementDocumentSheetsProps {
   agreementData: AgreementDocumentData;
@@ -78,6 +78,12 @@ export function AgreementDocumentSheets({
     rawId.replace(/^(Aadhaar|PAN|Voter ID|Driving License)\s*[:\-]?\s*/i, '').trim() ||
     '5489-3231-3231';
 
+  // Filter out any mock witness names (Mithun Kumar, Suresh Babu)
+  const realWitnesses = agreementData.witnesses?.filter(
+    (w) => w.name && w.name !== 'Mithun Kumar' && w.name !== 'Suresh Babu'
+  );
+  const effectiveWitnesses = realWitnesses && realWitnesses.length > 0 ? realWitnesses : undefined;
+
   // Address Fallbacks
   const rawOwner = agreementData.ownerName;
   const isGenericOwner =
@@ -136,12 +142,12 @@ export function AgreementDocumentSheets({
         {/* DOCUMENT HEADER */}
         <div className="text-center space-y-2 pb-1">
           <h1 className="text-xl sm:text-2xl font-black tracking-wider text-slate-950 uppercase">
-            {isPG ? 'PAYING GUEST ACCOMMODATION AGREEMENT' : 'RESIDENTIAL RENT AGREEMENT'}
+            {isPG ? 'PAYING GUEST ACCOMMODATION AGREEMENT' : 'RESIDENTIAL HOUSE RENTAL AGREEMENT'}
           </h1>
           <p className="text-sm sm:text-[14.5px] text-slate-900 font-medium italic max-w-2xl mx-auto leading-relaxed">
             {isPG
               ? 'This digital agreement is executed electronically and serves as a legally binding document between the Owner and the Paying Guest.'
-              : 'This lease agreement is governed under the Indian Contract Act, 1872 and the Transfer of Property Act, 1882 and this digital agreement is executed electronically and serves as a legally binding document between the Landlord and the Tenant.'}
+              : 'This digital agreement is executed electronically and serves as a legally binding Residential Tenancy Agreement between the Landlord / Lessor and the Tenant / Lessee.'}
           </p>
         </div>
 
@@ -159,10 +165,10 @@ export function AgreementDocumentSheets({
             </p>
           ) : (
             <p>
-              This Rent Agreement is made and executed at <span className="font-bold">{executionCity}</span> on this{' '}
+              This Residential House Rental Agreement is made and executed at <span className="font-bold">{executionCity}</span> on this{' '}
               <span className="font-bold">{execDay}</span> day of <span className="font-bold">{execMonth}</span>, 20
               <span className="font-bold">{execYearShort}</span> by and between the party detailed as{' '}
-              <strong>Landlord/Lessor</strong> and the party detailed as <strong>Tenant/Lessee</strong> in the schedule
+              <strong>Landlord / Lessor</strong> and the party detailed as <strong>Tenant / Lessee</strong> in the schedule
               below. The expressions 'Landlord' and 'Tenant' shall mean and include their respective heirs, successors,
               legal representatives, and assigns.
             </p>
@@ -181,7 +187,7 @@ export function AgreementDocumentSheets({
                 {/* Row 1 */}
                 <tr className="border-b border-slate-900">
                   <td className="p-2.5 sm:p-3 font-black text-slate-950 w-[36%] align-top border-r-2 border-slate-900 bg-slate-100/90">
-                    1. {isPG ? 'Owner Name:' : 'Landlord Name:'}
+                    1. {isPG ? 'Owner Name:' : 'Landlord / Lessor Name:'}
                   </td>
                   <td className="p-2.5 sm:p-3 font-bold text-slate-950">{ownerDisplayName}</td>
                 </tr>
@@ -189,17 +195,17 @@ export function AgreementDocumentSheets({
                 {/* Row 2 */}
                 <tr className="border-b border-slate-900">
                   <td className="p-2.5 sm:p-3 font-black text-slate-950 align-top border-r-2 border-slate-900 bg-slate-100/90">
-                    2. {isPG ? 'Resident Name:' : 'Landlord Address:'}
+                    2. {isPG ? 'Resident Name:' : 'Landlord Address & Contact:'}
                   </td>
                   <td className="p-2.5 sm:p-3 text-slate-950 font-semibold">
-                    {isPG ? agreementData.tenantName : ownerDisplayAddress}
+                    {isPG ? agreementData.tenantName : `${ownerDisplayAddress}${agreementData.ownerPhone ? ` • ${agreementData.ownerPhone}` : ''}`}
                   </td>
                 </tr>
 
                 {/* Row 3 */}
                 <tr className="border-b border-slate-900">
                   <td className="p-2.5 sm:p-3 font-black text-slate-950 align-top border-r-2 border-slate-900 bg-slate-100/90">
-                    3. {isPG ? 'Resident Permanent Address:' : 'Tenant Name:'}
+                    3. {isPG ? 'Resident Permanent Address:' : 'Tenant / Lessee Name:'}
                   </td>
                   <td className="p-2.5 sm:p-3 text-slate-950 font-semibold">
                     {isPG ? tenantDisplayAddress : agreementData.tenantName}
@@ -219,7 +225,7 @@ export function AgreementDocumentSheets({
                 {/* Row 5 */}
                 <tr className="border-b border-slate-900">
                   <td className="p-2.5 sm:p-3 font-black text-slate-950 align-top border-r-2 border-slate-900 bg-slate-100/90">
-                    5. {isPG ? 'Allocated Room/Bed No:' : 'ID Proof Provided:'}
+                    5. {isPG ? 'Allocated Room/Bed No:' : 'Rented Flat / House Premises:'}
                   </td>
                   <td className="p-2.5 sm:p-3 text-slate-950">
                     {isPG ? (
@@ -227,17 +233,7 @@ export function AgreementDocumentSheets({
                         {agreementData.unitOrBedName} ({sharingDisplay})
                       </span>
                     ) : (
-                      <div className="space-y-1">
-                        <div className="flex flex-wrap items-center gap-3 font-semibold">
-                          <span>Aadhaar [{isAadhaar ? '✓' : ' '}]</span>
-                          <span>PAN [{isPan ? '✓' : ' '}]</span>
-                          <span>Voter ID [{isVoter ? '✓' : ' '}]</span>
-                          <span>Driving License [{isDL ? '✓' : ' '}]</span>
-                        </div>
-                        <div>
-                          <span className="font-bold">No:</span> {cleanIdNumber}
-                        </div>
-                      </div>
+                      <span className="font-semibold">{rentedFullAddress}</span>
                     )}
                   </td>
                 </tr>
@@ -245,24 +241,20 @@ export function AgreementDocumentSheets({
                 {/* Row 6 */}
                 <tr className="border-b border-slate-900">
                   <td className="p-2.5 sm:p-3 font-black text-slate-950 align-top border-r-2 border-slate-900 bg-slate-100/90">
-                    6. {isPG ? 'ID Proof Provided:' : 'Rented Property Address:'}
+                    6. ID Proof Provided:
                   </td>
                   <td className="p-2.5 sm:p-3 text-slate-950">
-                    {isPG ? (
-                      <div className="space-y-1">
-                        <div className="flex flex-wrap items-center gap-3 font-semibold">
-                          <span>Aadhaar [{isAadhaar ? '✓' : ' '}]</span>
-                          <span>PAN [{isPan ? '✓' : ' '}]</span>
-                          <span>Voter ID [{isVoter ? '✓' : ' '}]</span>
-                          <span>Driving License [{isDL ? '✓' : ' '}]</span>
-                        </div>
-                        <div>
-                          <span className="font-bold">No:</span> {cleanIdNumber}
-                        </div>
+                    <div className="space-y-1">
+                      <div className="flex flex-wrap items-center gap-3 font-semibold">
+                        <span>Aadhaar [{isAadhaar ? '✓' : ' '}]</span>
+                        <span>PAN [{isPan ? '✓' : ' '}]</span>
+                        <span>Voter ID [{isVoter ? '✓' : ' '}]</span>
+                        <span>Driving License [{isDL ? '✓' : ' '}]</span>
                       </div>
-                    ) : (
-                      <span className="font-semibold">{rentedFullAddress}</span>
-                    )}
+                      <div>
+                        <span className="font-bold">No:</span> {cleanIdNumber}
+                      </div>
+                    </div>
                   </td>
                 </tr>
 
@@ -601,23 +593,23 @@ export function AgreementDocumentSheets({
                   Signature of Witness 1
                 </span>
                 <div className="h-20 sm:h-24 border-b-2 border-slate-900 flex items-center justify-start pb-1">
-                  {agreementData.witnesses?.[0]?.signature &&
-                  agreementData.witnesses[0].signature.startsWith('data:image') ? (
+                  {effectiveWitnesses?.[0]?.signature &&
+                  effectiveWitnesses[0].signature.startsWith('data:image') ? (
                     <img
-                      src={agreementData.witnesses[0].signature}
+                      src={effectiveWitnesses[0].signature}
                       alt="Witness 1 Signature"
                       className="max-h-16 sm:max-h-20 max-w-full object-contain"
                     />
-                  ) : agreementData.witnesses?.[0]?.signature?.startsWith('TYPE:') ? (
+                  ) : effectiveWitnesses?.[0]?.signature?.startsWith('TYPE:') ? (
                     <div className="font-serif italic text-2xl sm:text-3xl text-blue-900 font-bold">
-                      {agreementData.witnesses[0].signature.replace('TYPE:', '')}
+                      {effectiveWitnesses[0].signature.replace('TYPE:', '')}
                       <span className="block text-[11px] font-mono text-slate-600 font-semibold">
                         Witness 1 E-Signature
                       </span>
                     </div>
-                  ) : agreementData.witnesses?.[0]?.signature ? (
+                  ) : effectiveWitnesses?.[0]?.signature ? (
                     <div className="font-serif italic text-lg sm:text-xl text-blue-900 font-bold">
-                      {agreementData.witnesses[0].signature.replace(/^WITNESS:/i, '')}
+                      {effectiveWitnesses[0].signature.replace(/^WITNESS:/i, '')}
                       <span className="block text-[11px] font-mono text-slate-600 font-semibold">
                         Witness 1 Signature
                       </span>
@@ -631,16 +623,16 @@ export function AgreementDocumentSheets({
                 <div className="text-sm text-slate-950 space-y-0.5">
                   <div>
                     <strong className="font-black text-black">Name:</strong>{' '}
-                    {agreementData.witnesses?.[0]?.name ? agreementData.witnesses[0].name : '________________________'}
+                    {effectiveWitnesses?.[0]?.name ? effectiveWitnesses[0].name : '________________________'}
                   </div>
                   <div>
                     <strong className="font-black text-black">Date:</strong>{' '}
-                    {agreementData.witnesses?.[0]?.date ? agreementData.witnesses[0].date : executedDateFormatted}
+                    {effectiveWitnesses?.[0]?.date ? effectiveWitnesses[0].date : executedDateFormatted}
                   </div>
                   <div>
                     <strong className="font-black text-black">Address:</strong>{' '}
-                    {agreementData.witnesses?.[0]?.address
-                      ? agreementData.witnesses[0].address
+                    {effectiveWitnesses?.[0]?.address
+                      ? effectiveWitnesses[0].address
                       : '________________________'}
                   </div>
                 </div>
@@ -652,23 +644,23 @@ export function AgreementDocumentSheets({
                   Signature of Witness 2
                 </span>
                 <div className="h-20 sm:h-24 border-b-2 border-slate-900 flex items-center justify-start pb-1">
-                  {agreementData.witnesses?.[1]?.signature &&
-                  agreementData.witnesses[1].signature.startsWith('data:image') ? (
+                  {effectiveWitnesses?.[1]?.signature &&
+                  effectiveWitnesses[1].signature.startsWith('data:image') ? (
                     <img
-                      src={agreementData.witnesses[1].signature}
+                      src={effectiveWitnesses[1].signature}
                       alt="Witness 2 Signature"
                       className="max-h-16 sm:max-h-20 max-w-full object-contain"
                     />
-                  ) : agreementData.witnesses?.[1]?.signature?.startsWith('TYPE:') ? (
+                  ) : effectiveWitnesses?.[1]?.signature?.startsWith('TYPE:') ? (
                     <div className="font-serif italic text-2xl sm:text-3xl text-blue-900 font-bold">
-                      {agreementData.witnesses[1].signature.replace('TYPE:', '')}
+                      {effectiveWitnesses[1].signature.replace('TYPE:', '')}
                       <span className="block text-[11px] font-mono text-slate-600 font-semibold">
                         Witness 2 E-Signature
                       </span>
                     </div>
-                  ) : agreementData.witnesses?.[1]?.signature ? (
+                  ) : effectiveWitnesses?.[1]?.signature ? (
                     <div className="font-serif italic text-lg sm:text-xl text-blue-900 font-bold">
-                      {agreementData.witnesses[1].signature.replace(/^WITNESS:/i, '')}
+                      {effectiveWitnesses[1].signature.replace(/^WITNESS:/i, '')}
                       <span className="block text-[11px] font-mono text-slate-600 font-semibold">
                         Witness 2 Signature
                       </span>
@@ -682,16 +674,16 @@ export function AgreementDocumentSheets({
                 <div className="text-sm text-slate-950 space-y-0.5">
                   <div>
                     <strong className="font-black text-black">Name:</strong>{' '}
-                    {agreementData.witnesses?.[1]?.name ? agreementData.witnesses[1].name : '________________________'}
+                    {effectiveWitnesses?.[1]?.name ? effectiveWitnesses[1].name : '________________________'}
                   </div>
                   <div>
                     <strong className="font-black text-black">Date:</strong>{' '}
-                    {agreementData.witnesses?.[1]?.date ? agreementData.witnesses[1].date : executedDateFormatted}
+                    {effectiveWitnesses?.[1]?.date ? effectiveWitnesses[1].date : executedDateFormatted}
                   </div>
                   <div>
                     <strong className="font-black text-black">Address:</strong>{' '}
-                    {agreementData.witnesses?.[1]?.address
-                      ? agreementData.witnesses[1].address
+                    {effectiveWitnesses?.[1]?.address
+                      ? effectiveWitnesses[1].address
                       : '________________________'}
                   </div>
                 </div>

@@ -50,7 +50,10 @@ import {
   AgreementDocumentData,
 } from '@/components/agreements/AgreementDocumentViewerModal';
 import { formatIdProofDisplay } from '@/components/agreements/AgreementSignModal';
-import { getOrGenerateAgreementSignature } from '@/lib/agreementStorage';
+import {
+  getOrGenerateAgreementSignature,
+  generateDigitalSignatureDataUrl,
+} from '@/lib/agreementStorage';
 
 export default function TenantDetailsPage() {
   const params = useParams();
@@ -280,15 +283,26 @@ export default function TenantDetailsPage() {
     const activeLease: any = leases?.find((l: any) => l.status === 'ACTIVE') || leases?.[0];
 
     const isRental = Boolean(activeLease);
-    const propName = activeStay?.room?.property?.name || activeStay?.propertyName || activeLease?.rentalUnit?.property?.name || activeLease?.propertyName || 'Property Residency';
-    const unitName = activeStay
+    const prop = activeStay?.room?.property || activeLease?.rentalUnit?.property;
+    const propName = prop?.name || activeStay?.propertyName || activeLease?.propertyName || 'Property Residency';
+    const userName = user ? `${user.firstName} ${user.lastName}`.trim() : 'Arun Sharma';
+    const effectiveOwnerName = prop?.ownerName?.trim() || (userName && userName !== '—' ? userName : 'Arun Sharma');
+    const effectiveOwnerPhone = prop?.ownerPhone || prop?.contactPhone || user?.phone || '+91 98765 43210';
+    const effectiveOwnerAddress = prop?.ownerAddress || (prop ? `${prop.address || propName}, ${prop.city || 'Coimbatore'}, ${prop.state || 'Tamil Nadu'}` : '#12, Royal Palm Residency, Coimbatore, Tamil Nadu');
+    const effectiveOwnerSignature = prop?.ownerSignature || generateDigitalSignatureDataUrl(effectiveOwnerName, 'Authorized Landlord / Owner');
+
+    const cleanUnitName = activeStay
       ? `Bed ${activeStay?.bed?.bedNumber || activeStay?.bedNumber || '—'} (Room ${activeStay?.room?.roomNumber || activeStay?.roomNumber || '—'})`
       : activeLease
-      ? `Unit / Flat ${activeLease?.rentalUnit?.unitNumber || activeLease?.unitNumber || '—'}`
+      ? (activeLease?.rentalUnit?.unitNumber
+          ? (String(activeLease.rentalUnit.unitNumber).match(/^(flat|unit|house|room)/i)
+              ? activeLease.rentalUnit.unitNumber
+              : `Flat ${activeLease.rentalUnit.unitNumber}`)
+          : 'Flat 101')
       : 'Allocated Bed / Unit';
 
-    const rent = Number(activeStay?.monthlyRent || activeLease?.monthlyRent || 8500);
-    const deposit = Number(activeStay?.securityDeposit || activeLease?.securityDeposit || rent * 2);
+    const rent = Number(activeStay?.monthlyRent || activeLease?.monthlyRent || (isRental ? 25000 : 8500));
+    const deposit = Number(activeStay?.securityDeposit || activeLease?.securityDeposit || (isRental ? 50000 : rent * 2));
 
     const doc = details.documents?.find(
       (d) =>
@@ -299,6 +313,19 @@ export default function TenantDetailsPage() {
     const docNum = doc?.documentNumber || (tenant as any).documentNumber || (tenant as any).governmentIdNumber;
     const docType = doc?.documentType || 'Aadhaar Card';
 
+    const sigPkg = getOrGenerateAgreementSignature({
+      tenantId: tenant.id,
+      tenantName: `${tenant.firstName} ${tenant.lastName === '—' ? '' : tenant.lastName}`.trim(),
+      tenantPhone: tenant.phone,
+      unitName: cleanUnitName,
+      emergencyContactName: tenant.emergencyContactName,
+      emergencyContactPhone: tenant.emergencyContactPhone,
+      ownerName: effectiveOwnerName,
+      ownerPhone: effectiveOwnerPhone,
+      ownerAddress: effectiveOwnerAddress,
+      ownerSignature: effectiveOwnerSignature,
+    });
+
     const agreement: AgreementDocumentData = {
       id: activeStay?.id || activeLease?.id || tenant.id,
       tenantName: `${tenant.firstName} ${tenant.lastName === '—' ? '' : tenant.lastName}`.trim(),
@@ -308,34 +335,20 @@ export default function TenantDetailsPage() {
         ? `${tenant.permanentAddress}, ${tenant.permanentCity || 'Bengaluru'}, ${tenant.permanentState || 'Karnataka'} — ${tenant.permanentPostalCode || '560001'}`
         : 'Resident Address on Record',
       tenantAadhaar: formatIdProofDisplay(docType, docNum) || 'Government Photo ID Verified',
-      ownerName: isRental ? 'Property Landlord' : 'PG Facility Management',
-      ownerPhone: '+91 98765 43210',
-      ownerAddress: `${propName}, Coimbatore, Tamil Nadu`,
-      ownerSignature: 'DIGITAL_STAMP_DEFAULT',
-      residentSignature: getOrGenerateAgreementSignature({
-        tenantId: tenant.id,
-        tenantName: `${tenant.firstName} ${tenant.lastName === '—' ? '' : tenant.lastName}`.trim(),
-        tenantPhone: tenant.phone,
-        unitName,
-        emergencyContactName: tenant.emergencyContactName,
-        emergencyContactPhone: tenant.emergencyContactPhone,
-      }).signatureImage,
-      witnesses: getOrGenerateAgreementSignature({
-        tenantId: tenant.id,
-        tenantName: `${tenant.firstName} ${tenant.lastName === '—' ? '' : tenant.lastName}`.trim(),
-        tenantPhone: tenant.phone,
-        unitName,
-        emergencyContactName: tenant.emergencyContactName,
-        emergencyContactPhone: tenant.emergencyContactPhone,
-      }).witnesses,
+      ownerName: effectiveOwnerName,
+      ownerPhone: effectiveOwnerPhone,
+      ownerAddress: effectiveOwnerAddress,
+      ownerSignature: effectiveOwnerSignature,
+      residentSignature: sigPkg.signatureImage,
+      witnesses: sigPkg.witnesses,
       propertyName: propName,
-      propertyAddress: `${propName}, Bengaluru, Karnataka`,
-      unitOrBedName: unitName,
+      propertyAddress: prop?.address ? `${prop.address}, ${prop.city || 'Coimbatore'}, ${prop.state || 'Tamil Nadu'}` : `${propName}, Coimbatore, Tamil Nadu`,
+      unitOrBedName: cleanUnitName,
       propertyType: isRental ? 'RENTAL_HOUSE' : 'PG',
       monthlyRent: rent,
       securityDeposit: deposit,
-      lockInMonths: 1,
-      noticePeriodDays: 30,
+      lockInMonths: prop?.lockInMonths ?? 1,
+      noticePeriodDays: prop?.noticePeriodDays ?? 30,
       startDate: activeStay?.checkInDate
         ? new Date(activeStay.checkInDate).toISOString().split('T')[0]
         : activeLease?.startDate

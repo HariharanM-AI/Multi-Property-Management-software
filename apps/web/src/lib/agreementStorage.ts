@@ -98,7 +98,7 @@ export function saveAgreementSignature(data: StoredAgreementSignature): void {
 /**
  * Retrieve agreement signature and witnesses from localStorage.
  */
-export function getAgreementSignature(lookup: {
+export function getAgreementSignature(lookup: string | {
   bedId?: string;
   unitId?: string;
   tenantId?: string;
@@ -106,12 +106,22 @@ export function getAgreementSignature(lookup: {
   tenantPhone?: string;
   unitName?: string;
 }): StoredAgreementSignature | null {
-  if (typeof window === 'undefined') return null;
+  if (typeof window === 'undefined' || !lookup) return null;
 
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return null;
     const store: Record<string, StoredAgreementSignature> = JSON.parse(raw);
+
+    if (typeof lookup === 'string') {
+      const normalized = normalizeKey(lookup);
+      if (store[`bed:${lookup}`]) return store[`bed:${lookup}`];
+      if (store[`unit:${lookup}`]) return store[`unit:${lookup}`];
+      if (store[`tenant:${lookup}`]) return store[`tenant:${lookup}`];
+      if (store[`name:${normalized}`]) return store[`name:${normalized}`];
+      if (store[`unitName:${normalized}`]) return store[`unitName:${normalized}`];
+      return null;
+    }
 
     if (lookup.bedId && store[`bed:${lookup.bedId}`]) return store[`bed:${lookup.bedId}`];
     if (lookup.unitId && store[`unit:${lookup.unitId}`]) return store[`unit:${lookup.unitId}`];
@@ -163,20 +173,26 @@ export function getOrGenerateAgreementSignature(lookup: {
     if (lookup.ownerSignature && (!existing.ownerSignature || existing.ownerSignature.includes('DIGITAL_STAMP'))) {
       existing.ownerSignature = lookup.ownerSignature;
     }
+    // Clean up any old mock witnesses if the user didn't actually fill them
+    if (existing.witnesses && existing.witnesses.length > 0) {
+      existing.witnesses = existing.witnesses.filter((w) => w.name && w.name !== 'Mithun Kumar' && w.name !== 'Suresh Babu');
+      if (existing.witnesses.length === 0) {
+        existing.witnesses = undefined;
+      }
+    }
     return existing;
   }
 
   const tenantName = lookup.tenantName || 'Resident';
-  const execDateFormatted = lookup.moveInDate
-    ? new Date(lookup.moveInDate).toLocaleDateString('en-GB')
-    : new Date().toLocaleDateString('en-GB');
-
-  // Emergency contact is often Witness 1 if provided
-  const w1Name = lookup.emergencyContactName ? lookup.emergencyContactName.split('(')[0].trim() : 'Mithun Kumar';
-  const w2Name = 'Suresh Babu';
 
   const effOwnerName = (lookup.ownerName && !lookup.ownerName.includes('Facility Management')) ? lookup.ownerName : 'Arun Sharma';
   const effOwnerSignature = lookup.ownerSignature || generateDigitalSignatureDataUrl(effOwnerName, 'Authorized Landlord / Owner');
+
+  // Do NOT invent fake witnesses (Mithun Kumar / Suresh Babu) if none were provided during check-in!
+  // Witnesses should only be present if explicitly provided by the user.
+  const validWitnesses = (existing?.witnesses && existing.witnesses.length > 0)
+    ? existing.witnesses.filter((w) => w.name && w.name !== 'Mithun Kumar' && w.name !== 'Suresh Babu')
+    : undefined;
 
   const defaultSignature: StoredAgreementSignature = {
     signerName: tenantName,
@@ -185,20 +201,7 @@ export function getOrGenerateAgreementSignature(lookup: {
     signedAt: lookup.moveInDate || new Date().toISOString(),
     agreementType: 'PG_AGREEMENT',
     isSigned: true,
-    witnesses: (existing?.witnesses && existing.witnesses.length > 0) ? existing.witnesses : [
-      {
-        name: w1Name,
-        date: execDateFormatted,
-        address: '#42, Cross Cut Road, Gandhipuram, Coimbatore, Tamil Nadu',
-        signature: generateDigitalSignatureDataUrl(w1Name, 'Witness 1 Verified E-Sign'),
-      },
-      {
-        name: w2Name,
-        date: execDateFormatted,
-        address: '#18, 5th Street, RS Puram, Coimbatore, Tamil Nadu',
-        signature: generateDigitalSignatureDataUrl(w2Name, 'Witness 2 Verified E-Sign'),
-      },
-    ],
+    witnesses: (validWitnesses && validWitnesses.length > 0) ? validWitnesses : undefined,
     bedId: lookup.bedId,
     unitId: lookup.unitId,
     tenantId: lookup.tenantId,

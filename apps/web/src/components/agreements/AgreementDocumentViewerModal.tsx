@@ -3,18 +3,16 @@
 import React, { useRef, useState, useEffect } from 'react';
 import {
   FileText,
-  Download,
+  Home,
   Printer,
   X,
   ShieldCheck,
   CheckCircle2,
   Lock,
   ExternalLink,
-  Loader2,
 } from 'lucide-react';
 import { formatIdProofDisplay } from './AgreementSignModal';
 import { AgreementDocumentSheets } from './AgreementDocumentSheets';
-import { downloadAgreementPdf } from './downloadAgreementPdf';
 
 export interface AgreementDocumentData {
   id?: string;
@@ -50,22 +48,24 @@ export interface AgreementDocumentData {
     address?: string;
     signature?: string;
   }>;
+  hideDownloadButton?: boolean;
 }
 
 interface AgreementDocumentViewerModalProps {
   isOpen: boolean;
   onClose: () => void;
   agreementData: AgreementDocumentData | null;
+  hideDownloadButton?: boolean;
 }
 
 export function AgreementDocumentViewerModal({
   isOpen,
   onClose,
   agreementData,
+  hideDownloadButton,
 }: AgreementDocumentViewerModalProps) {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const prevOpenRef = useRef(false);
-  const [isDownloading, setIsDownloading] = useState(false);
 
   useEffect(() => {
     if (isOpen && !prevOpenRef.current) {
@@ -85,7 +85,7 @@ export function AgreementDocumentViewerModal({
   const unitLabel = agreementData.unitOrBedName || 'Bed 102-A';
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-950/80 backdrop-blur-xs animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-2 sm:p-4 bg-slate-950/80 backdrop-blur-xs animate-in fade-in duration-200">
       {/* Dynamic Print Styles for Exact 2-Page A4 Output */}
       <style
         dangerouslySetInnerHTML={{
@@ -150,11 +150,11 @@ export function AgreementDocumentViewerModal({
         <div className="px-6 py-4 border-b border-slate-200 bg-slate-900 text-white flex items-center justify-between gap-4 shrink-0 print:hidden">
           <div className="flex items-center gap-3">
             <div className={`w-10 h-10 rounded-xl ${isPG ? 'bg-teal-500/20 border-teal-400/40 text-teal-300' : 'bg-blue-500/20 border-blue-400/40 text-blue-300'} border flex items-center justify-center font-bold shadow-xs`}>
-              <FileText className="w-5 h-5" />
+              {isPG ? <FileText className="w-5 h-5" /> : <Home className="w-5 h-5" />}
             </div>
             <div>
               <h3 className="text-base font-bold text-white tracking-wide">
-                {isPG ? 'Paying Guest Accommodation Agreement' : 'Residential Rent Agreement'}
+                {isPG ? 'Paying Guest Accommodation Agreement' : 'Residential House Rental Agreement'}
               </h3>
               <p className="text-xs text-slate-400 mt-0.5">
                 {agreementData.tenantName} • {unitLabel} • {agreementData.propertyName}
@@ -163,35 +163,6 @@ export function AgreementDocumentViewerModal({
           </div>
 
           <div className="flex items-center gap-3">
-            {/* Download PDF Button */}
-            <button
-              type="button"
-              disabled={isDownloading}
-              onClick={async () => {
-                setIsDownloading(true);
-                try {
-                  await downloadAgreementPdf(agreementData);
-                } catch (err) {
-                  console.error(err);
-                } finally {
-                  setIsDownloading(false);
-                }
-              }}
-              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition shadow-xs cursor-pointer disabled:opacity-50"
-              title="Download Agreement PDF file"
-            >
-              {isDownloading ? (
-                <>
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  <span>Generating PDF...</span>
-                </>
-              ) : (
-                <>
-                  <Download className="w-3.5 h-3.5" />
-                  <span>Download PDF</span>
-                </>
-              )}
-            </button>
 
             <button
               type="button"

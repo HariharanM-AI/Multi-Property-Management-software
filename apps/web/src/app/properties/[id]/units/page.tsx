@@ -678,7 +678,7 @@ export default function RentalUnitsPage() {
             <p className="text-sm text-slate-500 mt-0.5">Manage flats, villas, specs, active leases, and escalations.</p>
           </div>
           <div className="flex items-center space-x-2">
-            <Button onClick={() => setShowAddUnitModal(true)} className="bg-[#0F766E] text-white hover:bg-[#0D5C56]">
+            <Button onClick={() => setShowAddUnitModal(true)} className="bg-blue-600 text-white hover:bg-blue-700">
               <Plus className="h-4 w-4 mr-2" /> Add Unit
             </Button>
           </div>
@@ -697,9 +697,9 @@ export default function RentalUnitsPage() {
             <Card className="p-4 flex items-center justify-between">
               <div>
                 <p className="text-xs text-slate-500 font-medium uppercase">Occupied Units</p>
-                <h3 className="text-2xl font-bold mt-1 text-[#0F766E]">{summary.occupiedUnits}</h3>
+                <h3 className="text-2xl font-bold mt-1 text-blue-600">{summary.occupiedUnits}</h3>
               </div>
-              <Users className="h-8 w-8 text-[#0F766E] opacity-70" />
+              <Users className="h-8 w-8 text-blue-600 opacity-70" />
             </Card>
             <Card className="p-4 flex items-center justify-between">
               <div>
@@ -722,7 +722,7 @@ export default function RentalUnitsPage() {
         <Card className="overflow-hidden">
           <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
             <h2 className="font-bold text-slate-900">Rental Units Inventory</h2>
-            <span className="text-xs font-semibold px-2.5 py-1 rounded bg-[#0F766E]/10 text-[#0F766E]">
+            <span className="text-xs font-semibold px-2.5 py-1 rounded bg-blue-50 text-blue-700">
               {units.length} Units Found
             </span>
           </div>
@@ -777,7 +777,7 @@ export default function RentalUnitsPage() {
                                 setSelectedLease(u.activeLease!);
                                 setShowLeaseDetailsModal(true);
                               }}
-                              className="inline-flex items-center text-xs font-semibold text-[#0F766E] hover:underline"
+                              className="inline-flex items-center text-xs font-semibold text-blue-600 hover:underline"
                             >
                               <FileText className="h-3 w-3 mr-1" /> Active Lease
                             </button>
@@ -793,7 +793,7 @@ export default function RentalUnitsPage() {
                               setLeaseDeposit(u.securityDeposit);
                               setShowAddLeaseModal(true);
                             }}
-                            className="inline-flex items-center text-xs font-bold text-[#0F766E] hover:underline"
+                            className="inline-flex items-center text-xs font-bold text-blue-600 hover:underline"
                           >
                             <Calendar className="h-3 w-3 mr-1" /> Create Lease
                           </button>
@@ -1066,7 +1066,7 @@ export default function RentalUnitsPage() {
                   <Button type="button" onClick={() => setShowAddLeaseModal(false)} className="bg-slate-100 text-slate-700 hover:bg-slate-200">
                     Cancel
                   </Button>
-                  <Button type="submit" className="bg-[#0F766E] text-white hover:bg-[#0D5C56]">
+                  <Button type="submit" className="bg-blue-600 text-white hover:bg-blue-700">
                     Activate Lease
                   </Button>
                 </div>
@@ -1109,7 +1109,7 @@ export default function RentalUnitsPage() {
 
               {/* Rent Escalations Section */}
               <div className="space-y-4">
-                <h4 className="font-bold text-slate-900 flex items-center"><TrendingUp className="h-4 w-4 mr-1 text-[#0F766E]" /> Scheduled Rent Escalations</h4>
+                <h4 className="font-bold text-slate-900 flex items-center"><TrendingUp className="h-4 w-4 mr-1 text-blue-600" /> Scheduled Rent Escalations</h4>
                 
                 {/* List escalations */}
                 <div className="border border-slate-100 rounded-lg overflow-hidden text-sm">
@@ -1184,7 +1184,7 @@ export default function RentalUnitsPage() {
                         className="w-full px-2.5 py-1.5 border border-slate-200 rounded text-xs outline-none bg-white focus:border-slate-400"
                       />
                     </div>
-                    <Button type="submit" className="bg-[#0F766E] text-white hover:bg-[#0D5C56] px-4 py-1.5 text-xs">
+                    <Button type="submit" className="bg-blue-600 text-white hover:bg-blue-700 px-4 py-1.5 text-xs">
                       Schedule Increase
                     </Button>
                   </form>

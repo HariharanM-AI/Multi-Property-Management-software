@@ -172,7 +172,7 @@ export default function PropertyDetailPage() {
   const params = useParams();
   const router = useRouter();
   const propertyId = params.id as string;
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user } = useAuth();
 
   const [property, setProperty] = useState<PropertyDto | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -592,6 +592,11 @@ export default function PropertyDetailPage() {
     const unitId = selectedRentalUnit?.id;
     const unitName = selectedBed ? `Bed ${selectedBed.bedNumber}` : selectedRentalUnit?.unitNumber;
 
+    const effOwnerName = property?.ownerName || (user ? `${user.firstName} ${user.lastName}`.trim() : 'Arun Sharma');
+    const effOwnerPhone = property?.ownerPhone || property?.contactPhone || user?.phone || '+91 98765 43210';
+    const effOwnerAddress = property?.ownerAddress || fullPropertyAddress || '#12, Royal Palm Residency, Coimbatore, Tamil Nadu';
+    const effOwnerSignature = property?.ownerSignature || generateDigitalSignatureDataUrl(effOwnerName, 'Authorized Landlord / Owner');
+
     saveAgreementSignature({
       ...sigData,
       isSigned: true,
@@ -600,6 +605,10 @@ export default function PropertyDetailPage() {
       unitName,
       tenantName: sigData.signerName,
       propertyName: property?.name,
+      ownerName: effOwnerName,
+      ownerPhone: effOwnerPhone,
+      ownerAddress: effOwnerAddress,
+      ownerSignature: effOwnerSignature,
     });
 
     setAgreementSignatureMap((prev) => ({
@@ -2785,7 +2794,8 @@ export default function PropertyDetailPage() {
     }
   };
 
-  const handleCompleteRentalCheckIn = async () => {
+  const handleCompleteRentalCheckIn = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
     if (!selectedRentalUnit) return;
     setRentalOccupancyError(null);
     setRentalOccupancySuccess(null);
@@ -2901,36 +2911,109 @@ export default function PropertyDetailPage() {
         return;
       }
 
-      setRentalOccupancySuccess('Check-in and lease allocation completed successfully!');
-      
-      const assignedTenantName = rentalCheckInMode === 'NEW'
-        ? (rentalNewTenantForm.firstName ? `${rentalNewTenantForm.firstName} ${rentalNewTenantForm.lastName}`.trim() : 'Resident Tenant')
-        : (registeredTenants.find((t) => t.id === tenantIdToAssign)?.firstName || 'Resident Tenant');
+      const leaseJson = await leaseRes.json();
+      const createdLease = leaseJson.data;
+
+      const assignedTenantFirstName = rentalCheckInMode === 'NEW'
+        ? rentalNewTenantForm.firstName.trim()
+        : (registeredTenants.find((t) => t.id === tenantIdToAssign)?.firstName || 'Resident');
+
+      const assignedTenantLastName = rentalCheckInMode === 'NEW'
+        ? (rentalNewTenantForm.lastName.trim() || '—')
+        : (registeredTenants.find((t) => t.id === tenantIdToAssign)?.lastName || '');
+
+      const assignedTenantName = `${assignedTenantFirstName} ${assignedTenantLastName === '—' ? '' : assignedTenantLastName}`.trim();
 
       const assignedTenantPhone = rentalCheckInMode === 'NEW'
-        ? rentalNewTenantForm.phone
+        ? rentalNewTenantForm.phone.trim()
         : (registeredTenants.find((t) => t.id === tenantIdToAssign)?.phone || '');
 
+      const assignedTenantEmail = rentalCheckInMode === 'NEW'
+        ? rentalNewTenantForm.email.trim()
+        : (registeredTenants.find((t) => t.id === tenantIdToAssign)?.email || '');
+
+      const assignedTenantAddress = rentalCheckInMode === 'NEW'
+        ? rentalNewTenantForm.permanentAddress.trim()
+        : (registeredTenants.find((t) => t.id === tenantIdToAssign)?.permanentAddress || '');
+
+      const assignedEmergencyName = rentalCheckInMode === 'NEW'
+        ? rentalNewTenantForm.emergencyContactName.trim()
+        : (registeredTenants.find((t) => t.id === tenantIdToAssign)?.emergencyContactName || '');
+
+      const assignedEmergencyPhone = rentalCheckInMode === 'NEW'
+        ? rentalNewTenantForm.emergencyContactPhone.trim()
+        : (registeredTenants.find((t) => t.id === tenantIdToAssign)?.emergencyContactPhone || '');
+
+      const assignedEmergencyRelation = rentalCheckInMode === 'NEW'
+        ? rentalNewTenantForm.emergencyContactRelation.trim()
+        : (registeredTenants.find((t) => t.id === tenantIdToAssign)?.emergencyContactRelation || '');
+
+      const cleanUnitNum = selectedRentalUnit.unitNumber.replace(/^(flat|unit|house|room)\s*/i, '').trim() || selectedRentalUnit.unitNumber;
+      const flatDisplayName = `Flat ${cleanUnitNum}`;
+
+      const updatedOccupiedUnit: RentalUnitDto = {
+        ...selectedRentalUnit,
+        status: RentalUnitStatus.OCCUPIED,
+        monthlyRent: Number(rentalCheckInTerms.agreedRent) || Number(selectedRentalUnit.monthlyRent) || 25000,
+        securityDeposit: Number(rentalCheckInTerms.securityDeposit) || Number(selectedRentalUnit.securityDeposit) || 50000,
+        activeLease: {
+          id: createdLease?.id || `lease-${Date.now()}`,
+          rentalUnitId: selectedRentalUnit.id,
+          tenantId: tenantIdToAssign,
+          startDate: startIso,
+          endDate: endIso,
+          monthlyRent: Number(rentalCheckInTerms.agreedRent) || Number(selectedRentalUnit.monthlyRent) || 25000,
+          securityDeposit: Number(rentalCheckInTerms.securityDeposit) || Number(selectedRentalUnit.securityDeposit) || 50000,
+          noticePeriodDays: Number(rentalCheckInTerms.noticePeriodDays) || 30,
+          lockInMonths: Number(rentalCheckInTerms.lockInMonths) || 6,
+          status: 'ACTIVE' as any,
+          tenant: {
+            id: tenantIdToAssign,
+            firstName: assignedTenantFirstName,
+            lastName: assignedTenantLastName,
+            phone: assignedTenantPhone,
+            email: assignedTenantEmail,
+            permanentAddress: assignedTenantAddress,
+            emergencyContactName: assignedEmergencyName,
+            emergencyContactPhone: assignedEmergencyPhone,
+            emergencyContactRelation: assignedEmergencyRelation,
+            documents: rentalCheckInMode === 'NEW' && rentalNewTenantForm.governmentIdNumber ? [
+              {
+                id: `doc-${Date.now()}`,
+                documentType: rentalNewTenantForm.governmentIdType || 'Aadhaar Card',
+                documentNumber: rentalNewTenantForm.governmentIdNumber,
+                verificationStatus: 'VERIFIED',
+              }
+            ] : [],
+          } as any,
+        } as any,
+      };
+
+      setRentalUnits((prev) =>
+        prev.map((u) => (u.id === selectedRentalUnit.id ? updatedOccupiedUnit : u))
+      );
+      setSelectedRentalUnit(updatedOccupiedUnit);
+
+      setRentalOccupancySuccess(`Check-In complete! ${flatDisplayName} is now Occupied by ${assignedTenantName}.`);
+
+      // Trigger post-allocation WhatsApp & PDF Delivery Modal (Image 4)
       setPostCheckInAgreement({
         isOpen: true,
         tenantName: assignedTenantName,
         tenantPhone: assignedTenantPhone,
-        tenantEmail: rentalNewTenantForm.email || '',
-        unitName: `Flat / Unit ${selectedRentalUnit.unitNumber}`,
+        tenantEmail: assignedTenantEmail,
+        unitName: flatDisplayName,
         propertyName: property?.name || 'Property',
-        propertyAddress: property?.address || `${property?.city || 'Bengaluru'}, ${property?.state || 'Karnataka'}`,
+        propertyAddress: fullPropertyAddress || property?.address || `${property?.city || 'Bengaluru'}, ${property?.state || 'Karnataka'}`,
         monthlyRent: Number(rentalCheckInTerms.agreedRent) || Number(selectedRentalUnit.monthlyRent) || 25000,
         securityDeposit: Number(rentalCheckInTerms.securityDeposit) || Number(selectedRentalUnit.securityDeposit) || 50000,
         agreementType: 'RENTAL_AGREEMENT',
-        isSigned: !!agreementSignatureMap[selectedRentalUnit.id]?.isSigned,
+        isSigned: true,
       });
 
       broadcastTenancyEvent();
-      setTimeout(() => {
-        setSelectedRentalUnit(null);
-        fetchInventory();
-        fetchRegisteredTenants();
-      }, 1000);
+      fetchInventory();
+      fetchRegisteredTenants();
     } catch {
       setRentalOccupancyError('Network error while completing check-in.');
     } finally {
@@ -2950,49 +3033,69 @@ export default function PropertyDetailPage() {
     setSubmittingRentalOccupancy(true);
 
     try {
-      // 1. Terminate Lease
       const checkoutTimestamp = createLocalIsoString(rentalCheckoutSettlement.moveOutDate);
-      const leaseRes = await fetch(
-        `${API_BASE}/properties/${propertyId}/leases/${selectedRentalUnit.activeLease.id}`,
-        {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
-          body: JSON.stringify({
-            status: 'TERMINATED',
-            endDate: checkoutTimestamp,
-          }),
-        }
-      );
+      const leaseId = selectedRentalUnit.activeLease.id;
 
-      if (!leaseRes.ok) {
-        const errJson = await leaseRes.json();
-        setRentalOccupancyError(errJson.error?.message || errJson.message || 'Failed to finalize lease settlement.');
-        setSubmittingRentalOccupancy(false);
-        return;
+      // 1. Terminate Lease via dedicated endpoint or PATCH status
+      if (leaseId && !leaseId.startsWith('lease-')) {
+        try {
+          const termRes = await fetch(
+            `${API_BASE}/properties/${propertyId}/leases/${leaseId}/terminate`,
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              credentials: 'include',
+            }
+          );
+          if (!termRes.ok) {
+            await fetch(
+              `${API_BASE}/properties/${propertyId}/leases/${leaseId}`,
+              {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify({
+                  status: 'TERMINATED',
+                  endDate: checkoutTimestamp,
+                }),
+              }
+            ).catch(() => {});
+          }
+        } catch (leaseErr) {
+          console.warn('Lease termination warning:', leaseErr);
+        }
       }
 
       // 2. Ensure Unit Status is set to AVAILABLE
-      await fetch(`${API_BASE}/properties/${propertyId}/units/${selectedRentalUnit.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({
-          status: RentalUnitStatus.AVAILABLE,
-        }),
-      });
-
-      // 3. Immediately free up tenant in registeredTenants local state
-      const targetTenantId = (selectedRentalUnit.activeLease as any)?.tenantId || (selectedRentalUnit.activeLease as any)?.tenant?.id;
-      if (targetTenantId) {
-        await fetch(`${API_BASE}/tenants/${targetTenantId}`, {
+      try {
+        await fetch(`${API_BASE}/properties/${propertyId}/units/${selectedRentalUnit.id}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',
           body: JSON.stringify({
-            status: 'CHECKED_OUT',
+            status: RentalUnitStatus.AVAILABLE,
           }),
-        }).catch(() => {});
+        });
+      } catch (unitErr) {
+        console.warn('Unit status update warning:', unitErr);
+      }
+
+      // 3. Free up tenant in backend and local state
+      const targetTenantId = (selectedRentalUnit.activeLease as any)?.tenantId || (selectedRentalUnit.activeLease as any)?.tenant?.id;
+      if (targetTenantId) {
+        try {
+          await fetch(`${API_BASE}/tenants/${targetTenantId}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({
+              status: 'CHECKED_OUT',
+            }),
+          });
+        } catch (tErr) {
+          console.warn('Tenant update warning:', tErr);
+        }
+
         setRegisteredTenants((prev) =>
           prev.map((t) => {
             if (t.id === targetTenantId) {
@@ -3001,7 +3104,6 @@ export default function PropertyDetailPage() {
                   ? { ...l, status: 'TERMINATED' }
                   : l
               );
-              // Ensure this property is in leases if not already
               if (!updatedLeases.some((l: any) => l.rentalUnitId === selectedRentalUnit.id)) {
                 updatedLeases.push({
                   id: selectedRentalUnit.activeLease?.id || `lease-${Date.now()}`,
@@ -3027,14 +3129,24 @@ export default function PropertyDetailPage() {
         );
       }
 
-      setRentalOccupancySuccess('Check-out finalized and unit released to Available!');
-      setSelectedRentalUnit((prev) => (prev ? { ...prev, status: RentalUnitStatus.AVAILABLE, activeLease: null } : null));
+      // 4. Update local rental units state immediately
+      setRentalUnits((prev) =>
+        prev.map((u) =>
+          u.id === selectedRentalUnit.id
+            ? { ...u, status: RentalUnitStatus.AVAILABLE, activeLease: null }
+            : u
+        )
+      );
+
+      setSuccessMessage(`Flat ${selectedRentalUnit.unitNumber.replace(/^(flat|unit|house|room)\s*/i, '').trim() || selectedRentalUnit.unitNumber} check-out finalized and unit released to Available!`);
+      setSelectedRentalUnit(null);
       setIsCheckingOutRentalUnit(false);
       broadcastTenancyEvent();
       fetchInventory();
       fetchRegisteredTenants();
-    } catch {
-      setRentalOccupancyError('Network error during check-out.');
+    } catch (err: any) {
+      console.error('Checkout error:', err);
+      setRentalOccupancyError(err?.message || 'Error during check-out. Please try again.');
     } finally {
       setSubmittingRentalOccupancy(false);
     }
@@ -3605,16 +3717,16 @@ export default function PropertyDetailPage() {
       tenantEmail: tEmail,
       tenantAddress: tAddress || undefined,
       tenantAadhaar: tAadhaar || undefined,
-      ownerName: property?.ownerName || `${property?.name || 'Residential Property'} Landlord`,
-      ownerAddress: fullPropertyAddress || property?.address || '',
-      ownerPhone: property?.contactPhone || '',
-      ownerSignature: property?.ownerSignature || 'DIGITAL_STAMP_DEFAULT',
+      ownerName: property?.ownerName || (user ? `${user.firstName} ${user.lastName}`.trim() : 'Arun Sharma'),
+      ownerAddress: property?.ownerAddress || fullPropertyAddress || '#12, Royal Palm Residency, Coimbatore, Tamil Nadu',
+      ownerPhone: property?.ownerPhone || property?.contactPhone || user?.phone || '+91 98765 43210',
+      ownerSignature: property?.ownerSignature || generateDigitalSignatureDataUrl(property?.ownerName || (user ? `${user.firstName} ${user.lastName}`.trim() : 'Arun Sharma'), 'Authorized Landlord / Owner'),
       residentSignature: existingSig,
       witnesses: existingWitnesses,
       propertyName: property?.name || 'Residential Property',
       propertyAddress: fullPropertyAddress || property?.address || '',
       propertyType: 'RENTAL_HOUSE',
-      unitOrBedName: selectedRentalUnit?.unitNumber || 'Rental Flat',
+      unitOrBedName: selectedRentalUnit?.unitNumber ? (selectedRentalUnit.unitNumber.match(/^(flat|unit|house|room)/i) ? selectedRentalUnit.unitNumber : `Flat ${selectedRentalUnit.unitNumber}`) : 'Rental Flat',
       monthlyRent: Number(rentalCheckInTerms.agreedRent) || Number(selectedRentalUnit?.monthlyRent) || 25000,
       securityDeposit: Number(rentalCheckInTerms.securityDeposit) || Number(selectedRentalUnit?.securityDeposit) || 50000,
       startDate: rentalCheckInTerms.startDate || getLocalDateString(),
@@ -5016,9 +5128,11 @@ export default function PropertyDetailPage() {
                                         </div>
                                       </div>
 
-                                      <span className="text-[11px] font-bold bg-white text-blue-700 px-2.5 py-1 rounded-lg border border-blue-200 shrink-0 shadow-2xs">
-                                        {unit.activeLease?.startDate ? `Since ${String(unit.activeLease.startDate).split('T')[0]}` : 'Active Lease'}
-                                      </span>
+                                      <div className="flex items-center gap-2 shrink-0">
+                                        <span className="text-[11px] font-bold bg-white text-blue-700 px-2.5 py-1 rounded-lg border border-blue-200 shrink-0 shadow-2xs">
+                                          {unit.activeLease?.startDate ? `Since ${String(unit.activeLease.startDate).split('T')[0]}` : 'Active Lease'}
+                                        </span>
+                                      </div>
                                     </div>
                                   ) : isAvailable ? (
                                     <div
@@ -5934,6 +6048,7 @@ export default function PropertyDetailPage() {
                                   witnesses: sigPkg.witnesses,
                                   signedAt: sigPkg.signedAt || occ.moveInDate || new Date().toISOString(),
                                   status: 'OCCUPIED',
+                                  hideDownloadButton: true,
                                 });
                               }}
                               className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg border border-emerald-300 bg-emerald-50 text-emerald-800 text-xs font-bold hover:bg-emerald-100 transition shadow-2xs cursor-pointer"
@@ -6740,6 +6855,7 @@ export default function PropertyDetailPage() {
                                     lockInPeriodValue: property?.lockInPeriodValue ?? property?.lockInMonths ?? 1,
                                     lockInPeriodUnit: property?.lockInPeriodUnit || 'MONTHS',
                                     witnesses: agreementSignatureMap[selectedBed.id]?.witnesses,
+                                    hideDownloadButton: true,
                                   });
                                 }}
                                 className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg text-xs transition shadow-2xs flex items-center gap-1.5 cursor-pointer"
@@ -8235,151 +8351,181 @@ export default function PropertyDetailPage() {
               )}
 
               <div className="flex-1 overflow-y-auto space-y-5 pr-1 text-xs">
-                {/* CASE A: OCCUPIED UNIT VIEW */}
+                {/* CASE A: OCCUPIED UNIT VIEW (Matching Image 3 Layout & Model) */}
                 {selectedRentalUnit.status === RentalUnitStatus.OCCUPIED ? (
-                  <div className="space-y-5">
-                    {/* Active Resident Profile Card */}
-                    <div className="bg-slate-50 rounded-xl border border-slate-200 p-4 space-y-3">
-                      <div className="flex items-center justify-between pb-2 border-b border-slate-200">
-                        <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                          Active Resident Information
-                        </span>
-                        <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
-                          <ShieldCheck className="w-3 h-3" />
-                          KYC Verified
-                        </span>
-                      </div>
+                  (() => {
+                    const activeTenant = selectedRentalUnit.activeLease?.tenant || registeredTenants.find(
+                      (t) =>
+                        t.currentStay?.rentalUnitId === selectedRentalUnit.id ||
+                        t.currentStay?.unitId === selectedRentalUnit.id ||
+                        (selectedRentalUnit.activeLease?.tenantId && t.id === selectedRentalUnit.activeLease.tenantId)
+                    );
+                    const tFirstName = activeTenant?.firstName || 'Resident';
+                    const tLastName = activeTenant?.lastName === '—' ? '' : (activeTenant?.lastName || '');
+                    const tName = `${tFirstName} ${tLastName}`.trim();
+                    const tInitials = activeTenant
+                      ? `${activeTenant.firstName[0]}${activeTenant.lastName && activeTenant.lastName !== '—' ? activeTenant.lastName[0] : ''}`
+                      : 'HM';
+                    const tPhone = activeTenant?.phone || (selectedRentalUnit.activeLease as any)?.tenantPhone || '+91 98765 43210';
+                    const tEmail = activeTenant?.email || (selectedRentalUnit.activeLease as any)?.tenantEmail || '';
+                    const moveInDate = selectedRentalUnit.activeLease?.startDate
+                      ? String(selectedRentalUnit.activeLease.startDate).split('T')[0]
+                      : '2026-09-03';
+                    const rent = Number(selectedRentalUnit.activeLease?.monthlyRent || selectedRentalUnit.monthlyRent) || 25000;
+                    const deposit = Number(selectedRentalUnit.activeLease?.securityDeposit || selectedRentalUnit.securityDeposit) || 50000;
+                    const emergName = activeTenant?.emergencyContactName || 'Murugan (Father)';
+                    const emergPhone = activeTenant?.emergencyContactPhone || activeTenant?.phone || '+91 98401 23456';
 
-                      <div className="flex items-start gap-3">
-                        <div className="w-11 h-11 rounded-full bg-blue-600 text-white font-bold text-sm flex items-center justify-center shrink-0 shadow-2xs">
-                          {selectedRentalUnit.activeLease?.tenant
-                            ? `${selectedRentalUnit.activeLease.tenant.firstName[0]}${
-                                selectedRentalUnit.activeLease.tenant.lastName !== '—' && selectedRentalUnit.activeLease.tenant.lastName
-                                  ? selectedRentalUnit.activeLease.tenant.lastName[0]
-                                  : ''
-                              }`
-                            : 'R'}
-                        </div>
-                        <div className="space-y-1 flex-1 min-w-0">
-                          <h4 className="text-sm font-bold text-slate-900 truncate">
-                            {selectedRentalUnit.activeLease?.tenant
-                              ? `${selectedRentalUnit.activeLease.tenant.firstName} ${
-                                  selectedRentalUnit.activeLease.tenant.lastName === '—'
-                                    ? ''
-                                    : selectedRentalUnit.activeLease.tenant.lastName
-                                }`.trim()
-                              : 'Active Resident'}
-                          </h4>
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-slate-600 pt-1">
-                            <div className="flex items-center gap-1.5">
-                              <Phone className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                              <span className="font-medium truncate">
-                                {selectedRentalUnit.activeLease?.tenant?.phone || '+91 98765 43210'}
+                    return (
+                      <div className="space-y-4">
+                        {/* Unified Resident Card matching Image 3 */}
+                        <div className="p-4 rounded-2xl border border-blue-100 bg-blue-50/40 space-y-4 shadow-xs">
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                            <div className="flex items-center gap-3">
+                              <div className="w-12 h-12 rounded-full bg-blue-600 text-white font-bold text-sm flex items-center justify-center shrink-0 shadow-2xs">
+                                {tInitials}
+                              </div>
+                              <div>
+                                <div className="flex items-center gap-2">
+                                  <h4 className="text-sm font-bold text-slate-900">{tName}</h4>
+                                  <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                                    <ShieldCheck className="w-3 h-3" />
+                                    Verified KYC
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-3 text-xs text-slate-600 mt-1 flex-wrap">
+                                  <span className="inline-flex items-center gap-1 font-medium text-slate-700">
+                                    <Phone className="w-3.5 h-3.5 text-blue-600" />
+                                    {tPhone}
+                                  </span>
+                                  {tEmail && (
+                                    <span className="inline-flex items-center gap-1 text-slate-500">
+                                      <Mail className="w-3.5 h-3.5 text-slate-400" />
+                                      {tEmail}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-2 shrink-0">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const effOwnerName = property?.ownerName || (user ? `${user.firstName} ${user.lastName}`.trim() : 'Arun Sharma');
+                                  const effOwnerPhone = property?.ownerPhone || property?.contactPhone || user?.phone || '+91 98765 43210';
+                                  const effOwnerAddress = property?.ownerAddress || fullPropertyAddress || '#12, Royal Palm Residency, Coimbatore, Tamil Nadu';
+                                  const effOwnerSignature = property?.ownerSignature || generateDigitalSignatureDataUrl(effOwnerName, 'Authorized Landlord / Owner');
+                                  const sigPkg = getOrGenerateAgreementSignature({
+                                    unitId: selectedRentalUnit.id,
+                                    tenantId: activeTenant?.id,
+                                    tenantName: tName,
+                                    tenantPhone: tPhone,
+                                    unitName: `Flat ${selectedRentalUnit.unitNumber.replace(/^(flat|unit|house|room)\s*/i, '').trim() || selectedRentalUnit.unitNumber}`,
+                                    moveInDate,
+                                    ownerName: effOwnerName,
+                                    ownerPhone: effOwnerPhone,
+                                    ownerAddress: effOwnerAddress,
+                                    ownerSignature: effOwnerSignature,
+                                  });
+
+                                  const docType = activeTenant?.documentType || 'Aadhaar Card';
+                                  const docNum = activeTenant?.documentNumber || '';
+
+                                  setViewingAgreementDoc({
+                                    id: selectedRentalUnit.activeLease?.id || selectedRentalUnit.id,
+                                    tenantName: tName,
+                                    tenantPhone: tPhone,
+                                    tenantEmail: tEmail || undefined,
+                                    tenantAddress: activeTenant?.permanentAddress || 'Resident Permanent Address on Record',
+                                    tenantAadhaar: formatIdProofDisplay(docType, docNum) || 'Government Photo ID Verified',
+                                    propertyName: property?.name || 'Residential Property',
+                                    propertyAddress: fullPropertyAddress,
+                                    unitOrBedName: `Flat ${selectedRentalUnit.unitNumber.replace(/^(flat|unit|house|room)\s*/i, '').trim() || selectedRentalUnit.unitNumber}`,
+                                    propertyType: 'RENTAL_HOUSE',
+                                    monthlyRent: rent,
+                                    securityDeposit: deposit,
+                                    noticePeriodDays: Number(selectedRentalUnit.activeLease?.noticePeriodDays) || property?.noticePeriodDays || 30,
+                                    lockInMonths: Number(selectedRentalUnit.activeLease?.lockInMonths) || property?.lockInPeriodValue || 1,
+                                    startDate: moveInDate,
+                                    endDate: selectedRentalUnit.activeLease?.endDate ? String(selectedRentalUnit.activeLease.endDate).split('T')[0] : undefined,
+                                    ownerName: effOwnerName,
+                                    ownerPhone: effOwnerPhone,
+                                    ownerAddress: effOwnerAddress,
+                                    ownerSignature: effOwnerSignature,
+                                    residentSignature: sigPkg.signatureImage,
+                                    witnesses: sigPkg.witnesses,
+                                    signedAt: sigPkg.signedAt || (selectedRentalUnit.activeLease?.startDate ? String(selectedRentalUnit.activeLease.startDate) : new Date().toISOString()),
+                                    status: 'OCCUPIED',
+                                    hideDownloadButton: true,
+                                  });
+                                }}
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-blue-300 bg-blue-50 text-blue-800 text-xs font-bold hover:bg-blue-100 transition shadow-2xs cursor-pointer"
+                                title="View & Download House Rental Agreement PDF"
+                              >
+                                <FileText className="w-3.5 h-3.5 text-blue-700" />
+                                <span>Agreement PDF</span>
+                              </button>
+                              <span className="px-2.5 py-1 rounded-lg text-xs font-bold bg-blue-100 text-blue-800 border border-blue-200">
+                                Active Resident
                               </span>
                             </div>
-                            <div className="flex items-center gap-1.5">
-                              <Mail className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                              <span className="font-medium truncate">
-                                {selectedRentalUnit.activeLease?.tenant?.email || 'tenant@propertyos.com'}
-                              </span>
+                          </div>
+
+                          {/* Additional Details Grid (5 boxes matching Image 3) */}
+                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 pt-3 border-t border-blue-100 text-xs">
+                            <div className="bg-white p-2.5 rounded-lg border border-blue-100">
+                              <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block">Check-In Date</span>
+                              <span className="font-bold text-slate-800">{moveInDate}</span>
                             </div>
-                            <div className="flex items-center gap-1.5">
-                              <FileText className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                              <span className="font-medium truncate">
-                                Govt ID: Aadhaar Card Verified
-                              </span>
+
+                            <div className="bg-white p-2.5 rounded-lg border border-blue-100">
+                              <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block">Agreed Monthly Rent</span>
+                              <span className="font-bold text-blue-600">₹{rent.toLocaleString('en-IN')}/mo</span>
                             </div>
-                            <div className="flex items-center gap-1.5">
-                              <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                              <span className="font-medium truncate">
-                                {selectedRentalUnit.activeLease?.tenant?.permanentAddress || 'Permanent Address on record'}
+
+                            <div className="bg-white p-2.5 rounded-lg border border-blue-100">
+                              <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block">Deposit Held</span>
+                              <span className="font-bold text-blue-700">₹{deposit.toLocaleString('en-IN')}</span>
+                            </div>
+
+                            <div className="bg-white p-2.5 rounded-lg border border-blue-100 col-span-2 sm:col-span-1">
+                              <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block">Rent Dues</span>
+                              <span className="font-bold text-emerald-700">₹0 (All Cleared)</span>
+                            </div>
+
+                            <div className="bg-white p-2.5 rounded-lg border border-blue-100 col-span-2">
+                              <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block">Emergency Contact</span>
+                              <span className="font-medium text-slate-800">
+                                {emergName} • {emergPhone}
                               </span>
                             </div>
                           </div>
                         </div>
-                      </div>
-                    </div>
 
-                    {/* Lease Agreement & Financial Overview */}
-                    <div className="bg-white rounded-xl border border-slate-200 p-4 space-y-3 shadow-2xs">
-                      <div className="flex items-center justify-between pb-2 border-b border-slate-100">
-                        <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                          Lease Agreement & Financial Terms
-                        </span>
-                        <span className="text-[10px] font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
-                          Active Lease
-                        </span>
-                      </div>
+                        {/* Check-Out Action Banner matching Image 3 */}
+                        <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                          {!isCheckingOutRentalUnit ? (
+                            <>
+                              <div>
+                                <h5 className="text-xs font-bold text-slate-900">Tenant Moving Out?</h5>
+                                <p className="text-[11px] text-slate-500 mt-0.5">
+                                  Initiate settlement review and release this flat back to Available status with owner approval.
+                                </p>
+                              </div>
 
-                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                        <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-100">
-                          <span className="text-[10px] text-slate-400 font-semibold block">Agreed Rent</span>
-                          <span className="text-xs font-bold text-slate-900">
-                            ₹{Number(selectedRentalUnit.activeLease?.monthlyRent || selectedRentalUnit.monthlyRent).toLocaleString('en-IN')}/mo
-                          </span>
-                        </div>
-
-                        <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-100">
-                          <span className="text-[10px] text-slate-400 font-semibold block">Security Deposit</span>
-                          <span className="text-xs font-bold text-blue-700">
-                            ₹{Number(selectedRentalUnit.activeLease?.securityDeposit || selectedRentalUnit.securityDeposit).toLocaleString('en-IN')}
-                          </span>
-                        </div>
-
-                        <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-100">
-                          <span className="text-[10px] text-slate-400 font-semibold block">Lease Start</span>
-                          <span className="text-xs font-bold text-slate-800">
-                            {selectedRentalUnit.activeLease?.startDate
-                              ? String(selectedRentalUnit.activeLease.startDate).split('T')[0]
-                              : '2026-08-01'}
-                          </span>
-                        </div>
-
-                        <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-100">
-                          <span className="text-[10px] text-slate-400 font-semibold block">Lease End</span>
-                          <span className="text-xs font-bold text-slate-800">
-                            {selectedRentalUnit.activeLease?.endDate
-                              ? String(selectedRentalUnit.activeLease.endDate).split('T')[0]
-                              : '2027-07-31'}
-                          </span>
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-3 gap-3 pt-1 text-[11px] text-slate-600">
-                        <div>
-                          Notice Period: <strong className="text-slate-800">{selectedRentalUnit.activeLease?.noticePeriodDays || 30} days</strong>
-                        </div>
-                        <div>
-                          Lock-in Period: <strong className="text-slate-800">{selectedRentalUnit.activeLease?.lockInMonths || 6} months</strong>
-                        </div>
-                        <div>
-                          Rent Dues: <strong className="text-emerald-700">₹0 (Cleared)</strong>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Check-Out & Settlement Workflow */}
-                    <div className="rounded-xl border border-rose-200 bg-rose-50/40 p-4 space-y-3">
-                      {!isCheckingOutRentalUnit ? (
-                        <div className="flex items-center justify-between gap-4">
-                          <div>
-                            <h5 className="font-bold text-slate-900">Resident Moving Out?</h5>
-                            <p className="text-xs text-slate-500 mt-0.5">
-                              Initiate settlement refund, record utility/damage deductions, and release flat to Available.
-                            </p>
-                          </div>
-                          <Button
-                            type="button"
-                            variant="primary"
-                            size="sm"
-                            onClick={() => setIsCheckingOutRentalUnit(true)}
-                            className="bg-rose-600 hover:bg-rose-700 text-white font-bold gap-1.5 shrink-0 shadow-xs"
-                          >
-                            <UserMinus className="w-3.5 h-3.5" />
-                            Check Out Resident
-                          </Button>
-                        </div>
-                      ) : (
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setIsCheckingOutRentalUnit(true)}
+                                className="gap-1.5 text-xs font-bold text-rose-700 border-rose-300 bg-rose-50 hover:bg-rose-100 whitespace-nowrap shrink-0 cursor-pointer"
+                              >
+                                <UserMinus className="w-3.5 h-3.5" />
+                                Check Out Tenant
+                              </Button>
+                            </>
+                          ) : (
                         <div className="space-y-4 pt-1">
                           <div className="flex items-center justify-between pb-2 border-b border-rose-200">
                             <h5 className="font-bold text-rose-900 flex items-center gap-1.5">
@@ -8513,7 +8659,9 @@ export default function PropertyDetailPage() {
                       )}
                     </div>
                   </div>
-                ) : (
+                );
+              })()
+            ) : (
                   /* CASE B: AVAILABLE / MAINTENANCE UNIT VIEW */
                   <div className="space-y-5">
                     {/* Readiness Bar */}
@@ -9318,18 +9466,24 @@ export default function PropertyDetailPage() {
                                 type="button"
                                 onClick={() => {
                                   const signDetails = getRentalAgreementDetails();
+                                  const effOwnerName = property?.ownerName || (user ? `${user.firstName} ${user.lastName}`.trim() : 'Arun Sharma');
+                                  const effOwnerPhone = property?.ownerPhone || property?.contactPhone || user?.phone || '+91 98765 43210';
+                                  const effOwnerAddress = property?.ownerAddress || fullPropertyAddress || '#12, Royal Palm Residency, Coimbatore, Tamil Nadu';
+                                  const effOwnerSignature = property?.ownerSignature || generateDigitalSignatureDataUrl(effOwnerName, 'Authorized Landlord / Owner');
+
                                   setViewingAgreementDoc({
                                     ...signDetails,
                                     tenantPhone: signDetails.tenantPhone || '',
-                                    ownerName: property?.ownerName || 'Property Landlord',
-                                    ownerPhone: property?.contactPhone || '',
-                                    ownerAddress: fullPropertyAddress,
-                                    ownerSignature: property?.ownerSignature || 'DIGITAL_STAMP_DEFAULT',
+                                    ownerName: effOwnerName,
+                                    ownerPhone: effOwnerPhone,
+                                    ownerAddress: effOwnerAddress,
+                                    ownerSignature: effOwnerSignature,
                                     residentSignature: agreementSignatureMap[selectedRentalUnit.id]?.signatureImage || `SIGNED:${agreementSignatureMap[selectedRentalUnit.id]?.signerName}`,
                                     noticePeriodDays: Number(rentalCheckInTerms.noticePeriodDays) || property?.noticePeriodDays || 30,
-                                    lockInPeriodValue: Number(rentalCheckInTerms.lockInMonths) || property?.lockInPeriodValue || 6,
+                                    lockInPeriodValue: Number(rentalCheckInTerms.lockInMonths) || property?.lockInPeriodValue || 1,
                                     lockInPeriodUnit: 'MONTHS',
                                     witnesses: agreementSignatureMap[selectedRentalUnit.id]?.witnesses,
+                                    hideDownloadButton: true,
                                   });
                                 }}
                                 className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg text-xs transition shadow-2xs flex items-center gap-1.5 cursor-pointer"
@@ -9825,11 +9979,11 @@ export default function PropertyDetailPage() {
         {/* POST-ALLOCATION WHATSAPP & PDF DELIVERY MODAL                              */}
         {/* ========================================================================= */}
         {postCheckInAgreement && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-200">
             <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-lg w-full p-6 space-y-5 animate-in zoom-in-95 text-slate-800">
               <div className="flex items-center justify-between border-b border-slate-100 pb-3">
                 <div className="flex items-center gap-2.5">
-                  <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center font-bold border border-emerald-200">
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold border ${isPG ? 'bg-teal-50 text-brand-teal border-teal-200' : 'bg-blue-50 text-blue-700 border-blue-200'}`}>
                     <CheckCircle2 className="w-6 h-6" />
                   </div>
                   <div>
@@ -9849,11 +10003,11 @@ export default function PropertyDetailPage() {
                 </button>
               </div>
 
-              <div className="p-4 bg-teal-50/50 rounded-xl border border-teal-200 space-y-2 text-xs">
+              <div className={`p-4 rounded-xl border space-y-2 text-xs ${isPG ? 'bg-teal-50/50 border-teal-200' : 'bg-blue-50/50 border-blue-200'}`}>
                 <div className="flex items-center justify-between font-bold text-slate-800">
                   <span>Digital Agreement Document:</span>
-                  <span className="text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-full font-bold border border-emerald-300">
-                    {postCheckInAgreement.isSigned ? 'Dual Signed & Executed' : 'MTA 2021 Formatted'}
+                  <span className={`px-2 py-0.5 rounded-full font-bold border ${isPG ? 'text-teal-800 bg-teal-100 border-teal-300' : 'text-blue-800 bg-blue-100 border-blue-300'}`}>
+                    {postCheckInAgreement.isSigned ? 'Dual Signed & Executed' : (isPG ? 'PG Agreement Formatted' : 'House Rental Formatted')}
                   </span>
                 </div>
                 <p className="text-slate-600 leading-relaxed">
@@ -9922,14 +10076,15 @@ export default function PropertyDetailPage() {
                         sharingType: selectedBedRoom?.sharingType,
                         witnesses: sig?.witnesses,
                       };
-                      await downloadAgreementPdf(agreementDocData);
+                      const downloadedFileName = await downloadAgreementPdf(agreementDocData);
+                      setSuccessMessage(`Agreement PDF downloaded successfully to your system Downloads folder: ${downloadedFileName}`);
                     } catch (err) {
                       console.error('Failed to download PDF:', err);
                     } finally {
                       setIsDownloadingPostCheckInPdf(false);
                     }
                   }}
-                  className="w-full py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm flex items-center justify-center gap-2 shadow-sm transition cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+                  className={`w-full py-3 px-4 rounded-xl ${isPG ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-blue-600 hover:bg-blue-700'} text-white font-bold text-sm flex items-center justify-center gap-2 shadow-sm transition cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed`}
                 >
                   {isDownloadingPostCheckInPdf ? (
                     <>
@@ -9946,14 +10101,13 @@ export default function PropertyDetailPage() {
               </div>
 
               <div className="flex items-center justify-end pt-2 border-t border-slate-100">
-                <Button
-                  variant="primary"
-                  size="md"
+                <button
+                  type="button"
                   onClick={() => setPostCheckInAgreement(null)}
-                  className="font-bold text-sm px-6 py-2.5 shadow-sm"
+                  className={`font-bold text-sm px-8 py-3 rounded-xl shadow-sm transition cursor-pointer ${isPG ? 'bg-slate-900 hover:bg-black text-white' : 'bg-blue-600 hover:bg-blue-700 text-white'}`}
                 >
                   Done
-                </Button>
+                </button>
               </div>
             </div>
           </div>

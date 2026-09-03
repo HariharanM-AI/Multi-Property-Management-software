@@ -754,7 +754,13 @@ export default function TenantsPage() {
 
     const propDisplayAddress = prop?.address
       ? `${prop.address}, ${prop.city || 'Coimbatore'}, ${prop.state || 'Tamil Nadu'}`
-      : `${rec.propertyName !== '—' ? rec.propertyName : 'Test PG'}, Coimbatore, Tamil Nadu`;
+      : `${rec.propertyName !== '—' ? rec.propertyName : (rec.isRentalUnit ? 'Residential Property' : 'Test PG')}, Coimbatore, Tamil Nadu`;
+
+    const cleanUnitName = rec.unitOrBedNumber !== '—'
+      ? (rec.isRentalUnit && !rec.unitOrBedNumber.match(/^(flat|unit|house|room)/i)
+          ? `Flat ${rec.unitOrBedNumber}`
+          : rec.unitOrBedNumber)
+      : (rec.isRentalUnit ? 'Rental Flat' : 'Allocated Space');
 
     const agreement: AgreementDocumentData = {
       id: rec.recordId,
@@ -771,12 +777,12 @@ export default function TenantsPage() {
       ownerSignature: effectiveOwnerSignature,
       residentSignature: sigPkg.signatureImage,
       witnesses: sigPkg.witnesses,
-      propertyName: rec.propertyName !== '—' ? rec.propertyName : (prop?.name || 'Test PG'),
+      propertyName: rec.propertyName !== '—' ? rec.propertyName : (prop?.name || (rec.isRentalUnit ? 'Residential Property' : 'Test PG')),
       propertyAddress: propDisplayAddress,
-      unitOrBedName: rec.unitOrBedNumber !== '—' ? rec.unitOrBedNumber : 'Allocated Space',
+      unitOrBedName: cleanUnitName,
       propertyType: rec.isRentalUnit ? 'RENTAL_HOUSE' : 'PG',
-      monthlyRent: rec.monthlyRent || 10000,
-      securityDeposit: rec.securityDeposit || (rec.monthlyRent ? rec.monthlyRent * 2 : 20000),
+      monthlyRent: rec.monthlyRent || (rec.isRentalUnit ? 25000 : 10000),
+      securityDeposit: rec.securityDeposit || (rec.monthlyRent ? rec.monthlyRent * 2 : (rec.isRentalUnit ? 50000 : 20000)),
       lockInMonths: prop?.lockInMonths ?? 1,
       noticePeriodDays: prop?.noticePeriodDays ?? 30,
       startDate: rec.checkInDate
@@ -1222,16 +1228,24 @@ export default function TenantsPage() {
                             <button
                               type="button"
                               onClick={() => handleOpenAgreementDoc(rec)}
-                              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-800 font-bold text-xs hover:bg-emerald-100 hover:border-emerald-300 transition shadow-2xs cursor-pointer"
-                              title="View & Download Filled Tenancy Agreement PDF"
+                              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border font-bold text-xs transition shadow-2xs cursor-pointer ${
+                                rec.isRentalUnit
+                                  ? 'border-blue-200 bg-blue-50 text-blue-800 hover:bg-blue-100 hover:border-blue-300'
+                                  : 'border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 hover:border-emerald-300'
+                              }`}
+                              title={rec.isRentalUnit ? "View & Download House Rental Agreement PDF" : "View & Download PG Accommodation Agreement PDF"}
                             >
-                              <FileText className="w-3.5 h-3.5 text-emerald-700" />
+                              <FileText className={`w-3.5 h-3.5 ${rec.isRentalUnit ? 'text-blue-700' : 'text-emerald-700'}`} />
                               <span>Agreement PDF</span>
                             </button>
 
                             <Link
                               href={`/tenants/${rec.tenantId}`}
-                              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-teal-200 bg-teal-50/70 text-brand-teal font-semibold text-xs hover:bg-teal-100 transition shadow-2xs"
+                              className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border font-semibold text-xs transition shadow-2xs ${
+                                rec.isRentalUnit
+                                  ? 'border-blue-200 bg-blue-50/70 text-blue-700 hover:bg-blue-100'
+                                  : 'border-teal-200 bg-teal-50/70 text-brand-teal hover:bg-teal-100'
+                              }`}
                               title="View Tenant Profile"
                             >
                               <Eye className="w-3.5 h-3.5" />

@@ -95,11 +95,60 @@ export async function downloadAgreementPdf(agreementData: AgreementDocumentData)
         pdf.addImage(imgData2, 'JPEG', 0, 0, 210, 297, undefined, 'FAST');
 
         const isPG = agreementData.propertyType === 'PG';
-        const cleanTenantName = agreementData.tenantName.replace(/[^a-zA-Z0-9_-]/g, '_');
+        const cleanTenantName = (agreementData.tenantName || 'Resident').trim().replace(/[^a-zA-Z0-9_-]/g, '_');
         const docPrefix = isPG ? 'PG_Accommodation_Agreement' : 'Residential_Rent_Agreement';
         const fileName = `${docPrefix}_${cleanTenantName}.pdf`;
 
-        pdf.save(fileName);
+        const dataUri = pdf.output('datauristring');
+
+        try {
+          // Stage the PDF through /api/download-pdf.
+          // The backend immediately writes the genuine .pdf file directly to the user's system Downloads folder.
+          const stageRes = await fetch('/api/download-pdf', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ pdfBase64: dataUri, fileName }),
+          });
+
+          if (stageRes.ok) {
+            const data = await stageRes.json();
+            if (data.downloadUrl) {
+              const anchor = document.createElement('a');
+              anchor.href = data.downloadUrl;
+              anchor.download = fileName;
+              anchor.style.display = 'none';
+              document.body.appendChild(anchor);
+              anchor.click();
+              setTimeout(() => {
+                try {
+                  document.body.removeChild(anchor);
+                } catch {}
+              }, 1000);
+              resolve(fileName);
+              return;
+            }
+          }
+        } catch (postErr) {
+          console.warn('API staging download warning:', postErr);
+        }
+
+        // Fallback: direct application/pdf blob anchor download
+        const blob = pdf.output('blob');
+        const pdfBlob = new Blob([blob], { type: 'application/pdf' });
+        const blobUrl = URL.createObjectURL(pdfBlob);
+        const anchor = document.createElement('a');
+        anchor.href = blobUrl;
+        anchor.download = fileName;
+        anchor.style.display = 'none';
+        document.body.appendChild(anchor);
+        anchor.click();
+        setTimeout(() => {
+          try {
+            document.body.removeChild(anchor);
+            URL.revokeObjectURL(blobUrl);
+          } catch {}
+        }, 1500);
+
         resolve(fileName);
       } catch (err) {
         console.error('Failed to generate high quality agreement PDF:', err);
