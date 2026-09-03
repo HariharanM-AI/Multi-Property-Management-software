@@ -221,13 +221,15 @@ export class RentalController {
   async terminateLease(
     @Param('propertyId') propertyId: string,
     @Param('leaseId') leaseId: string,
-    @CurrentUser() user: AuthenticatedUser
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() body?: { endDate?: string }
   ) {
     const data = await this.rentalService.terminateLease(
       user.organizationId,
       propertyId,
       leaseId,
-      user.id
+      user.id,
+      body?.endDate
     );
     return { success: true, data };
   }

@@ -262,14 +262,20 @@ export default function TenantsPage() {
     };
     window.addEventListener('storage', onStorage);
 
-    // 2.5-second polling interval for live real-time synchronization
+    const onCustomEvent = () => {
+      fetchTenantsAndProperties(true);
+    };
+    window.addEventListener('propertyos_tenancy_event', onCustomEvent);
+
+    // 2-second polling interval for live real-time synchronization
     const interval = setInterval(() => {
       fetchTenantsAndProperties(true);
-    }, 2500);
+    }, 2000);
 
     return () => {
       if (bc) bc.close();
       window.removeEventListener('storage', onStorage);
+      window.removeEventListener('propertyos_tenancy_event', onCustomEvent);
       clearInterval(interval);
     };
   }, [fetchTenantsAndProperties]);
@@ -381,7 +387,8 @@ export default function TenantsPage() {
       if (t.stayHistories && t.stayHistories.length > 0) {
         t.stayHistories.forEach((s) => {
           const rent = Number(s.monthlyRent) || 0;
-          const checkInTime = getSafeTime(s.checkInDate) || getSafeTime(s.createdAt) || Date.now();
+          // Check-in action timestamp: exact creation or checkin date
+          const checkInTime = getSafeTime(s.createdAt) || getSafeTime(s.checkInDate) || Date.now();
           const isActive = !s.checkOutDate && (t.status === 'ACTIVE' || !s.checkOutDate);
 
           // Check-In Event Record
@@ -401,7 +408,7 @@ export default function TenantsPage() {
             unitOrBedNumber: formatBedOrUnit(s.bedNumber, false),
             isRentalUnit: false,
             checkInDate: s.checkInDate || s.createdAt || null,
-            checkOutDate: s.checkOutDate || null,
+            checkOutDate: null,
             monthlyRent: rent,
             securityDeposit: rent * 2,
             actionTimestamp: checkInTime,
@@ -412,9 +419,9 @@ export default function TenantsPage() {
 
           // Check-Out Event Record (only if vacated)
           if (s.checkOutDate) {
-            let checkOutTime = getSafeTime(s.checkOutDate) || (checkInTime + 1);
+            let checkOutTime = getSafeTime(s.checkOutDate) || (checkInTime + 1000);
             if (checkOutTime <= checkInTime) {
-              checkOutTime = checkInTime + 1;
+              checkOutTime = checkInTime + 1000;
             }
 
             records.push({
@@ -477,9 +484,8 @@ export default function TenantsPage() {
         t.leases.forEach((l) => {
           const isActive = l.status === 'ACTIVE';
           const rent = Number(l.monthlyRent) || 0;
-          const checkInTime = getSafeTime(l.startDate) || getSafeTime(l.createdAt) || Date.now();
-
-          const checkOutDateVal = !isActive && l.status !== 'NOTICE' ? (l.endDate || l.updatedAt || null) : null;
+          // Check-in action timestamp: exact creation or start date
+          const checkInTime = getSafeTime(l.createdAt) || getSafeTime(l.startDate) || Date.now();
 
           // Lease Check-In Record
           records.push({
@@ -498,7 +504,7 @@ export default function TenantsPage() {
             unitOrBedNumber: formatBedOrUnit(l.unitNumber, true),
             isRentalUnit: true,
             checkInDate: l.startDate || l.createdAt || null,
-            checkOutDate: checkOutDateVal,
+            checkOutDate: null,
             monthlyRent: rent,
             securityDeposit: rent * 2,
             actionTimestamp: checkInTime,
@@ -509,9 +515,15 @@ export default function TenantsPage() {
 
           // Lease Termination / Check-Out Record
           if (!isActive && l.status !== 'NOTICE') {
-            let checkOutTime = getSafeTime(l.endDate, l.updatedAt) || (checkInTime + 1);
+            const nowMs = Date.now();
+            const endDateMs = getSafeTime(l.endDate);
+            // If endDate is more than 24 hours in the future, it's the scheduled future expiry, not the checkout date
+            const isFutureScheduledEnd = endDateMs > (nowMs + 86400000);
+            const actualCheckOutDate = (!isFutureScheduledEnd && endDateMs > 0) ? l.endDate : (l.updatedAt || l.startDate);
+
+            let checkOutTime = (!isFutureScheduledEnd && endDateMs > 0) ? endDateMs : (getSafeTime(l.updatedAt) || (checkInTime + 1000));
             if (checkOutTime <= checkInTime) {
-              checkOutTime = checkInTime + 1;
+              checkOutTime = checkInTime + 1000;
             }
 
             records.push({
@@ -530,7 +542,7 @@ export default function TenantsPage() {
               unitOrBedNumber: formatBedOrUnit(l.unitNumber, true),
               isRentalUnit: true,
               checkInDate: l.startDate || l.createdAt || null,
-              checkOutDate: l.endDate || l.updatedAt || null,
+              checkOutDate: actualCheckOutDate || null,
               monthlyRent: rent,
               securityDeposit: rent * 2,
               actionTimestamp: checkOutTime,

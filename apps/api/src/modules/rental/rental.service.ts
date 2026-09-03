@@ -802,7 +802,11 @@ export class RentalService {
         where: { id: leaseId },
         data: {
           startDate: input.startDate ? new Date(input.startDate) : undefined,
-          endDate: input.endDate ? new Date(input.endDate) : undefined,
+          endDate: input.endDate
+            ? new Date(input.endDate)
+            : input.status === LeaseStatus.TERMINATED
+            ? new Date()
+            : undefined,
           monthlyRent: input.monthlyRent !== undefined ? input.monthlyRent : undefined,
           securityDeposit: input.securityDeposit !== undefined ? input.securityDeposit : undefined,
           noticePeriodDays: input.noticePeriodDays !== undefined ? input.noticePeriodDays : undefined,
@@ -884,10 +888,12 @@ export class RentalService {
     organizationId: string,
     propertyId: string,
     leaseId: string,
-    userId: string
+    userId: string,
+    endDate?: string
   ): Promise<LeaseDto> {
     return this.updateLease(organizationId, propertyId, leaseId, userId, {
       status: LeaseStatus.TERMINATED,
+      endDate: endDate || new Date().toISOString(),
     });
   }
 
