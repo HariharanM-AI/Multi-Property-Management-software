@@ -14,7 +14,7 @@ SCHEDULE OF PARTIES & PROPERTY DETAILS
 8. Security Deposit Amount: Rs. {{SECURITY_DEPOSIT_AMOUNT}}/- (Refundable subject to terms)
 9. Agreement Start Date: {{AGREEMENT_START_DATE}}
 10. Notice Period Required: {{NOTICE_PERIOD_DAYS}} Days minimum written/verbal notice before vacating.
-11. Stay / Lock-in Bracket: {{LOCK_IN_MONTHS}} Months fixed duration (if applicable)
+11. Stay / Lock-in Bracket: {{LOCK_IN_PERIOD_VALUE}} {{LOCK_IN_PERIOD_UNIT}} fixed duration (if applicable)
 
 TERMS AND CONDITIONS
 1. Rent and Payment: The Resident agrees to pay the stipulated Monthly PG Rent on or before the due date mentioned in the schedule above. Late payments may attract a fixed daily penalty fee as determined by the Owner.
@@ -47,7 +47,7 @@ SCHEDULE OF PARTIES & PROPERTY DETAILS
 8. Security Deposit Amount: Rs. {{SECURITY_DEPOSIT_AMOUNT}}/- (Refundable subject to terms)
 9. Agreement Tenancy Period: 11 Months (Commencing: {{AGREEMENT_START_DATE}} to {{AGREEMENT_END_DATE}})
 10. Notice Period Required: {{NOTICE_PERIOD_DAYS}} Days standard written/verbal notice from either side.
-11. Stay / Lock-in Bracket: {{LOCK_IN_MONTHS}} Months fixed duration (if applicable)
+11. Stay / Lock-in Bracket: {{LOCK_IN_PERIOD_VALUE}} {{LOCK_IN_PERIOD_UNIT}} fixed duration (if applicable)
 
 TERMS AND CONDITIONS
 1. Rent and Payment Outlay: The Tenant agrees to pay the stipulated Monthly Rent to the Landlord on or before the due date mentioned in the schedule. Any delay beyond the due date may attract a late payment penalty charge as mutually settled or specified by the Landlord.

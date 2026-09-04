@@ -36,6 +36,7 @@ import {
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api/v1';
 
 import { BackButton } from '@/components/ui/BackButton';
+import { getCleanPropertyDescription } from '@/lib/propertyUtils';
 
 export default function PropertiesListPage() {
   const router = useRouter();
@@ -361,9 +362,9 @@ export default function PropertiesListPage() {
                     </div>
 
                     {/* Description */}
-                    {property.description && (
+                    {getCleanPropertyDescription(property.description) && (
                       <p className="text-xs text-surface-textSecondary line-clamp-2 leading-relaxed">
-                        {property.description}
+                        {getCleanPropertyDescription(property.description)}
                       </p>
                     )}
 

@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
+import { getLocalDateString, formatAgreementDate } from '../../lib/date-utils';
 import {
   FileSignature,
   CheckCircle2,
@@ -185,7 +186,7 @@ export function AgreementSignModal({
   // Witness 1 State
   const [w1SignMode, setW1SignMode] = useState<'draw' | 'type'>('draw');
   const [w1Name, setW1Name] = useState(agreementData.witnesses?.[0]?.name || '');
-  const [w1Date, setW1Date] = useState(agreementData.witnesses?.[0]?.date || new Date().toISOString().split('T')[0]);
+  const [w1Date, setW1Date] = useState(agreementData.witnesses?.[0]?.date ? getLocalDateString(agreementData.witnesses[0].date) : getLocalDateString());
   const [w1Address, setW1Address] = useState(agreementData.witnesses?.[0]?.address || '');
   const [w1TypedSignature, setW1TypedSignature] = useState('');
   const [w1DrawnSignature, setW1DrawnSignature] = useState('');
@@ -196,7 +197,7 @@ export function AgreementSignModal({
   // Witness 2 State
   const [w2SignMode, setW2SignMode] = useState<'draw' | 'type'>('draw');
   const [w2Name, setW2Name] = useState(agreementData.witnesses?.[1]?.name || '');
-  const [w2Date, setW2Date] = useState(agreementData.witnesses?.[1]?.date || new Date().toISOString().split('T')[0]);
+  const [w2Date, setW2Date] = useState(agreementData.witnesses?.[1]?.date ? getLocalDateString(agreementData.witnesses[1].date) : getLocalDateString());
   const [w2Address, setW2Address] = useState(agreementData.witnesses?.[1]?.address || '');
   const [w2TypedSignature, setW2TypedSignature] = useState('');
   const [w2DrawnSignature, setW2DrawnSignature] = useState('');
@@ -232,7 +233,7 @@ export function AgreementSignModal({
       if (agreementData.witnesses?.[0]) {
         const w1 = agreementData.witnesses[0];
         setW1Name(w1.name || '');
-        setW1Date(w1.date || new Date().toISOString().split('T')[0]);
+        setW1Date(w1.date ? getLocalDateString(w1.date) : getLocalDateString());
         setW1Address(w1.address || '');
         if (w1.signature?.startsWith('TYPE:')) {
           setW1SignMode('type');
@@ -257,7 +258,7 @@ export function AgreementSignModal({
         }
       } else {
         setW1Name('');
-        setW1Date(new Date().toISOString().split('T')[0]);
+        setW1Date(getLocalDateString());
         setW1Address('');
         setW1SignMode('draw');
         setW1DrawnSignature('');
@@ -268,7 +269,7 @@ export function AgreementSignModal({
       if (agreementData.witnesses?.[1]) {
         const w2 = agreementData.witnesses[1];
         setW2Name(w2.name || '');
-        setW2Date(w2.date || new Date().toISOString().split('T')[0]);
+        setW2Date(w2.date ? getLocalDateString(w2.date) : getLocalDateString());
         setW2Address(w2.address || '');
         if (w2.signature?.startsWith('TYPE:')) {
           setW2SignMode('type');
@@ -293,7 +294,7 @@ export function AgreementSignModal({
         }
       } else {
         setW2Name('');
-        setW2Date(new Date().toISOString().split('T')[0]);
+        setW2Date(getLocalDateString());
         setW2Address('');
         setW2SignMode('draw');
         setW2DrawnSignature('');
@@ -600,7 +601,7 @@ export function AgreementSignModal({
       if (w1Name.trim() || w1Address.trim() || finalW1Sig) {
         witnessesPayload.push({
           name: w1Name.trim(),
-          date: w1Date,
+          date: w1Date ? formatAgreementDate(w1Date) : formatAgreementDate(new Date()),
           address: w1Address.trim(),
           signature: finalW1Sig || (w1Name.trim() ? `WITNESS:${w1Name.trim()}` : undefined),
         });
@@ -624,7 +625,7 @@ export function AgreementSignModal({
       if (w2Name.trim() || w2Address.trim() || finalW2Sig) {
         witnessesPayload.push({
           name: w2Name.trim(),
-          date: w2Date,
+          date: w2Date ? formatAgreementDate(w2Date) : formatAgreementDate(new Date()),
           address: w2Address.trim(),
           signature: finalW2Sig || (w2Name.trim() ? `WITNESS:${w2Name.trim()}` : undefined),
         });
@@ -674,22 +675,17 @@ export function AgreementSignModal({
   const executionCity = cityMatch ? cityMatch[1].trim() : 'coimbatore';
 
   // Execution Date
-  const now = new Date();
-  const execDay = String(now.getDate()).padStart(2, '0');
-  const execMonth = now.toLocaleString('en-IN', { month: 'long' });
-  const execYear = String(now.getFullYear());
+  const execDateBase = agreementData.startDate ? new Date(agreementData.startDate) : new Date();
+  const execDateSafe = isNaN(execDateBase.getTime()) ? new Date() : execDateBase;
+  const execDay = String(execDateSafe.getDate()).padStart(2, '0');
+  const execMonth = execDateSafe.toLocaleString('en-IN', { month: 'long' });
+  const execYear = String(execDateSafe.getFullYear());
   const execYearShort = execYear.slice(-2);
-  const executedDateFormatted = `${execDay}/${String(now.getMonth() + 1).padStart(2, '0')}/${execYear}`;
+  const executedDateFormatted = formatAgreementDate(agreementData.startDate || new Date());
 
   // Start and End Date formatting
   const parseDateFormatted = (dateStr?: string) => {
-    if (!dateStr) {
-      const d = new Date();
-      return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
-    }
-    const d = new Date(dateStr);
-    if (isNaN(d.getTime())) return dateStr;
-    return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
+    return formatAgreementDate(dateStr) || formatAgreementDate(new Date());
   };
 
   const formattedStartDate = parseDateFormatted(agreementData.startDate);
@@ -722,7 +718,13 @@ export function AgreementSignModal({
     : 'Full Residential Unit';
 
   const noticeDays = agreementData.noticePeriodDays ?? 30;
-  const lockInMonths = agreementData.lockInPeriodValue ?? agreementData.lockInMonths ?? 1;
+  const lockInValue = agreementData.lockInPeriodValue ?? agreementData.lockInMonths ?? 1;
+  const rawUnit = (agreementData.lockInPeriodUnit || 'MONTHS').toUpperCase();
+  const lockInUnitDisplay = rawUnit.startsWith('DAY')
+    ? (lockInValue === 1 ? 'Day' : 'Days')
+    : rawUnit.startsWith('YEAR')
+    ? (lockInValue === 1 ? 'Year' : 'Years')
+    : (lockInValue === 1 ? 'Month' : 'Months');
 
   const isSignatureProvided =
     (signMode === 'draw' && (hasDrawn || Boolean(currentSignatureImage))) ||
@@ -970,7 +972,7 @@ export function AgreementSignModal({
                         11. Stay / Lock-In Bracket:
                       </td>
                       <td className="p-3.5 sm:p-4 text-slate-950">
-                        <span className="font-black">{lockInMonths}</span> Months fixed duration
+                        <span className="font-black">{lockInValue}</span> {lockInUnitDisplay} fixed duration
                       </td>
                     </tr>
                   </tbody>
@@ -1162,7 +1164,10 @@ export function AgreementSignModal({
                           onTouchStart={startDrawing}
                           onTouchMove={draw}
                           onTouchEnd={stopDrawing}
-                          className="w-full h-44 sm:h-52 cursor-crosshair touch-none bg-white block"
+                          className="w-full h-44 sm:h-52 touch-none bg-white block"
+                          style={{
+                            cursor: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='%230f172a' stroke='%23ffffff' stroke-width='1.5'%3E%3Cpath d='M17.8 2.2a2.5 2.5 0 0 1 3.5 3.5L8.5 18.5 2 22l3.5-6.5L17.8 2.2z'/%3E%3Cpath d='m15 5 4 4' stroke='%23ffffff' fill='none'/%3E%3Ccircle cx='2.5' cy='21.5' r='1.5' fill='%232563eb'/%3E%3C/svg%3E") 2 22, crosshair`,
+                          }}
                         />
                         {!hasDrawn && !currentSignatureImage && (
                           <div className="absolute inset-0 flex items-center justify-center pointer-events-none text-slate-400 text-xs sm:text-sm italic">
@@ -1299,7 +1304,10 @@ export function AgreementSignModal({
                             onTouchStart={startW1Drawing}
                             onTouchMove={drawW1}
                             onTouchEnd={stopW1Drawing}
-                            className="w-full h-36 sm:h-44 cursor-crosshair touch-none bg-white block"
+                            className="w-full h-36 sm:h-44 touch-none bg-white block"
+                            style={{
+                              cursor: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='%230f172a' stroke='%23ffffff' stroke-width='1.5'%3E%3Cpath d='M17.8 2.2a2.5 2.5 0 0 1 3.5 3.5L8.5 18.5 2 22l3.5-6.5L17.8 2.2z'/%3E%3Cpath d='m15 5 4 4' stroke='%23ffffff' fill='none'/%3E%3Ccircle cx='2.5' cy='21.5' r='1.5' fill='%232563eb'/%3E%3C/svg%3E") 2 22, crosshair`,
+                            }}
                           />
                           {!hasW1Drawn && !w1DrawnSignature && (
                             <div className="absolute inset-0 flex items-center justify-center pointer-events-none text-slate-400 text-xs sm:text-sm italic">
@@ -1429,7 +1437,10 @@ export function AgreementSignModal({
                             onTouchStart={startW2Drawing}
                             onTouchMove={drawW2}
                             onTouchEnd={stopW2Drawing}
-                            className="w-full h-36 sm:h-44 cursor-crosshair touch-none bg-white block"
+                            className="w-full h-36 sm:h-44 touch-none bg-white block"
+                            style={{
+                              cursor: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='%230f172a' stroke='%23ffffff' stroke-width='1.5'%3E%3Cpath d='M17.8 2.2a2.5 2.5 0 0 1 3.5 3.5L8.5 18.5 2 22l3.5-6.5L17.8 2.2z'/%3E%3Cpath d='m15 5 4 4' stroke='%23ffffff' fill='none'/%3E%3Ccircle cx='2.5' cy='21.5' r='1.5' fill='%232563eb'/%3E%3C/svg%3E") 2 22, crosshair`,
+                            }}
                           />
                           {!hasW2Drawn && !w2DrawnSignature && (
                             <div className="absolute inset-0 flex items-center justify-center pointer-events-none text-slate-400 text-xs sm:text-sm italic">

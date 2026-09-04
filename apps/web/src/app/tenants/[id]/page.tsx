@@ -51,9 +51,12 @@ import {
 } from '@/components/agreements/AgreementDocumentViewerModal';
 import { formatIdProofDisplay } from '@/components/agreements/AgreementSignModal';
 import {
+  saveAgreementSignature,
   getOrGenerateAgreementSignature,
   generateDigitalSignatureDataUrl,
 } from '@/lib/agreementStorage';
+import { getOwnerProfile, onOwnerProfileChange, OwnerProfileData } from '@/lib/ownerProfileStorage';
+import { getLocalDateString, createLocalIsoString, formatAgreementDate } from '@/lib/date-utils';
 
 export default function TenantDetailsPage() {
   const params = useParams();
@@ -64,6 +67,15 @@ export default function TenantDetailsPage() {
   const [details, setDetails] = useState<TenantDetailsDto | null>(null);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [ownerProfile, setOwnerProfile] = useState<OwnerProfileData>(() => getOwnerProfile(user));
+
+  useEffect(() => {
+    setOwnerProfile(getOwnerProfile(user));
+    const unsubscribe = onOwnerProfileChange((updated) => {
+      setOwnerProfile(updated);
+    });
+    return unsubscribe;
+  }, [user]);
 
   // Modals
   const [showUploadModal, setShowUploadModal] = useState(false);
@@ -285,11 +297,11 @@ export default function TenantDetailsPage() {
     const isRental = Boolean(activeLease);
     const prop = activeStay?.room?.property || activeLease?.rentalUnit?.property;
     const propName = prop?.name || activeStay?.propertyName || activeLease?.propertyName || 'Property Residency';
-    const userName = user ? `${user.firstName} ${user.lastName}`.trim() : 'Arun Sharma';
-    const effectiveOwnerName = prop?.ownerName?.trim() || (userName && userName !== '—' ? userName : 'Arun Sharma');
-    const effectiveOwnerPhone = prop?.ownerPhone || prop?.contactPhone || user?.phone || '+91 98765 43210';
-    const effectiveOwnerAddress = prop?.ownerAddress || (prop ? `${prop.address || propName}, ${prop.city || 'Coimbatore'}, ${prop.state || 'Tamil Nadu'}` : '#12, Royal Palm Residency, Coimbatore, Tamil Nadu');
-    const effectiveOwnerSignature = prop?.ownerSignature || generateDigitalSignatureDataUrl(effectiveOwnerName, 'Authorized Landlord / Owner');
+    const userName = ownerProfile.fullName;
+    const fallbackOwnerName = ownerProfile.fullName || prop?.ownerName?.trim() || (userName && userName !== '—' ? userName : 'Landlord');
+    const fallbackOwnerPhone = ownerProfile.phone || prop?.ownerPhone || prop?.contactPhone || user?.phone || '';
+    const fallbackOwnerAddress = ownerProfile.address || prop?.ownerAddress || (prop ? `${prop.address || propName}, ${prop.city || 'Bengaluru'}, ${prop.state || 'Karnataka'}` : '#12, Royal Palm Residency, Indiranagar, Bengaluru, Karnataka - 560038');
+    const fallbackOwnerSignature = ownerProfile.signature || prop?.ownerSignature || '';
 
     const cleanUnitName = activeStay
       ? `Bed ${activeStay?.bed?.bedNumber || activeStay?.bedNumber || '—'} (Room ${activeStay?.room?.roomNumber || activeStay?.roomNumber || '—'})`
@@ -313,57 +325,114 @@ export default function TenantDetailsPage() {
     const docNum = doc?.documentNumber || (tenant as any).documentNumber || (tenant as any).governmentIdNumber;
     const docType = doc?.documentType || 'Aadhaar Card';
 
+    const effectiveBedId = activeStay?.bedId;
+    const effectiveUnitId = activeLease?.rentalUnitId || activeLease?.id;
+    const propDisplayAddress = prop?.address
+      ? `${prop.address}, ${prop.city || 'Coimbatore'}, ${prop.state || 'Tamil Nadu'}`
+      : `${propName}, Coimbatore, Tamil Nadu`;
+
+    const stayOrLeaseStart = activeStay?.checkInDate || activeLease?.startDate || tenant.createdAt;
     const sigPkg = getOrGenerateAgreementSignature({
+      bedId: effectiveBedId,
+      unitId: effectiveUnitId,
       tenantId: tenant.id,
       tenantName: `${tenant.firstName} ${tenant.lastName === '—' ? '' : tenant.lastName}`.trim(),
       tenantPhone: tenant.phone,
       unitName: cleanUnitName,
       emergencyContactName: tenant.emergencyContactName,
       emergencyContactPhone: tenant.emergencyContactPhone,
-      ownerName: effectiveOwnerName,
-      ownerPhone: effectiveOwnerPhone,
-      ownerAddress: effectiveOwnerAddress,
-      ownerSignature: effectiveOwnerSignature,
+      moveInDate: stayOrLeaseStart ? getLocalDateString(stayOrLeaseStart) : undefined,
+      startDate: stayOrLeaseStart ? getLocalDateString(stayOrLeaseStart) : undefined,
+      monthlyRent: rent,
+      securityDeposit: deposit,
+      noticePeriodDays: prop?.noticePeriodDays ?? 30,
+      lockInMonths: prop?.lockInMonths ?? 1,
+      lockInPeriodValue: prop?.lockInPeriodValue ?? prop?.lockInMonths ?? 1,
+      lockInPeriodUnit: prop?.lockInPeriodUnit || 'MONTHS',
+      propertyName: propName,
+      propertyAddress: propDisplayAddress,
+      propertyType: isRental ? 'RENTAL_HOUSE' : 'PG',
+      ownerName: fallbackOwnerName,
+      ownerPhone: fallbackOwnerPhone,
+      ownerAddress: fallbackOwnerAddress,
+      ownerSignature: fallbackOwnerSignature,
     });
+
+    // LEGAL IMMUTABILITY: Prioritize frozen agreement snapshot values so future property/profile updates do not alter past documents
+    const effectiveOwnerName = sigPkg.ownerName || fallbackOwnerName;
+    const effectiveOwnerPhone = sigPkg.ownerPhone || fallbackOwnerPhone;
+    const effectiveOwnerAddress = sigPkg.ownerAddress || fallbackOwnerAddress;
+    const effectiveOwnerSignature = sigPkg.ownerSignature || fallbackOwnerSignature;
+    const effectiveNoticePeriodDays = sigPkg.noticePeriodDays ?? (prop?.noticePeriodDays ?? 30);
+    const effectiveLockInMonths = sigPkg.lockInMonths ?? (prop?.lockInMonths ?? 1);
+    const effectiveLockInPeriodValue = sigPkg.lockInPeriodValue ?? (prop?.lockInPeriodValue ?? prop?.lockInMonths ?? 1);
+    const effectiveLockInPeriodUnit = (sigPkg.lockInPeriodUnit as any) || (prop?.lockInPeriodUnit as any) || 'MONTHS';
+    const effectiveMonthlyRent = sigPkg.monthlyRent || rent;
+    const effectiveSecurityDeposit = sigPkg.securityDeposit || deposit;
+
+    const effectiveStartDate = sigPkg.startDate || (stayOrLeaseStart ? getLocalDateString(stayOrLeaseStart) : getLocalDateString());
+    const effectiveSignedAt = sigPkg.signedAt || (stayOrLeaseStart ? createLocalIsoString(stayOrLeaseStart) : new Date().toISOString());
+
+    // Permanently lock and freeze the snapshot in persistent storage
+    if (sigPkg.noticePeriodDays === undefined || sigPkg.lockInPeriodValue === undefined || !sigPkg.isExecuted) {
+      saveAgreementSignature({
+        ...sigPkg,
+        bedId: effectiveBedId || sigPkg.bedId,
+        unitId: effectiveUnitId || sigPkg.unitId,
+        tenantId: tenant.id || sigPkg.tenantId,
+        tenantName: sigPkg.tenantName || `${tenant.firstName} ${tenant.lastName === '—' ? '' : tenant.lastName}`.trim(),
+        isExecuted: true,
+        isSigned: true,
+        noticePeriodDays: effectiveNoticePeriodDays,
+        lockInMonths: effectiveLockInMonths,
+        lockInPeriodValue: effectiveLockInPeriodValue,
+        lockInPeriodUnit: effectiveLockInPeriodUnit,
+        monthlyRent: effectiveMonthlyRent,
+        securityDeposit: effectiveSecurityDeposit,
+        startDate: effectiveStartDate,
+        signedAt: effectiveSignedAt,
+        propertyName: sigPkg.propertyName || propName,
+        propertyAddress: sigPkg.propertyAddress || propDisplayAddress,
+        propertyType: isRental ? 'RENTAL_HOUSE' : 'PG',
+        ownerName: effectiveOwnerName,
+        ownerPhone: effectiveOwnerPhone,
+        ownerAddress: effectiveOwnerAddress,
+        ownerSignature: effectiveOwnerSignature,
+      });
+    }
 
     const agreement: AgreementDocumentData = {
       id: activeStay?.id || activeLease?.id || tenant.id,
-      tenantName: `${tenant.firstName} ${tenant.lastName === '—' ? '' : tenant.lastName}`.trim(),
-      tenantPhone: tenant.phone,
-      tenantEmail: tenant.email || undefined,
-      tenantAddress: tenant.permanentAddress
+      tenantName: sigPkg.tenantName || `${tenant.firstName} ${tenant.lastName === '—' ? '' : tenant.lastName}`.trim(),
+      tenantPhone: sigPkg.tenantPhone || tenant.phone,
+      tenantEmail: sigPkg.tenantEmail || tenant.email || undefined,
+      tenantAddress: sigPkg.tenantAddress || (tenant.permanentAddress
         ? `${tenant.permanentAddress}, ${tenant.permanentCity || 'Bengaluru'}, ${tenant.permanentState || 'Karnataka'} — ${tenant.permanentPostalCode || '560001'}`
-        : 'Resident Address on Record',
-      tenantAadhaar: formatIdProofDisplay(docType, docNum) || 'Government Photo ID Verified',
+        : 'Resident Address on Record'),
+      tenantAadhaar: sigPkg.tenantAadhaar || (formatIdProofDisplay(docType, docNum) || 'Government Photo ID Verified'),
       ownerName: effectiveOwnerName,
       ownerPhone: effectiveOwnerPhone,
       ownerAddress: effectiveOwnerAddress,
       ownerSignature: effectiveOwnerSignature,
       residentSignature: sigPkg.signatureImage,
       witnesses: sigPkg.witnesses,
-      propertyName: propName,
-      propertyAddress: prop?.address ? `${prop.address}, ${prop.city || 'Coimbatore'}, ${prop.state || 'Tamil Nadu'}` : `${propName}, Coimbatore, Tamil Nadu`,
-      unitOrBedName: cleanUnitName,
+      propertyName: sigPkg.propertyName || propName,
+      propertyAddress: sigPkg.propertyAddress || propDisplayAddress,
+      unitOrBedName: sigPkg.unitName || cleanUnitName,
       propertyType: isRental ? 'RENTAL_HOUSE' : 'PG',
-      monthlyRent: rent,
-      securityDeposit: deposit,
-      lockInMonths: prop?.lockInMonths ?? 1,
-      noticePeriodDays: prop?.noticePeriodDays ?? 30,
-      startDate: activeStay?.checkInDate
-        ? new Date(activeStay.checkInDate).toISOString().split('T')[0]
-        : activeLease?.startDate
-        ? new Date(activeLease.startDate).toISOString().split('T')[0]
-        : new Date(tenant.createdAt).toISOString().split('T')[0],
-      endDate: activeStay?.checkOutDate
-        ? new Date(activeStay.checkOutDate).toISOString().split('T')[0]
+      monthlyRent: effectiveMonthlyRent,
+      securityDeposit: effectiveSecurityDeposit,
+      lockInMonths: effectiveLockInMonths,
+      lockInPeriodValue: effectiveLockInPeriodValue,
+      lockInPeriodUnit: effectiveLockInPeriodUnit,
+      noticePeriodDays: effectiveNoticePeriodDays,
+      startDate: effectiveStartDate,
+      endDate: sigPkg.endDate || (activeStay?.checkOutDate
+        ? getLocalDateString(activeStay.checkOutDate)
         : activeLease?.endDate
-        ? new Date(activeLease.endDate).toISOString().split('T')[0]
-        : undefined,
-      signedAt: activeStay?.checkInDate
-        ? new Date(activeStay.checkInDate).toISOString()
-        : activeLease?.startDate
-        ? new Date(activeLease.startDate).toISOString()
-        : new Date(tenant.createdAt).toISOString(),
+        ? getLocalDateString(activeLease.endDate)
+        : undefined),
+      signedAt: effectiveSignedAt,
       status: tenant.status,
     };
 

@@ -87,9 +87,11 @@ export class PropertiesService {
         propertyData.lockInMonths !== undefined
       );
 
+      const cleanDesc = this.extractCleanDescription(propertyData.description);
+
       const descriptionPayload = hasMeta
         ? JSON.stringify({
-            text: propertyData.description?.trim() || null,
+            text: cleanDesc,
             ownerName: propertyData.ownerName?.trim() || null,
             ownerAddress: propertyData.ownerAddress?.trim() || null,
             ownerPhone: propertyData.ownerPhone?.trim() || null,
@@ -99,7 +101,7 @@ export class PropertiesService {
             lockInPeriodUnit: propertyData.lockInPeriodUnit || 'MONTHS',
             lockInMonths: propertyData.lockInMonths !== undefined ? Number(propertyData.lockInMonths) : (propertyData.lockInPeriodUnit === 'YEARS' ? (Number(propertyData.lockInPeriodValue || 1) * 12) : Number(propertyData.lockInPeriodValue || 1)),
           })
-        : propertyData.description?.trim() || null;
+        : cleanDesc;
 
       // 2. Create Property
       const created = await tx.property.create({
@@ -311,7 +313,7 @@ export class PropertiesService {
 
     await this.prisma.$transaction(async (tx) => {
       // 1. Resolve composite description if owner or terms fields are touched
-      let descriptionPayload = updateData.description !== undefined ? updateData.description?.trim() : undefined;
+      let descriptionPayload = updateData.description !== undefined ? this.extractCleanDescription(updateData.description) : undefined;
       if (
         updateData.ownerName !== undefined ||
         updateData.ownerAddress !== undefined ||
@@ -329,7 +331,10 @@ export class PropertiesService {
           } catch {}
         }
 
-        const text = updateData.description !== undefined ? updateData.description?.trim() : existingMeta.text || existing.description || null;
+        const cleanExistingText = this.extractCleanDescription(existingMeta.text ?? existing.description);
+        const text = updateData.description !== undefined
+          ? this.extractCleanDescription(updateData.description)
+          : cleanExistingText;
         const ownerName = updateData.ownerName !== undefined ? updateData.ownerName?.trim() : existingMeta.ownerName || null;
         const ownerAddress = updateData.ownerAddress !== undefined ? updateData.ownerAddress?.trim() : existingMeta.ownerAddress || null;
         const ownerPhone = updateData.ownerPhone !== undefined ? updateData.ownerPhone?.trim() : existingMeta.ownerPhone || null;
@@ -341,7 +346,7 @@ export class PropertiesService {
 
         descriptionPayload = (ownerName || ownerAddress || ownerPhone || ownerSignature || noticePeriodDays !== undefined)
           ? JSON.stringify({
-              text,
+              text: text || null,
               ownerName,
               ownerAddress,
               ownerPhone,
@@ -351,7 +356,7 @@ export class PropertiesService {
               lockInPeriodUnit,
               lockInMonths,
             })
-          : text;
+          : (text || null);
       }
 
       // Update Core Fields
@@ -427,6 +432,45 @@ export class PropertiesService {
   }
 
   /**
+   * Helper to recursively unwrap JSON and extract pure human-readable text.
+   * Prevents raw JSON containing owner metadata from leaking into description or getting nested into text.
+   */
+  private extractCleanDescription(raw: string | null | undefined): string | null {
+    if (!raw) return null;
+    let current: any = raw;
+    for (let i = 0; i < 10; i++) {
+      if (typeof current === 'string' && current.trim().startsWith('{')) {
+        try {
+          const parsed = JSON.parse(current);
+          if (parsed && typeof parsed === 'object') {
+            if ('text' in parsed) {
+              current = parsed.text;
+              continue;
+            } else {
+              return null;
+            }
+          }
+        } catch {
+          break;
+        }
+      } else {
+        break;
+      }
+    }
+    if (typeof current === 'string') {
+      const trimmed = current.trim();
+      if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+        try {
+          JSON.parse(trimmed);
+          return null;
+        } catch {}
+      }
+      return trimmed.length > 0 ? trimmed : null;
+    }
+    return null;
+  }
+
+  /**
    * Maps Prisma Property entity to PropertyDto including capability resolution
    */
   private mapToDto(property: any): PropertyDto {
@@ -440,7 +484,7 @@ export class PropertiesService {
         icon: pa.amenity.icon,
       })) || [];
 
-    let cleanDescription = property.description;
+    const cleanDescription = this.extractCleanDescription(property.description);
     let ownerName: string | null = null;
     let ownerAddress: string | null = null;
     let ownerPhone: string | null = null;
@@ -453,7 +497,6 @@ export class PropertiesService {
     if (property.description && property.description.startsWith('{')) {
       try {
         const meta = JSON.parse(property.description);
-        cleanDescription = meta.text ?? null;
         ownerName = meta.ownerName ?? null;
         ownerAddress = meta.ownerAddress ?? null;
         ownerPhone = meta.ownerPhone ?? null;

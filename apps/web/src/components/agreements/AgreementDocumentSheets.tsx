@@ -3,6 +3,7 @@
 import React, { useEffect, useRef } from 'react';
 import { AgreementDocumentData } from './AgreementDocumentViewerModal';
 import { generateDigitalSignatureDataUrl } from '../../lib/agreementStorage';
+import { formatAgreementDate } from '../../lib/date-utils';
 
 export interface AgreementDocumentSheetsProps {
   agreementData: AgreementDocumentData;
@@ -50,23 +51,44 @@ export function AgreementDocumentSheets({
       : Number(String(agreementData.securityDeposit).replace(/[^\d.]/g, '')) || 0;
   const formattedDepositNumber = Number(numericDeposit).toLocaleString('en-IN');
 
-  // Format Dates
-  const execDate = agreementData.startDate ? new Date(agreementData.startDate) : new Date();
+  // Format Dates - based on agreement execution timestamp (signedAt), then startDate, fallback to now
+  const rawDateToUse = agreementData.signedAt || agreementData.startDate || new Date();
+  let execDate: Date;
+  if (typeof rawDateToUse === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(rawDateToUse.trim())) {
+    const [y, m, d] = rawDateToUse.trim().split('-').map(Number);
+    execDate = new Date(y, m - 1, d);
+  } else {
+    execDate = rawDateToUse instanceof Date ? rawDateToUse : new Date(rawDateToUse);
+    if (isNaN(execDate.getTime())) execDate = new Date();
+  }
+
+  const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
   const execDay = String(execDate.getDate()).padStart(2, '0');
-  const execMonth = execDate.toLocaleString('en-IN', { month: 'long' });
+  const execMonth = MONTHS[execDate.getMonth()] || 'September';
   const execYear = String(execDate.getFullYear());
   const execYearShort = execYear.slice(-2);
   const executionCity = 'Coimbatore';
 
-  const formattedStartDate = agreementData.startDate
-    ? new Date(agreementData.startDate).toLocaleDateString('en-GB')
-    : new Date().toLocaleDateString('en-GB');
+  const executedDateFormatted = formatAgreementDate(rawDateToUse) || formatAgreementDate(new Date());
+
+  const formattedStartDate = formatAgreementDate(agreementData.startDate || rawDateToUse);
 
   const formattedEndDate = agreementData.endDate
-    ? new Date(agreementData.endDate).toLocaleDateString('en-GB')
-    : new Date(Date.now() + 334 * 24 * 60 * 60 * 1000).toLocaleDateString('en-GB');
+    ? formatAgreementDate(agreementData.endDate)
+    : formatAgreementDate(new Date(execDate.getTime() + 334 * 24 * 60 * 60 * 1000));
 
-  const executedDateFormatted = new Date().toLocaleDateString('en-GB');
+  const getWitnessDateDisplay = (wDate?: string) => {
+    if (!wDate) return executedDateFormatted;
+    const formatted = formatAgreementDate(wDate);
+    if (formatted === executedDateFormatted) return formatted;
+    // If the stored witness date differs from execution date only by UTC day boundary shift (e.g. 03/09/2026 vs 04/09/2026),
+    // align with executedDateFormatted so the official contract is 100% consistent across all signers.
+    const parsedW = new Date(wDate);
+    if (!isNaN(parsedW.getTime()) && Math.abs(parsedW.getTime() - execDate.getTime()) <= 86400000) {
+      return executedDateFormatted;
+    }
+    return formatted || executedDateFormatted;
+  };
 
   // ID Proof Extraction
   const rawId = agreementData.tenantAadhaar || '5489-3231-3231';
@@ -110,7 +132,13 @@ export function AgreementDocumentSheets({
     : 'Full Residential Unit';
 
   const noticeDays = agreementData.noticePeriodDays ?? 30;
-  const lockInMonths = agreementData.lockInPeriodValue ?? agreementData.lockInMonths ?? 1;
+  const lockInValue = agreementData.lockInPeriodValue ?? agreementData.lockInMonths ?? 1;
+  const rawUnit = (agreementData.lockInPeriodUnit || 'MONTHS').toUpperCase();
+  const lockInUnitDisplay = rawUnit.startsWith('DAY')
+    ? (lockInValue === 1 ? 'Day' : 'Days')
+    : rawUnit.startsWith('YEAR')
+    ? (lockInValue === 1 ? 'Year' : 'Years')
+    : (lockInValue === 1 ? 'Month' : 'Months');
 
   return (
     <div className={`agreement-sheets-root space-y-8 max-w-[860px] mx-auto ${className}`}>
@@ -314,7 +342,7 @@ export function AgreementDocumentSheets({
                     11. Stay / Lock-In Bracket:
                   </td>
                   <td className="p-2.5 sm:p-3 text-slate-950">
-                    <span className="font-black">{lockInMonths}</span> Months fixed duration
+                    <span className="font-black">{lockInValue}</span> {lockInUnitDisplay} fixed duration
                   </td>
                 </tr>
               </tbody>
@@ -627,7 +655,7 @@ export function AgreementDocumentSheets({
                   </div>
                   <div>
                     <strong className="font-black text-black">Date:</strong>{' '}
-                    {effectiveWitnesses?.[0]?.date ? effectiveWitnesses[0].date : executedDateFormatted}
+                    {getWitnessDateDisplay(effectiveWitnesses?.[0]?.date)}
                   </div>
                   <div>
                     <strong className="font-black text-black">Address:</strong>{' '}
@@ -678,7 +706,7 @@ export function AgreementDocumentSheets({
                   </div>
                   <div>
                     <strong className="font-black text-black">Date:</strong>{' '}
-                    {effectiveWitnesses?.[1]?.date ? effectiveWitnesses[1].date : executedDateFormatted}
+                    {getWitnessDateDisplay(effectiveWitnesses?.[1]?.date)}
                   </div>
                   <div>
                     <strong className="font-black text-black">Address:</strong>{' '}

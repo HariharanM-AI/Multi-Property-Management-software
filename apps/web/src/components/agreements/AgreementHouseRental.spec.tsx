@@ -202,4 +202,40 @@ describe('House Rental Model Agreement & Flow Verification', () => {
     expect(dataUrl).toContain('Arun%20Sharma');
     expect(dataUrl).toContain('Authorized%20Landlord%20%2F%20Owner');
   });
+
+  it('should dynamically display Lock-In Bracket units (Days, Months, Years) accurately', () => {
+    // Test Days
+    const daysData = {
+      tenantName: 'Kavin M',
+      tenantPhone: '+91 98765 43210',
+      propertyName: 'Test PG',
+      propertyType: 'PG' as const,
+      unitOrBedName: 'Bed 102-B',
+      monthlyRent: 8000,
+      lockInPeriodValue: 100,
+      lockInPeriodUnit: 'DAYS',
+      noticePeriodDays: 30,
+    };
+    const htmlDays = renderToStaticMarkup(<AgreementDocumentSheets agreementData={daysData} />);
+    expect(htmlDays).toContain('11. Stay / Lock-In Bracket:');
+    expect(htmlDays).toContain('100</span> Days fixed duration');
+
+    // Test Years
+    const yearsData = {
+      ...daysData,
+      lockInPeriodValue: 2,
+      lockInPeriodUnit: 'YEARS',
+    };
+    const htmlYears = renderToStaticMarkup(<AgreementDocumentSheets agreementData={yearsData} />);
+    expect(htmlYears).toContain('2</span> Years fixed duration');
+
+    // Test Single Day / Month
+    const singleDayData = {
+      ...daysData,
+      lockInPeriodValue: 1,
+      lockInPeriodUnit: 'DAYS',
+    };
+    const htmlSingleDay = renderToStaticMarkup(<AgreementDocumentSheets agreementData={singleDayData} />);
+    expect(htmlSingleDay).toContain('1</span> Day fixed duration');
+  });
 });

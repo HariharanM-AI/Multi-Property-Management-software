@@ -14,10 +14,27 @@ interface AppShellProps {
       }) => React.ReactNode);
   activePath?: string;
   propertyName?: string;
+  propertyType?: PropertyType;
 }
 
-export const AppShell: React.FC<AppShellProps> = ({ children, activePath, propertyName }) => {
-  const [propertyType, setPropertyType] = useState<PropertyType>(PropertyType.PG);
+export const AppShell: React.FC<AppShellProps> = ({
+  children,
+  activePath,
+  propertyName,
+  propertyType: propPropertyType,
+}) => {
+  const [internalPropertyType, setInternalPropertyType] = useState<PropertyType>(
+    propPropertyType || PropertyType.PG
+  );
+
+  React.useEffect(() => {
+    if (propPropertyType) {
+      setInternalPropertyType(propPropertyType);
+    }
+  }, [propPropertyType]);
+
+  const propertyType = propPropertyType || internalPropertyType;
+  const setPropertyType = setInternalPropertyType;
 
   return (
     <div className="flex h-screen bg-surface-subtle overflow-hidden">

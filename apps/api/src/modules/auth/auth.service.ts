@@ -3,6 +3,7 @@ import {
   ConflictException,
   UnauthorizedException,
   BadRequestException,
+  NotFoundException,
   Logger,
 } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
@@ -467,6 +468,61 @@ export class AuthService {
 
     return {
       message: 'Password has been reset successfully. Please log in with your new password.',
+    };
+  }
+
+  /**
+   * Update User Profile and Organization Entity
+   */
+  async updateUserProfile(
+    userId: string,
+    organizationId: string,
+    data: { firstName?: string; lastName?: string; phone?: string; organizationName?: string }
+  ): Promise<AuthUser> {
+    const updateUserData: Record<string, any> = {};
+    if (data.firstName && data.firstName.trim()) updateUserData.firstName = data.firstName.trim();
+    if (data.lastName && data.lastName.trim()) updateUserData.lastName = data.lastName.trim();
+    if (data.phone && data.phone.trim()) updateUserData.phone = data.phone.trim();
+
+    if (Object.keys(updateUserData).length > 0) {
+      await this.prisma.user.update({
+        where: { id: userId },
+        data: updateUserData,
+      });
+    }
+
+    if (data.organizationName && data.organizationName.trim()) {
+      await this.prisma.organization.update({
+        where: { id: organizationId },
+        data: { name: data.organizationName.trim() },
+      });
+    }
+
+    const updatedUser = await this.prisma.user.findUnique({
+      where: { id: userId },
+      include: {
+        organization: true,
+        userRoles: {
+          include: {
+            role: true,
+          },
+        },
+      },
+    });
+
+    if (!updatedUser) {
+      throw new NotFoundException('User not found.');
+    }
+
+    return {
+      id: updatedUser.id,
+      email: updatedUser.email,
+      firstName: updatedUser.firstName,
+      lastName: updatedUser.lastName,
+      phone: updatedUser.phone,
+      organizationId: updatedUser.organization.id,
+      organizationName: updatedUser.organization.name,
+      roles: updatedUser.userRoles.map((ur) => ur.role.name as UserRole),
     };
   }
 }

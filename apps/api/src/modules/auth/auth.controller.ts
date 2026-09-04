@@ -2,6 +2,7 @@ import {
   Controller,
   Post,
   Get,
+  Patch,
   Body,
   Req,
   Res,
@@ -113,6 +114,16 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   async me(@CurrentUser() user: AuthUser): Promise<{ user: AuthUser }> {
     return { user };
+  }
+
+  @Patch('profile')
+  @HttpCode(HttpStatus.OK)
+  async updateProfile(
+    @CurrentUser() user: AuthUser,
+    @Body() body: { firstName?: string; lastName?: string; phone?: string; organizationName?: string }
+  ): Promise<{ user: AuthUser }> {
+    const updated = await this.authService.updateUserProfile(user.id, user.organizationId, body);
+    return { user: updated };
   }
 
   @Public()

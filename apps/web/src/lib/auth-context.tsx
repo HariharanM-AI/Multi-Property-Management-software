@@ -13,6 +13,12 @@ interface AuthContextType {
   register: (input: RegisterOwnerInput) => Promise<{ success: boolean; error?: string }>;
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
+  updateProfile: (data: {
+    firstName?: string;
+    lastName?: string;
+    phone?: string;
+    organizationName?: string;
+  }) => Promise<{ success: boolean; error?: string }>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -138,6 +144,45 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  const updateProfile = async (data: {
+    firstName?: string;
+    lastName?: string;
+    phone?: string;
+    organizationName?: string;
+  }): Promise<{ success: boolean; error?: string }> => {
+    try {
+      const res = await fetch(`${API_BASE}/auth/profile`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(data),
+      });
+
+      const json = await res.json();
+      if (!res.ok || !json.success) {
+        return {
+          success: false,
+          error: json.error?.message || 'Failed to update profile.',
+        };
+      }
+
+      if (json.data?.user) {
+        setUser(json.data.user);
+        setOrganization({
+          id: json.data.user.organizationId,
+          name: json.data.user.organizationName || 'My Organization',
+        });
+      }
+
+      return { success: true };
+    } catch {
+      return {
+        success: false,
+        error: 'Unable to connect to the server to update profile.',
+      };
+    }
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -149,6 +194,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         register,
         logout,
         refreshUser,
+        updateProfile,
       }}
     >
       {children}

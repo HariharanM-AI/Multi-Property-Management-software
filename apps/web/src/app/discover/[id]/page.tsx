@@ -30,6 +30,8 @@ import {
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api/v1';
 
+import { getCleanPropertyDescription } from '@/lib/propertyUtils';
+
 export default function PropertyDetailPage() {
   const params = useParams();
   const router = useRouter();
@@ -220,11 +222,11 @@ export default function PropertyDetailPage() {
             </div>
 
             {/* Description */}
-            {property.description && (
+            {getCleanPropertyDescription(property.description) && (
               <div className="space-y-2 bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
                 <h3 className="text-sm font-bold text-slate-900 dark:text-white">About the Property</h3>
                 <p className="text-xs md:text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
-                  {property.description}
+                  {getCleanPropertyDescription(property.description)}
                 </p>
               </div>
             )}

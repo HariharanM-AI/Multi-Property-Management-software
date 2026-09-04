@@ -484,7 +484,7 @@ export class AgreementsService {
       NOTICE_PERIOD_DAYS: agreement.lease?.noticePeriodDays ? String(agreement.lease.noticePeriodDays) : propNoticePeriodDays,
       LOCK_IN_MONTHS: agreement.lease?.lockInMonths ? String(agreement.lease.lockInMonths) : propLockInMonths,
       LOCK_IN_PERIOD_VALUE: propLockInPeriodValue,
-      LOCK_IN_PERIOD_UNIT: propLockInPeriodUnit,
+      LOCK_IN_PERIOD_UNIT: propLockInPeriodUnit?.toUpperCase() === 'DAYS' ? 'Days' : propLockInPeriodUnit?.toUpperCase() === 'YEARS' ? 'Years' : 'Months',
 
       AGREEMENT_DAY: String(today.getDate()),
       AGREEMENT_MONTH: today.toLocaleString('en-US', { month: 'long' }),

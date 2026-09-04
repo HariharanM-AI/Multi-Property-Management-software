@@ -7,7 +7,7 @@ import { AppShell } from '@/components/layout/AppShell';
 import { Button } from '@/components/ui/Button';
 import { BackButton } from '@/components/ui/BackButton';
 import { useAuth } from '@/lib/auth-context';
-import { getLocalDateString, createLocalIsoString } from '@/lib/date-utils';
+import { getLocalDateString, createLocalIsoString, formatAgreementDate } from '@/lib/date-utils';
 import {
   PropertyDto,
   PropertyType,
@@ -34,7 +34,10 @@ import {
   getAgreementSignature,
   getOrGenerateAgreementSignature,
   generateDigitalSignatureDataUrl,
+  StoredAgreementSignature,
 } from '@/lib/agreementStorage';
+import { getOwnerProfile, onOwnerProfileChange } from '@/lib/ownerProfileStorage';
+import { getCleanPropertyDescription } from '@/lib/propertyUtils';
 import {
   Building2,
   BedDouble,
@@ -245,8 +248,36 @@ export default function PropertyDetailPage() {
   const [editOwnerSignMode, setEditOwnerSignMode] = useState<'draw' | 'type'>('draw');
   const [editOwnerTypedName, setEditOwnerTypedName] = useState('');
   const editOwnerCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const signatureContainerRef = useRef<HTMLDivElement | null>(null);
   const [isEditOwnerDrawing, setIsEditOwnerDrawing] = useState(false);
   const [hasEditOwnerDrawn, setHasEditOwnerDrawn] = useState(false);
+  const hasEditOwnerDrawnRef = useRef(false);
+  const editOwnerLastPointRef = useRef<{ x: number; y: number } | null>(null);
+  const [signatureRequiredError, setSignatureRequiredError] = useState(false);
+
+  // Synchronize owner profile across property pages in real-time
+  const [ownerProfile, setOwnerProfile] = useState(() => getOwnerProfile(user));
+  useEffect(() => {
+    const current = getOwnerProfile(user);
+    setOwnerProfile(current);
+    const unsubscribe = onOwnerProfileChange((updated) => {
+      setOwnerProfile(updated);
+      setEditFormData((prev) => ({
+        ...prev,
+        ownerName: updated.fullName || prev.ownerName,
+        ownerPhone: updated.phone || prev.ownerPhone,
+        ownerAddress: updated.address || prev.ownerAddress,
+        ownerSignature: updated.signature || prev.ownerSignature,
+      }));
+      if (updated.signature) {
+        hasEditOwnerDrawnRef.current = true;
+        setHasEditOwnerDrawn(true);
+        if (updated.signMode) setEditOwnerSignMode(updated.signMode);
+        if (updated.typedName) setEditOwnerTypedName(updated.typedName);
+      }
+    });
+    return () => unsubscribe();
+  }, [user]);
 
   // Paint existing owner signature onto edit modal canvas when open in draw mode
   useEffect(() => {
@@ -256,17 +287,22 @@ export default function PropertyDetailPage() {
       editFormData.ownerSignature &&
       !editFormData.ownerSignature.startsWith('TYPE:')
     ) {
-      const canvas = editOwnerCanvasRef.current;
-      if (!canvas) return;
-      const ctx = canvas.getContext('2d');
-      if (!ctx) return;
-      const img = new Image();
-      img.onload = () => {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-        setHasEditOwnerDrawn(true);
-      };
-      img.src = editFormData.ownerSignature;
+      const timer = setTimeout(() => {
+        const canvas = editOwnerCanvasRef.current;
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+        const img = new Image();
+        img.onload = () => {
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+          setHasEditOwnerDrawn(true);
+          hasEditOwnerDrawnRef.current = true;
+          setSignatureRequiredError(false);
+        };
+        img.src = editFormData.ownerSignature;
+      }, 50);
+      return () => clearTimeout(timer);
     }
   }, [isEditModalOpen, editOwnerSignMode, editFormData.ownerSignature]);
 
@@ -275,14 +311,28 @@ export default function PropertyDetailPage() {
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
+
     setIsEditOwnerDrawing(true);
     setHasEditOwnerDrawn(true);
+    hasEditOwnerDrawnRef.current = true;
+    setSignatureRequiredError(false);
+    setEditModalError(null);
+
     const rect = canvas.getBoundingClientRect();
-    const x = 'touches' in e ? e.touches[0].clientX - rect.left : e.clientX - rect.left;
-    const y = 'touches' in e ? e.touches[0].clientY - rect.top : e.clientY - rect.top;
-    ctx.strokeStyle = '#0f766e';
-    ctx.lineWidth = 2.5;
+    const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
+    const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    const x = (clientX - rect.left) * scaleX;
+    const y = (clientY - rect.top) * scaleY;
+
+    editOwnerLastPointRef.current = { x, y };
+
+    const inkColor = property?.propertyType === PropertyType.RENTAL_HOUSE ? '#1e3a8a' : '#0f766e';
+    ctx.strokeStyle = inkColor;
+    ctx.lineWidth = 3.5;
     ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
     ctx.beginPath();
     ctx.moveTo(x, y);
   };
@@ -293,18 +343,42 @@ export default function PropertyDetailPage() {
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
+
     const rect = canvas.getBoundingClientRect();
-    const x = 'touches' in e ? e.touches[0].clientX - rect.left : e.clientX - rect.left;
-    const y = 'touches' in e ? e.touches[0].clientY - rect.top : e.clientY - rect.top;
-    ctx.lineTo(x, y);
-    ctx.stroke();
+    const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
+    const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    const x = (clientX - rect.left) * scaleX;
+    const y = (clientY - rect.top) * scaleY;
+
+    if (editOwnerLastPointRef.current) {
+      const midX = (editOwnerLastPointRef.current.x + x) / 2;
+      const midY = (editOwnerLastPointRef.current.y + y) / 2;
+      ctx.quadraticCurveTo(editOwnerLastPointRef.current.x, editOwnerLastPointRef.current.y, midX, midY);
+      ctx.stroke();
+    } else {
+      ctx.lineTo(x, y);
+      ctx.stroke();
+    }
+
+    editOwnerLastPointRef.current = { x, y };
+    hasEditOwnerDrawnRef.current = true;
+    setHasEditOwnerDrawn(true);
+    setSignatureRequiredError(false);
   };
 
   const stopEditOwnerDrawing = () => {
-    setIsEditOwnerDrawing(false);
-    if (editOwnerCanvasRef.current && hasEditOwnerDrawn) {
-      const sigData = editOwnerCanvasRef.current.toDataURL('image/png');
-      setEditFormData((prev) => ({ ...prev, ownerSignature: sigData }));
+    if (isEditOwnerDrawing) {
+      setIsEditOwnerDrawing(false);
+      editOwnerLastPointRef.current = null;
+      const canvas = editOwnerCanvasRef.current;
+      if (canvas && hasEditOwnerDrawnRef.current) {
+        const sigData = canvas.toDataURL('image/png');
+        setEditFormData((prev) => ({ ...prev, ownerSignature: sigData }));
+        setHasEditOwnerDrawn(true);
+        setSignatureRequiredError(false);
+      }
     }
   };
 
@@ -314,6 +388,8 @@ export default function PropertyDetailPage() {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+    hasEditOwnerDrawnRef.current = false;
+    editOwnerLastPointRef.current = null;
     setHasEditOwnerDrawn(false);
     setEditFormData((prev) => ({ ...prev, ownerSignature: '' }));
   };
@@ -329,28 +405,35 @@ export default function PropertyDetailPage() {
 
   const handleOpenEditModal = () => {
     if (property) {
+      const liveOwner = getOwnerProfile(user);
       const existingAmenityIds = (property.amenities || []).map((a: any) => {
         const match = STANDARD_AMENITIES_CATALOG.find((cat) => cat.name === a.name);
         return match ? match.id : a.id || a.name;
       });
 
-      const currentSig = property.ownerSignature || '';
+      const currentSig = liveOwner.signature || property.ownerSignature || '';
       if (currentSig.startsWith('TYPE:')) {
         setEditOwnerSignMode('type');
-        setEditOwnerTypedName(currentSig.replace('TYPE:', ''));
+        setEditOwnerTypedName(liveOwner.typedName || currentSig.replace('TYPE:', ''));
+        setHasEditOwnerDrawn(false);
+        hasEditOwnerDrawnRef.current = false;
       } else if (currentSig) {
         setEditOwnerSignMode('draw');
+        setEditOwnerTypedName('');
         setHasEditOwnerDrawn(true);
+        hasEditOwnerDrawnRef.current = true;
       } else {
         setEditOwnerSignMode('draw');
+        setEditOwnerTypedName('');
         setHasEditOwnerDrawn(false);
+        hasEditOwnerDrawnRef.current = false;
       }
 
       setEditFormData({
         name: property.name || '',
         propertyType: property.propertyType || PropertyType.PG,
         status: property.status || PropertyStatus.ACTIVE,
-        description: property.description || '',
+        description: getCleanPropertyDescription(property.description),
         address: property.address || '',
         addressLine1: property.addressLine1 || '',
         addressLine2: property.addressLine2 || '',
@@ -364,9 +447,9 @@ export default function PropertyDetailPage() {
         longitude: property.longitude ?? undefined,
         contactPhone: property.contactPhone || '',
         contactEmail: property.contactEmail || '',
-        ownerName: property.ownerName || '',
-        ownerAddress: property.ownerAddress || '',
-        ownerPhone: property.ownerPhone || '',
+        ownerName: liveOwner.fullName || property.ownerName || '',
+        ownerAddress: liveOwner.address || property.ownerAddress || '',
+        ownerPhone: liveOwner.phone || property.ownerPhone || '',
         ownerSignature: currentSig,
         noticePeriodDays: property.noticePeriodDays ?? 30,
         lockInPeriodValue: property.lockInPeriodValue ?? 1,
@@ -375,8 +458,115 @@ export default function PropertyDetailPage() {
         amenityIds: existingAmenityIds,
       });
       setEditModalError(null);
+      setSignatureRequiredError(false);
+
+      if (currentSig && !currentSig.startsWith('TYPE:')) {
+        setTimeout(() => {
+          const canvas = editOwnerCanvasRef.current;
+          if (canvas) {
+            const ctx = canvas.getContext('2d');
+            if (ctx) {
+              const img = new Image();
+              img.onload = () => {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                setHasEditOwnerDrawn(true);
+                hasEditOwnerDrawnRef.current = true;
+              };
+              img.src = currentSig;
+            }
+          }
+        }, 60);
+      }
     }
     setIsEditModalOpen(true);
+  };
+
+  const handleCancelEdit = () => {
+    if (property) {
+      const liveOwner = getOwnerProfile(user);
+      const existingAmenityIds = (property.amenities || []).map((a: any) => {
+        const match = STANDARD_AMENITIES_CATALOG.find((cat) => cat.name === a.name);
+        return match ? match.id : a.id || a.name;
+      });
+
+      const currentSig = liveOwner.signature || property.ownerSignature || '';
+      if (currentSig.startsWith('TYPE:')) {
+        setEditOwnerSignMode('type');
+        setEditOwnerTypedName(liveOwner.typedName || currentSig.replace('TYPE:', ''));
+        setHasEditOwnerDrawn(false);
+        hasEditOwnerDrawnRef.current = false;
+      } else if (currentSig) {
+        setEditOwnerSignMode('draw');
+        setEditOwnerTypedName('');
+        setHasEditOwnerDrawn(true);
+        hasEditOwnerDrawnRef.current = true;
+      } else {
+        setEditOwnerSignMode('draw');
+        setEditOwnerTypedName('');
+        setHasEditOwnerDrawn(false);
+        hasEditOwnerDrawnRef.current = false;
+      }
+
+      setEditFormData({
+        name: property.name || '',
+        propertyType: property.propertyType || PropertyType.PG,
+        status: property.status || PropertyStatus.ACTIVE,
+        description: getCleanPropertyDescription(property.description),
+        address: property.address || '',
+        addressLine1: property.addressLine1 || '',
+        addressLine2: property.addressLine2 || '',
+        locality: property.locality || '',
+        city: property.city || '',
+        district: property.district || '',
+        state: property.state || '',
+        country: property.country || 'India',
+        postalCode: property.postalCode || '',
+        latitude: property.latitude ?? undefined,
+        longitude: property.longitude ?? undefined,
+        contactPhone: property.contactPhone || '',
+        contactEmail: property.contactEmail || '',
+        ownerName: liveOwner.fullName || property.ownerName || '',
+        ownerAddress: liveOwner.address || property.ownerAddress || '',
+        ownerPhone: liveOwner.phone || property.ownerPhone || '',
+        ownerSignature: currentSig,
+        noticePeriodDays: property.noticePeriodDays ?? 30,
+        lockInPeriodValue: property.lockInPeriodValue ?? 1,
+        lockInPeriodUnit: (property.lockInPeriodUnit as any) || 'MONTHS',
+        lockInMonths: property.lockInMonths ?? 1,
+        amenityIds: existingAmenityIds,
+      });
+      setEditModalError(null);
+      setSignatureRequiredError(false);
+
+      if (currentSig && !currentSig.startsWith('TYPE:')) {
+        setTimeout(() => {
+          const canvas = editOwnerCanvasRef.current;
+          if (canvas) {
+            const ctx = canvas.getContext('2d');
+            if (ctx) {
+              const img = new Image();
+              img.onload = () => {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                setHasEditOwnerDrawn(true);
+                hasEditOwnerDrawnRef.current = true;
+              };
+              img.src = currentSig;
+            }
+          }
+        }, 60);
+      } else {
+        const canvas = editOwnerCanvasRef.current;
+        if (canvas) {
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+          }
+        }
+      }
+    }
+    setIsEditModalOpen(false);
   };
 
   // Inventory State (Floors, Rooms, Beds for PG; Units for Rental)
@@ -532,23 +722,7 @@ export default function PropertyDetailPage() {
   // Pre-Check-In Digital Agreement & E-Signature State
   const [showAgreementModal, setShowAgreementModal] = useState(false);
   const [agreementSignatureMap, setAgreementSignatureMap] = useState<
-    Record<
-      string,
-      {
-        signerName: string;
-        signerEmail?: string;
-        signatureImage?: string;
-        signedAt: string;
-        agreementType: string;
-        isSigned: boolean;
-        witnesses?: Array<{
-          name?: string;
-          date?: string;
-          address?: string;
-          signature?: string;
-        }>;
-      }
-    >
+    Record<string, StoredAgreementSignature>
   >({});
 
   // Post-Allocation WhatsApp & PDF Delivery State
@@ -592,10 +766,10 @@ export default function PropertyDetailPage() {
     const unitId = selectedRentalUnit?.id;
     const unitName = selectedBed ? `Bed ${selectedBed.bedNumber}` : selectedRentalUnit?.unitNumber;
 
-    const effOwnerName = property?.ownerName || (user ? `${user.firstName} ${user.lastName}`.trim() : 'Arun Sharma');
-    const effOwnerPhone = property?.ownerPhone || property?.contactPhone || user?.phone || '+91 98765 43210';
-    const effOwnerAddress = property?.ownerAddress || fullPropertyAddress || '#12, Royal Palm Residency, Coimbatore, Tamil Nadu';
-    const effOwnerSignature = property?.ownerSignature || generateDigitalSignatureDataUrl(effOwnerName, 'Authorized Landlord / Owner');
+    const effOwnerName = ownerProfile.fullName || property?.ownerName || (user ? `${user.firstName} ${user.lastName}`.trim() : 'Landlord');
+    const effOwnerPhone = ownerProfile.phone || property?.ownerPhone || property?.contactPhone || user?.phone || '';
+    const effOwnerAddress = ownerProfile.address || property?.ownerAddress || fullPropertyAddress || '';
+    const effOwnerSignature = ownerProfile.signature || property?.ownerSignature || '';
 
     saveAgreementSignature({
       ...sigData,
@@ -803,7 +977,7 @@ export default function PropertyDetailPage() {
               gender: t.gender || 'Male',
               governmentId: formattedGovId ? formattedGovId : (t.governmentIdNumber ? `ID: ${t.governmentIdNumber}` : ''),
               permanentAddress: t.permanentAddress || 'Resident Address',
-              moveInDate: t.currentStay.checkInDate ? t.currentStay.checkInDate.split('T')[0] : '2026-08-01',
+              moveInDate: t.currentStay.checkInDate ? getLocalDateString(t.currentStay.checkInDate) : getLocalDateString(),
               monthlyRent: t.currentStay.monthlyRent || 8500,
               securityDeposit: Number(t.currentStay.securityDeposit) || 17000,
               kycStatus: 'VERIFIED',
@@ -884,11 +1058,30 @@ export default function PropertyDetailPage() {
           return match ? match.id : a.id || a.name;
         });
 
+        const liveOwner = getOwnerProfile(user);
+        const currentSig = liveOwner.signature || json.data.ownerSignature || '';
+        if (currentSig.startsWith('TYPE:')) {
+          setEditOwnerSignMode('type');
+          setEditOwnerTypedName(liveOwner.typedName || currentSig.replace('TYPE:', ''));
+          setHasEditOwnerDrawn(false);
+          hasEditOwnerDrawnRef.current = false;
+        } else if (currentSig) {
+          setEditOwnerSignMode('draw');
+          setEditOwnerTypedName('');
+          setHasEditOwnerDrawn(true);
+          hasEditOwnerDrawnRef.current = true;
+        } else {
+          setEditOwnerSignMode('draw');
+          setEditOwnerTypedName('');
+          setHasEditOwnerDrawn(false);
+          hasEditOwnerDrawnRef.current = false;
+        }
+
         setEditFormData({
           name: json.data.name || '',
           propertyType: json.data.propertyType || PropertyType.PG,
           status: json.data.status || PropertyStatus.ACTIVE,
-          description: json.data.description || '',
+          description: getCleanPropertyDescription(json.data.description),
           address: json.data.address || '',
           addressLine1: json.data.addressLine1 || '',
           addressLine2: json.data.addressLine2 || '',
@@ -902,10 +1095,10 @@ export default function PropertyDetailPage() {
           longitude: json.data.longitude ?? undefined,
           contactPhone: json.data.contactPhone || '',
           contactEmail: json.data.contactEmail || '',
-          ownerName: json.data.ownerName || '',
-          ownerAddress: json.data.ownerAddress || '',
-          ownerPhone: json.data.ownerPhone || '',
-          ownerSignature: json.data.ownerSignature || '',
+          ownerName: liveOwner.fullName || json.data.ownerName || '',
+          ownerAddress: liveOwner.address || json.data.ownerAddress || '',
+          ownerPhone: liveOwner.phone || json.data.ownerPhone || '',
+          ownerSignature: currentSig,
           noticePeriodDays: json.data.noticePeriodDays ?? 30,
           lockInPeriodValue: json.data.lockInPeriodValue ?? 1,
           lockInPeriodUnit: (json.data.lockInPeriodUnit as any) || 'MONTHS',
@@ -1069,7 +1262,8 @@ export default function PropertyDetailPage() {
       setActionLoading(false);
       return;
     }
-    if (!editFormData.description?.trim() || editFormData.description.trim().length < 5) {
+    const cleanDescription = getCleanPropertyDescription(editFormData.description);
+    if (!cleanDescription || cleanDescription.length < 5) {
       setEditModalError('Property Description is required (at least 5 characters).');
       setActionLoading(false);
       return;
@@ -1130,22 +1324,22 @@ export default function PropertyDetailPage() {
       return;
     }
 
-    const hasSignature = Boolean(
-      editFormData.ownerSignature ||
-      (editOwnerSignMode === 'type' && editOwnerTypedName.trim().length >= 2) ||
-      (editOwnerSignMode === 'draw' && hasEditOwnerDrawn)
-    );
-    if (!hasSignature) {
-      setEditModalError('Landlord / Property Owner Digital Signature is required. Please draw or type your signature.');
+    // Ensure signature is validated
+    const finalOwnerSignature = editFormData.ownerSignature || getOwnerProfile(user).signature;
+    if (!finalOwnerSignature) {
+      setSignatureRequiredError(true);
+      setEditModalError('Please fill out this field — digital signature field is mandatory.');
+      signatureContainerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
       setActionLoading(false);
       return;
     }
+    setSignatureRequiredError(false);
 
     try {
       const cleanPayload = {
         name: editFormData.name.trim(),
         status: editFormData.status,
-        description: editFormData.description?.trim() || null,
+        description: cleanDescription,
         address: editFormData.address.trim(),
         addressLine1: editFormData.addressLine1?.trim() || null,
         addressLine2: editFormData.addressLine2?.trim() || null,
@@ -1162,7 +1356,7 @@ export default function PropertyDetailPage() {
         ownerName: editFormData.ownerName?.trim() || null,
         ownerAddress: editFormData.ownerAddress?.trim() || null,
         ownerPhone: editFormData.ownerPhone?.trim() || null,
-        ownerSignature: editFormData.ownerSignature || (editOwnerSignMode === 'type' && editOwnerTypedName.trim() ? `TYPE:${editOwnerTypedName.trim()}` : null),
+        ownerSignature: finalOwnerSignature || editFormData.ownerSignature || null,
         noticePeriodDays: Number(editFormData.noticePeriodDays ?? 30),
         lockInPeriodValue: Number(editFormData.lockInPeriodValue ?? 1),
         lockInPeriodUnit: editFormData.lockInPeriodUnit || 'MONTHS',
@@ -1265,7 +1459,7 @@ export default function PropertyDetailPage() {
             gender: matchingTenant.gender || 'Male',
             governmentId: matchingTenant.governmentIdNumber ? `ID: ${matchingTenant.governmentIdNumber}` : '',
             permanentAddress: matchingTenant.permanentAddress || 'Resident Address',
-            moveInDate: matchingTenant.currentStay?.checkInDate ? matchingTenant.currentStay.checkInDate.split('T')[0] : getLocalDateString(),
+            moveInDate: matchingTenant.currentStay?.checkInDate ? getLocalDateString(matchingTenant.currentStay.checkInDate) : getLocalDateString(),
             monthlyRent: matchingTenant.currentStay?.monthlyRent || bedRent,
             securityDeposit: Number(matchingTenant.currentStay?.securityDeposit) || bedDeposit,
             kycStatus: 'VERIFIED',
@@ -1555,6 +1749,14 @@ export default function PropertyDetailPage() {
 
       // Save agreement signature & witnesses to persistent storage
       const existingSig = agreementSignatureMap[selectedBed.id];
+      const effOwnerName = ownerProfile.fullName || property?.ownerName || (user ? `${user.firstName} ${user.lastName}`.trim() : 'Landlord');
+      const effOwnerPhone = ownerProfile.phone || property?.ownerPhone || property?.contactPhone || user?.phone || '';
+      const effOwnerAddress = ownerProfile.address || property?.ownerAddress || fullPropertyAddress || '';
+      const effOwnerSignature = ownerProfile.signature || property?.ownerSignature || generateDigitalSignatureDataUrl(effOwnerName, 'Authorized Landlord / Owner');
+
+      const startD = checkInTerms.moveInDate || getLocalDateString();
+      const signedAtIso = createLocalIsoString(startD);
+
       const finalSigPkg = existingSig || getOrGenerateAgreementSignature({
         bedId: selectedBed.id,
         unitName: `Bed ${selectedBed.bedNumber}`,
@@ -1562,16 +1764,45 @@ export default function PropertyDetailPage() {
         tenantPhone: phone,
         emergencyContactName,
         emergencyContactPhone,
-        moveInDate: checkInTerms.moveInDate,
+        moveInDate: startD,
+        ownerName: effOwnerName,
+        ownerPhone: effOwnerPhone,
+        ownerAddress: effOwnerAddress,
+        ownerSignature: effOwnerSignature,
       });
-      saveAgreementSignature({
+
+      const executedRecord: StoredAgreementSignature = {
         ...finalSigPkg,
         bedId: selectedBed.id,
-        unitName: `Bed ${selectedBed.bedNumber}`,
+        unitName: `Bed ${selectedBed.bedNumber} (Room ${selectedBedRoom?.roomNumber || '—'})`,
+        tenantId: effectiveTenantId || selectedExistingTenantId || undefined,
         tenantName,
         tenantPhone: phone,
-        propertyName: property?.name,
-      });
+        tenantEmail: email || undefined,
+        tenantAddress: permanentAddress ? `${permanentAddress}, ${permanentCity}, ${permanentState} — ${permanentPostalCode}` : undefined,
+        tenantAadhaar: governmentIdNumber ? formatIdProofDisplay(governmentIdType, governmentIdNumber) : undefined,
+        propertyName: property?.name || 'PG Facility',
+        propertyAddress: fullPropertyAddress,
+        propertyType: 'PG',
+        monthlyRent: checkInTerms.agreedRent,
+        securityDeposit: checkInTerms.securityDeposit,
+        startDate: startD,
+        endDate: checkInTerms.expectedCheckoutDate || undefined,
+        noticePeriodDays: property?.noticePeriodDays ?? 30,
+        lockInMonths: property?.lockInPeriodValue ?? property?.lockInMonths ?? 1,
+        lockInPeriodValue: property?.lockInPeriodValue ?? property?.lockInMonths ?? 1,
+        lockInPeriodUnit: property?.lockInPeriodUnit || 'MONTHS',
+        sharingType: selectedBedRoom?.sharingType,
+        ownerName: finalSigPkg.ownerName || effOwnerName,
+        ownerPhone: finalSigPkg.ownerPhone || effOwnerPhone,
+        ownerAddress: finalSigPkg.ownerAddress || effOwnerAddress,
+        ownerSignature: finalSigPkg.ownerSignature || effOwnerSignature,
+        signedAt: finalSigPkg.signedAt || signedAtIso,
+        isExecuted: true,
+        isSigned: true,
+      };
+
+      saveAgreementSignature(executedRecord);
 
       setBedOccupantMap((prev) => ({
         ...prev,
@@ -2996,6 +3227,49 @@ export default function PropertyDetailPage() {
 
       setRentalOccupancySuccess(`Check-In complete! ${flatDisplayName} is now Occupied by ${assignedTenantName}.`);
 
+      // Save rental agreement signature & witnesses to persistent storage
+      const existingRentalSig = agreementSignatureMap[selectedRentalUnit.id];
+      const effRentalOwnerName = ownerProfile.fullName || property?.ownerName || (user ? `${user.firstName} ${user.lastName}`.trim() : 'Landlord');
+      const effRentalOwnerPhone = ownerProfile.phone || property?.ownerPhone || property?.contactPhone || user?.phone || '';
+      const effRentalOwnerAddress = ownerProfile.address || property?.ownerAddress || fullPropertyAddress || '';
+      const effRentalOwnerSignature = ownerProfile.signature || property?.ownerSignature || generateDigitalSignatureDataUrl(effRentalOwnerName, 'Authorized Landlord / Owner');
+
+      const rentalExecutedRecord: StoredAgreementSignature = {
+        signerName: assignedTenantName,
+        signerEmail: assignedTenantEmail || undefined,
+        signatureImage: existingRentalSig?.signatureImage || generateDigitalSignatureDataUrl(assignedTenantName, 'Tenant Digital E-Sign'),
+        signedAt: startIso,
+        agreementType: 'RENTAL_AGREEMENT',
+        isSigned: true,
+        isExecuted: true,
+        witnesses: existingRentalSig?.witnesses,
+        unitId: selectedRentalUnit.id,
+        tenantId: tenantIdToAssign,
+        tenantName: assignedTenantName,
+        tenantPhone: assignedTenantPhone,
+        tenantEmail: assignedTenantEmail || undefined,
+        tenantAddress: assignedTenantAddress || undefined,
+        tenantAadhaar: rentalNewTenantForm.governmentIdNumber ? formatIdProofDisplay(rentalNewTenantForm.governmentIdType, rentalNewTenantForm.governmentIdNumber) : undefined,
+        unitName: flatDisplayName,
+        propertyName: property?.name || 'Residential Property',
+        propertyAddress: fullPropertyAddress,
+        propertyType: 'RENTAL_HOUSE',
+        monthlyRent: Number(rentalCheckInTerms.agreedRent) || Number(selectedRentalUnit.monthlyRent) || 25000,
+        securityDeposit: Number(rentalCheckInTerms.securityDeposit) || Number(selectedRentalUnit.securityDeposit) || 50000,
+        startDate: startD,
+        endDate: endD,
+        noticePeriodDays: Number(rentalCheckInTerms.noticePeriodDays) || property?.noticePeriodDays || 30,
+        lockInMonths: Number(rentalCheckInTerms.lockInMonths) || property?.lockInPeriodValue || 6,
+        lockInPeriodValue: Number(rentalCheckInTerms.lockInMonths) || property?.lockInPeriodValue || 6,
+        lockInPeriodUnit: 'MONTHS',
+        ownerName: existingRentalSig?.ownerName || effRentalOwnerName,
+        ownerPhone: existingRentalSig?.ownerPhone || effRentalOwnerPhone,
+        ownerAddress: existingRentalSig?.ownerAddress || effRentalOwnerAddress,
+        ownerSignature: existingRentalSig?.ownerSignature || effRentalOwnerSignature,
+      };
+
+      saveAgreementSignature(rentalExecutedRecord);
+
       // Trigger post-allocation WhatsApp & PDF Delivery Modal (Image 4)
       setPostCheckInAgreement({
         isOpen: true,
@@ -3640,10 +3914,10 @@ export default function PropertyDetailPage() {
       tenantEmail: tEmail,
       tenantAddress: tAddress || undefined,
       tenantAadhaar: tAadhaar || undefined,
-      ownerName: property?.ownerName || `${property?.name || 'PG Facility'} Management`,
-      ownerAddress: fullPropertyAddress || property?.address || '',
-      ownerPhone: property?.contactPhone || '',
-      ownerSignature: property?.ownerSignature || 'DIGITAL_STAMP_DEFAULT',
+      ownerName: ownerProfile.fullName || property?.ownerName || `${property?.name || 'PG Facility'} Management`,
+      ownerAddress: ownerProfile.address || fullPropertyAddress || property?.address || '',
+      ownerPhone: ownerProfile.phone || property?.ownerPhone || property?.contactPhone || '',
+      ownerSignature: ownerProfile.signature || property?.ownerSignature || 'DIGITAL_STAMP_DEFAULT',
       residentSignature: existingSig,
       witnesses: existingWitnesses,
       propertyName: property?.name || 'PG Facility',
@@ -3717,10 +3991,10 @@ export default function PropertyDetailPage() {
       tenantEmail: tEmail,
       tenantAddress: tAddress || undefined,
       tenantAadhaar: tAadhaar || undefined,
-      ownerName: property?.ownerName || (user ? `${user.firstName} ${user.lastName}`.trim() : 'Arun Sharma'),
-      ownerAddress: property?.ownerAddress || fullPropertyAddress || '#12, Royal Palm Residency, Coimbatore, Tamil Nadu',
-      ownerPhone: property?.ownerPhone || property?.contactPhone || user?.phone || '+91 98765 43210',
-      ownerSignature: property?.ownerSignature || generateDigitalSignatureDataUrl(property?.ownerName || (user ? `${user.firstName} ${user.lastName}`.trim() : 'Arun Sharma'), 'Authorized Landlord / Owner'),
+      ownerName: ownerProfile.fullName || property?.ownerName || (user ? `${user.firstName} ${user.lastName}`.trim() : 'Landlord'),
+      ownerAddress: ownerProfile.address || property?.ownerAddress || fullPropertyAddress || undefined,
+      ownerPhone: ownerProfile.phone || property?.ownerPhone || property?.contactPhone || user?.phone || undefined,
+      ownerSignature: ownerProfile.signature || property?.ownerSignature || undefined,
       residentSignature: existingSig,
       witnesses: existingWitnesses,
       propertyName: property?.name || 'Residential Property',
@@ -3817,6 +4091,7 @@ export default function PropertyDetailPage() {
   }
 
   const isPG = property.propertyType === PropertyType.PG;
+  const isRental = property.propertyType === PropertyType.RENTAL_HOUSE;
   const isArchived = property.status === PropertyStatus.ARCHIVED;
 
   // PG Inventory Metrics (Real-time Live Calculations)
@@ -3922,7 +4197,7 @@ export default function PropertyDetailPage() {
   const sortedFloors = [...floors].sort((a, b) => a.floorNumber - b.floorNumber);
 
   return (
-    <AppShell activePath="/properties">
+    <AppShell activePath="/properties" propertyType={property?.propertyType} propertyName={property?.name}>
       <div className="max-w-6xl mx-auto space-y-6">
         {/* Navigation Breadcrumb & Back Button */}
         <div className="flex items-center justify-between gap-4">
@@ -3996,7 +4271,7 @@ export default function PropertyDetailPage() {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => setIsEditModalOpen(true)}
+              onClick={handleOpenEditModal}
               className="gap-2 text-xs font-bold border-slate-200 text-slate-700 hover:bg-slate-50 shadow-2xs px-3.5 py-2 h-9 rounded-xl cursor-pointer"
             >
               <Edit className={`w-4 h-4 ${isPG ? 'text-brand-teal' : 'text-blue-600'}`} />
@@ -4187,10 +4462,10 @@ export default function PropertyDetailPage() {
                     <span className="text-sm font-extrabold text-slate-900 mt-0.5 block">{property.lockInPeriodValue ?? 1} {property.lockInPeriodUnit || 'MONTHS'}</span>
                   </div>
                 </div>
-                {property.ownerName && (
+                {(ownerProfile.fullName || property.ownerName) && (
                   <div className="flex items-center justify-between text-xs pt-1.5 px-1">
-                    <span className="text-slate-500 font-medium">Owner: <strong className="text-slate-900">{property.ownerName}</strong></span>
-                    {property.ownerSignature && (
+                    <span className="text-slate-500 font-medium">Owner: <strong className="text-slate-900">{ownerProfile.fullName || property.ownerName}</strong></span>
+                    {(ownerProfile.signature || property.ownerSignature) && (
                       <span className={`text-[11px] font-bold ${isPG ? 'text-emerald-800 bg-emerald-50 border-emerald-200' : 'text-blue-800 bg-blue-50 border-blue-200'} px-2.5 py-0.5 rounded-full border flex items-center gap-1`}>
                         <CheckCircle2 className={`w-3 h-3 ${isPG ? 'text-emerald-600' : 'text-blue-600'}`} />
                         Digital Stamp
@@ -5130,7 +5405,7 @@ export default function PropertyDetailPage() {
 
                                       <div className="flex items-center gap-2 shrink-0">
                                         <span className="text-[11px] font-bold bg-white text-blue-700 px-2.5 py-1 rounded-lg border border-blue-200 shrink-0 shadow-2xs">
-                                          {unit.activeLease?.startDate ? `Since ${String(unit.activeLease.startDate).split('T')[0]}` : 'Active Lease'}
+                                          {unit.activeLease?.startDate ? `Since ${formatAgreementDate(unit.activeLease.startDate)}` : 'Active Lease'}
                                         </span>
                                       </div>
                                     </div>
@@ -5235,7 +5510,7 @@ export default function PropertyDetailPage() {
               {/* Modal Header */}
               <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-slate-50/70 shrink-0">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-2xl bg-teal-50 text-brand-teal flex items-center justify-center border border-teal-200 shadow-2xs font-bold">
+                  <div className={`w-10 h-10 rounded-2xl ${isRental ? 'bg-blue-50 text-blue-600 border-blue-200' : 'bg-teal-50 text-brand-teal border-teal-200'} flex items-center justify-center border shadow-2xs font-bold`}>
                     <Edit className="w-5 h-5" />
                   </div>
                   <div>
@@ -5247,7 +5522,7 @@ export default function PropertyDetailPage() {
                 </div>
                 <button
                   type="button"
-                  onClick={() => setIsEditModalOpen(false)}
+                  onClick={handleCancelEdit}
                   className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition cursor-pointer"
                 >
                   <X className="w-5 h-5" />
@@ -5279,12 +5554,12 @@ export default function PropertyDetailPage() {
                   <div className="p-5 rounded-2xl bg-slate-50/60 border border-slate-200/80 space-y-4">
                     <div className="flex items-center justify-between border-b border-slate-200/60 pb-2.5">
                       <div className="flex items-center gap-2">
-                        <Building2 className="w-4 h-4 text-brand-teal" />
+                        <Building2 className={`w-4 h-4 ${isRental ? 'text-blue-600' : 'text-brand-teal'}`} />
                         <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
                           1. Basic Information
                         </h4>
                       </div>
-                      <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
+                      <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${isRental ? 'bg-blue-50 text-blue-700 border border-blue-200' : 'bg-teal-50 text-teal-800 border border-teal-200'}`}>
                         {property?.propertyType === PropertyType.PG ? 'PG / Co-Living Operating Model' : 'Whole-Unit Residential Model'}
                       </span>
                     </div>
@@ -5299,7 +5574,7 @@ export default function PropertyDetailPage() {
                         value={editFormData.name}
                         onChange={(e) => setEditFormData({ ...editFormData, name: e.target.value })}
                         placeholder="e.g. GreenGlen PG Residency"
-                        className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 focus:ring-2 focus:ring-brand-teal focus:outline-none"
+                        className={`w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 focus:ring-2 ${isRental ? 'focus:ring-blue-500' : 'focus:ring-brand-teal'} focus:outline-none`}
                       />
                     </div>
 
@@ -5313,7 +5588,7 @@ export default function PropertyDetailPage() {
                         value={editFormData.description}
                         onChange={(e) => setEditFormData({ ...editFormData, description: e.target.value })}
                         placeholder="Brief overview of the property, landmarks, features or rules (min 5 characters)..."
-                        className="w-full px-3.5 py-2 bg-white border border-slate-300 rounded-xl text-xs text-slate-900 focus:ring-2 focus:ring-brand-teal focus:outline-none"
+                        className={`w-full px-3.5 py-2 bg-white border border-slate-300 rounded-xl text-xs text-slate-900 focus:ring-2 ${isRental ? 'focus:ring-blue-500' : 'focus:ring-brand-teal'} focus:outline-none`}
                       />
                     </div>
                   </div>
@@ -5321,7 +5596,7 @@ export default function PropertyDetailPage() {
                   {/* SECTION 2: LOCATION & FULL ADDRESS */}
                   <div className="p-5 rounded-2xl bg-slate-50/60 border border-slate-200/80 space-y-4">
                     <div className="flex items-center gap-2 border-b border-slate-200/60 pb-2.5">
-                      <MapPin className="w-4 h-4 text-brand-teal" />
+                      <MapPin className={`w-4 h-4 ${isRental ? 'text-blue-600' : 'text-brand-teal'}`} />
                       <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
                         2. Location & Full Postal Address
                       </h4>
@@ -5337,7 +5612,7 @@ export default function PropertyDetailPage() {
                         value={editFormData.address}
                         onChange={(e) => setEditFormData({ ...editFormData, address: e.target.value })}
                         placeholder="e.g. #42, 14th Main Road, Sector 4, HSR Layout"
-                        className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 focus:ring-2 focus:ring-brand-teal focus:outline-none"
+                        className={`w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 focus:ring-2 ${isRental ? 'focus:ring-blue-500' : 'focus:ring-brand-teal'} focus:outline-none`}
                       />
                     </div>
 
@@ -5351,7 +5626,7 @@ export default function PropertyDetailPage() {
                           value={editFormData.addressLine1}
                           onChange={(e) => setEditFormData({ ...editFormData, addressLine1: e.target.value })}
                           placeholder="e.g. 14th Main Road"
-                          className="w-full px-3.5 py-2 bg-white border border-slate-300 rounded-xl text-xs text-slate-900 focus:ring-2 focus:ring-brand-teal focus:outline-none"
+                          className={`w-full px-3.5 py-2 bg-white border border-slate-300 rounded-xl text-xs text-slate-900 focus:ring-2 ${isRental ? 'focus:ring-blue-500' : 'focus:ring-brand-teal'} focus:outline-none`}
                         />
                       </div>
                       <div>
@@ -5363,7 +5638,7 @@ export default function PropertyDetailPage() {
                           value={editFormData.addressLine2}
                           onChange={(e) => setEditFormData({ ...editFormData, addressLine2: e.target.value })}
                           placeholder="e.g. Near BDA Complex"
-                          className="w-full px-3.5 py-2 bg-white border border-slate-300 rounded-xl text-xs text-slate-900 focus:ring-2 focus:ring-brand-teal focus:outline-none"
+                          className={`w-full px-3.5 py-2 bg-white border border-slate-300 rounded-xl text-xs text-slate-900 focus:ring-2 ${isRental ? 'focus:ring-blue-500' : 'focus:ring-brand-teal'} focus:outline-none`}
                         />
                       </div>
                     </div>
@@ -5378,7 +5653,7 @@ export default function PropertyDetailPage() {
                           value={editFormData.locality}
                           onChange={(e) => setEditFormData({ ...editFormData, locality: e.target.value })}
                           placeholder="e.g. HSR Layout"
-                          className="w-full px-3.5 py-2 bg-white border border-slate-300 rounded-xl text-xs text-slate-900 focus:ring-2 focus:ring-brand-teal focus:outline-none"
+                          className={`w-full px-3.5 py-2 bg-white border border-slate-300 rounded-xl text-xs text-slate-900 focus:ring-2 ${isRental ? 'focus:ring-blue-500' : 'focus:ring-brand-teal'} focus:outline-none`}
                         />
                       </div>
                       <div>
@@ -5391,7 +5666,7 @@ export default function PropertyDetailPage() {
                           value={editFormData.city}
                           onChange={(e) => setEditFormData({ ...editFormData, city: e.target.value })}
                           placeholder="e.g. Bengaluru"
-                          className="w-full px-3.5 py-2 bg-white border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 focus:ring-2 focus:ring-brand-teal focus:outline-none"
+                          className={`w-full px-3.5 py-2 bg-white border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 focus:ring-2 ${isRental ? 'focus:ring-blue-500' : 'focus:ring-brand-teal'} focus:outline-none`}
                         />
                       </div>
                       <div>
@@ -5404,7 +5679,7 @@ export default function PropertyDetailPage() {
                           value={editFormData.state}
                           onChange={(e) => setEditFormData({ ...editFormData, state: e.target.value })}
                           placeholder="e.g. Karnataka"
-                          className="w-full px-3.5 py-2 bg-white border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 focus:ring-2 focus:ring-brand-teal focus:outline-none"
+                          className={`w-full px-3.5 py-2 bg-white border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 focus:ring-2 ${isRental ? 'focus:ring-blue-500' : 'focus:ring-brand-teal'} focus:outline-none`}
                         />
                       </div>
                       <div>
@@ -5417,7 +5692,7 @@ export default function PropertyDetailPage() {
                           value={editFormData.postalCode}
                           onChange={(e) => setEditFormData({ ...editFormData, postalCode: e.target.value })}
                           placeholder="e.g. 560102"
-                          className="w-full px-3.5 py-2 bg-white border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 focus:ring-2 focus:ring-brand-teal focus:outline-none"
+                          className={`w-full px-3.5 py-2 bg-white border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 focus:ring-2 ${isRental ? 'focus:ring-blue-500' : 'focus:ring-brand-teal'} focus:outline-none`}
                         />
                       </div>
                     </div>
@@ -5426,7 +5701,7 @@ export default function PropertyDetailPage() {
                   {/* SECTION 3: MANAGEMENT & HELPDESK CONTACTS */}
                   <div className="p-5 rounded-2xl bg-slate-50/60 border border-slate-200/80 space-y-4">
                     <div className="flex items-center gap-2 border-b border-slate-200/60 pb-2.5">
-                      <Phone className="w-4 h-4 text-brand-teal" />
+                      <Phone className={`w-4 h-4 ${isRental ? 'text-blue-600' : 'text-brand-teal'}`} />
                       <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
                         3. Property Management & Helpdesk Contact
                       </h4>
@@ -5445,7 +5720,7 @@ export default function PropertyDetailPage() {
                             value={editFormData.contactPhone}
                             onChange={(e) => setEditFormData({ ...editFormData, contactPhone: e.target.value })}
                             placeholder="e.g. 9845012345 (10 digits)"
-                            className="w-full pl-9 pr-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 focus:ring-2 focus:ring-brand-teal focus:outline-none"
+                            className={`w-full pl-9 pr-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 focus:ring-2 ${isRental ? 'focus:ring-blue-500' : 'focus:ring-brand-teal'} focus:outline-none`}
                           />
                         </div>
                       </div>
@@ -5461,7 +5736,7 @@ export default function PropertyDetailPage() {
                             value={editFormData.contactEmail}
                             onChange={(e) => setEditFormData({ ...editFormData, contactEmail: e.target.value })}
                             placeholder="e.g. manager@property.in"
-                            className="w-full pl-9 pr-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 focus:ring-2 focus:ring-brand-teal focus:outline-none"
+                            className={`w-full pl-9 pr-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 focus:ring-2 ${isRental ? 'focus:ring-blue-500' : 'focus:ring-brand-teal'} focus:outline-none`}
                           />
                         </div>
                       </div>
@@ -5508,7 +5783,7 @@ export default function PropertyDetailPage() {
                               })
                             }
                             placeholder="e.g. 30"
-                            className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 focus:ring-2 focus:ring-brand-teal focus:outline-none"
+                            className={`w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 focus:ring-2 ${isRental ? 'focus:ring-blue-500' : 'focus:ring-brand-teal'} focus:outline-none`}
                           />
                           <span className="absolute right-3.5 top-2.5 text-xs font-bold text-slate-500 pointer-events-none">
                             Days
@@ -5537,7 +5812,7 @@ export default function PropertyDetailPage() {
                               })
                             }
                             placeholder="e.g. 1"
-                            className="w-24 px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 text-center focus:ring-2 focus:ring-brand-teal focus:outline-none"
+                            className={`w-24 px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 text-center focus:ring-2 ${isRental ? 'focus:ring-blue-500' : 'focus:ring-brand-teal'} focus:outline-none`}
                           />
                           <select
                             value={editFormData.lockInPeriodUnit || 'MONTHS'}
@@ -5547,7 +5822,7 @@ export default function PropertyDetailPage() {
                                 lockInPeriodUnit: e.target.value as 'DAYS' | 'MONTHS' | 'YEARS',
                               })
                             }
-                            className="flex-1 px-3 py-2.5 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-800 focus:ring-2 focus:ring-brand-teal focus:outline-none"
+                            className={`flex-1 px-3 py-2.5 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-800 focus:ring-2 ${isRental ? 'focus:ring-blue-500' : 'focus:ring-brand-teal'} focus:outline-none`}
                           >
                             <option value="DAYS">Day(s)</option>
                             <option value="MONTHS">Month(s)</option>
@@ -5562,11 +5837,11 @@ export default function PropertyDetailPage() {
                   </div>
 
                   {/* SECTION 5: LANDLORD / OWNER PROFILE & DIGITAL SIGNATURE */}
-                  <div className="p-5 rounded-2xl bg-teal-50/40 border border-teal-200/90 space-y-4 shadow-2xs">
-                    <div className="flex items-center justify-between border-b border-teal-200/70 pb-2.5">
+                  <div className={`p-5 rounded-2xl ${isRental ? 'bg-blue-50/40 border-blue-200/90' : 'bg-teal-50/40 border-teal-200/90'} border space-y-4 shadow-2xs`}>
+                    <div className={`flex items-center justify-between border-b ${isRental ? 'border-blue-200/70' : 'border-teal-200/70'} pb-2.5`}>
                       <div className="flex items-center gap-2.5">
-                        <div className="w-8 h-8 rounded-lg bg-teal-100 text-brand-teal flex items-center justify-center font-bold">
-                          <FileSignature className="w-4.5 h-4.5 text-teal-700" />
+                        <div className={`w-8 h-8 rounded-lg ${isRental ? 'bg-blue-100 text-blue-700' : 'bg-teal-100 text-brand-teal'} flex items-center justify-center font-bold`}>
+                          <FileSignature className={`w-4.5 h-4.5 ${isRental ? 'text-blue-700' : 'text-teal-700'}`} />
                         </div>
                         <div>
                           <h4 className="text-sm font-bold text-slate-900">
@@ -5577,135 +5852,86 @@ export default function PropertyDetailPage() {
                           </p>
                         </div>
                       </div>
-                      <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
-                        MTA 2021 Ready
-                      </span>
+                      
                     </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
                       <div>
                         <label className="block text-xs font-semibold text-slate-700 mb-1">
-                          Owner / Landlord Legal Name <span className="text-rose-500">*</span>
+                          Owner / Landlord Legal Name 
                         </label>
                         <input
                           type="text"
-                          required
+                          readOnly
+                          tabIndex={-1}
                           value={editFormData.ownerName}
-                          onChange={(e) => setEditFormData({ ...editFormData, ownerName: e.target.value })}
-                          placeholder="e.g. Ramesh Chandra (Owner)"
-                          className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-teal"
+                          className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 cursor-default select-none focus:outline-none"
                         />
                       </div>
                       <div>
                         <label className="block text-xs font-semibold text-slate-700 mb-1">
-                          Owner WhatsApp / Phone Number <span className="text-rose-500">*</span>
+                          Owner WhatsApp / Phone Number 
                         </label>
                         <input
                           type="tel"
-                          required
+                          readOnly
+                          tabIndex={-1}
                           value={editFormData.ownerPhone}
-                          onChange={(e) => setEditFormData({ ...editFormData, ownerPhone: e.target.value })}
-                          placeholder="e.g. 9876543210 (10 digits)"
-                          className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-teal"
+                          className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 cursor-default select-none focus:outline-none"
                         />
                       </div>
                       <div>
                         <label className="block text-xs font-semibold text-slate-700 mb-1">
-                          Owner Office / Permanent Address <span className="text-rose-500">*</span>
+                          Owner Office / Permanent Address 
                         </label>
                         <input
                           type="text"
-                          required
+                          readOnly
+                          tabIndex={-1}
                           value={editFormData.ownerAddress}
-                          onChange={(e) => setEditFormData({ ...editFormData, ownerAddress: e.target.value })}
-                          placeholder="e.g. #12, 5th Cross, Indiranagar"
-                          className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-teal"
+                          className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 cursor-default select-none focus:outline-none"
                         />
                       </div>
                     </div>
 
-                    {/* Owner Signature Canvas Pad */}
-                    <div className="pt-2 space-y-2">
-                    <div className="flex items-center justify-between text-xs font-bold text-slate-700">
-                      <span className="flex items-center gap-1.5">
-                        <PenTool className="w-3.5 h-3.5 text-brand-teal" />
-                        Owner Digital Signature (Drawn or Typed) <span className="text-red-500">*</span>
-                      </span>
-                      <div className="flex items-center gap-2">
-                        <button
-                            type="button"
-                            onClick={() => setEditOwnerSignMode('draw')}
-                            className={`px-2.5 py-1 text-[11px] font-bold rounded-md transition cursor-pointer ${
-                              editOwnerSignMode === 'draw' ? 'bg-brand-teal text-white' : 'bg-slate-200 text-slate-700'
-                            }`}
-                          >
-                            Draw Pad
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setEditOwnerSignMode('type')}
-                            className={`px-2.5 py-1 text-[11px] font-bold rounded-md transition cursor-pointer ${
-                              editOwnerSignMode === 'type' ? 'bg-brand-teal text-white' : 'bg-slate-200 text-slate-700'
-                            }`}
-                          >
-                            Type Script
-                          </button>
-                          {editOwnerSignMode === 'draw' && (
-                            <button
-                              type="button"
-                              onClick={clearEditOwnerCanvas}
-                              className="px-2.5 py-1 text-[11px] font-bold rounded-md bg-amber-50 text-amber-800 border border-amber-200 hover:bg-amber-100 flex items-center gap-1 cursor-pointer"
-                            >
-                              <RotateCcw className="w-3 h-3" />
-                              Clear & Redraw
-                            </button>
-                          )}
-                        </div>
+                    {/* Owner Signature Non-Editable Display */}
+                    <div ref={signatureContainerRef} className="pt-2 space-y-2">
+                      <div className="flex items-center justify-between text-xs font-bold text-slate-700">
+                        <span className="flex items-center gap-1.5">
+                          <PenTool className={`w-3.5 h-3.5 ${isRental ? 'text-blue-600' : 'text-brand-teal'}`} />
+                          Owner Digital Signature
+                        </span>
                       </div>
 
-                      {editOwnerSignMode === 'draw' ? (
-                        <div className="space-y-2">
-                          <div className="border-2 border-dashed border-teal-300 rounded-xl bg-white relative overflow-hidden shadow-2xs">
-                            <canvas
-                              ref={editOwnerCanvasRef}
-                              width={600}
-                              height={120}
-                              onMouseDown={startEditOwnerDrawing}
-                              onMouseMove={drawEditOwner}
-                              onMouseUp={stopEditOwnerDrawing}
-                              onMouseLeave={stopEditOwnerDrawing}
-                              onTouchStart={startEditOwnerDrawing}
-                              onTouchMove={drawEditOwner}
-                              onTouchEnd={stopEditOwnerDrawing}
-                              className="w-full h-28 cursor-crosshair touch-none bg-transparent"
+                      <div
+                        className={`relative rounded-2xl bg-white border-2 overflow-hidden shadow-inner flex items-center justify-center p-3 h-44 sm:h-52 ${
+                          isRental ? 'border-blue-300' : 'border-teal-300'
+                        }`}
+                      >
+                        {editFormData.ownerSignature ? (
+                          editFormData.ownerSignature.startsWith('data:image/') ? (
+                            <img
+                              src={editFormData.ownerSignature}
+                              alt="Owner Digital Signature"
+                              className="h-full w-full object-contain pointer-events-none select-none"
                             />
-                            {!hasEditOwnerDrawn && !editFormData.ownerSignature && (
-                              <div className="absolute inset-0 flex items-center justify-center pointer-events-none text-slate-400 text-xs italic">
-                                ✍️ Sign inside this box to set or update landlord legal signature...
-                              </div>
-                            )}
+                          ) : editFormData.ownerSignature.startsWith('TYPE:') ? (
+                            <div className="font-sans font-semibold text-slate-800 text-xl tracking-wide select-none">
+                              {editFormData.ownerSignature.replace('TYPE:', '')}
+                            </div>
+                          ) : (
+                            <img
+                              src={editFormData.ownerSignature}
+                              alt="Owner Digital Signature"
+                              className="h-full w-full object-contain pointer-events-none select-none"
+                            />
+                          )
+                        ) : (
+                          <div className="flex items-center justify-center pointer-events-none text-slate-400 text-xs sm:text-sm italic">
+                            No digital signature configured in profile
                           </div>
-                        </div>
-                      ) : (
-                        <div className="space-y-2">
-                          <input
-                            type="text"
-                            value={editOwnerTypedName}
-                            onChange={(e) => {
-                              setEditOwnerTypedName(e.target.value);
-                              setEditFormData((prev) => ({
-                                ...prev,
-                                ownerSignature: e.target.value ? `TYPE:${e.target.value}` : '',
-                              }));
-                            }}
-                            placeholder="Type your official legal signature name..."
-                            className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-sm text-slate-900 font-serif focus:ring-2 focus:ring-brand-teal focus:outline-none"
-                          />
-                          <div className="p-3 bg-white border border-teal-200 rounded-xl text-center font-serif italic text-xl text-brand-teal shadow-2xs">
-                            {editOwnerTypedName || 'Signature Preview'}
-                          </div>
-                        </div>
-                      )}
+                        )}
+                      </div>
                     </div>
                   </div>
 
@@ -5713,7 +5939,7 @@ export default function PropertyDetailPage() {
                   <div className="p-5 rounded-2xl bg-slate-50/60 border border-slate-200/80 space-y-4">
                     <div className="flex items-center justify-between border-b border-slate-200/60 pb-2.5">
                       <div className="flex items-center gap-2">
-                        <Sparkles className="w-4 h-4 text-brand-teal" />
+                        <Sparkles className={`w-4 h-4 ${isRental ? 'text-blue-600' : 'text-brand-teal'}`} />
                         <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
                           5. Configured Amenities & Inclusions ({editFormData.amenityIds?.length || 0})
                         </h4>
@@ -5732,13 +5958,15 @@ export default function PropertyDetailPage() {
                             onClick={() => handleEditAmenityToggle(amenity.id)}
                             className={`p-3 rounded-xl border cursor-pointer transition-all duration-150 flex flex-col justify-between select-none ${
                               isSelected
-                                ? 'border-brand-teal bg-teal-50/50 text-brand-navy shadow-2xs font-semibold'
+                                ? isRental
+                                  ? 'border-blue-500 bg-blue-50/60 text-blue-950 shadow-2xs font-semibold'
+                                  : 'border-brand-teal bg-teal-50/50 text-brand-navy shadow-2xs font-semibold'
                                 : 'border-slate-200 hover:border-slate-300 bg-white text-slate-600'
                             }`}
                           >
                             <div className="flex items-center justify-between">
-                              <Icon className={`w-4.5 h-4.5 ${isSelected ? 'text-brand-teal' : 'text-slate-400'}`} />
-                              {isSelected && <CheckCircle2 className="w-4 h-4 text-brand-teal" />}
+                              <Icon className={`w-4.5 h-4.5 ${isSelected ? (isRental ? 'text-blue-600' : 'text-brand-teal') : 'text-slate-400'}`} />
+                              {isSelected && <CheckCircle2 className={`w-4 h-4 ${isRental ? 'text-blue-600' : 'text-brand-teal'}`} />}
                             </div>
                             <div className="mt-2.5">
                               <p className="text-xs font-bold leading-snug">{amenity.name}</p>
@@ -5758,21 +5986,27 @@ export default function PropertyDetailPage() {
                     type="button"
                     variant="outline"
                     size="md"
-                    onClick={() => setIsEditModalOpen(false)}
-                    className="px-5 py-2 text-xs font-bold rounded-xl"
+                    onClick={handleCancelEdit}
+                    className="px-5 py-2 text-xs font-bold rounded-xl cursor-pointer"
                   >
                     Cancel
                   </Button>
-                  <Button
+                  <button
                     type="submit"
-                    variant="primary"
-                    size="md"
-                    isLoading={actionLoading}
-                    className="px-6 py-2 text-xs font-bold rounded-xl shadow-sm bg-brand-teal hover:bg-teal-700 text-white flex items-center gap-2"
+                    disabled={actionLoading}
+                    className={`px-6 py-2.5 text-xs font-bold rounded-xl shadow-sm text-white flex items-center gap-2 transition cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
+                      isRental
+                        ? 'bg-blue-600 hover:bg-blue-700 active:bg-blue-800 shadow-blue-500/20'
+                        : 'bg-brand-teal hover:bg-teal-700 active:bg-teal-800'
+                    }`}
                   >
-                    <CheckCircle2 className="w-4 h-4" />
-                    Save All Changes
-                  </Button>
+                    {actionLoading ? (
+                      <Loader2 className="w-4 h-4 animate-spin text-white" />
+                    ) : (
+                      <CheckCircle2 className="w-4 h-4 text-white" />
+                    )}
+                    <span>{actionLoading ? 'Saving Changes...' : 'Save All Changes'}</span>
+                  </button>
                 </div>
               </form>
             </div>
@@ -6014,39 +6248,95 @@ export default function PropertyDetailPage() {
                                 if (!occ) return;
                                 const sigPkg = getOrGenerateAgreementSignature({
                                   bedId: selectedBed.id,
+                                  tenantId: occ.tenantId,
                                   tenantName: occ.tenantName,
                                   tenantPhone: occ.phone,
                                   unitName: `Bed ${selectedBed.bedNumber}`,
                                   emergencyContactName: occ.emergencyContactName,
                                   emergencyContactPhone: occ.emergencyContactPhone,
-                                  moveInDate: occ.moveInDate,
+                                  moveInDate: occ.moveInDate || getLocalDateString(),
+                                  startDate: occ.moveInDate || getLocalDateString(),
+                                  monthlyRent: occ.monthlyRent,
+                                  securityDeposit: occ.securityDeposit,
+                                  noticePeriodDays: property?.noticePeriodDays ?? 30,
+                                  lockInMonths: property?.lockInPeriodValue ?? property?.lockInMonths ?? 1,
+                                  lockInPeriodValue: property?.lockInPeriodValue ?? property?.lockInMonths ?? 1,
+                                  lockInPeriodUnit: property?.lockInPeriodUnit || 'MONTHS',
+                                  propertyName: property?.name || 'PG Facility',
+                                  propertyAddress: fullPropertyAddress,
+                                  propertyType: 'PG',
                                 });
+
+                                // Preserve frozen agreement snapshot details for executed past agreements
+                                const effOwnerName = sigPkg.ownerName || ownerProfile.fullName || property?.ownerName || undefined;
+                                const effOwnerPhone = sigPkg.ownerPhone || ownerProfile.phone || property?.ownerPhone || property?.contactPhone || undefined;
+                                const effOwnerAddress = sigPkg.ownerAddress || ownerProfile.address || property?.ownerAddress || fullPropertyAddress || undefined;
+                                const effOwnerSignature = sigPkg.ownerSignature || ownerProfile.signature || property?.ownerSignature || undefined;
+                                const effStartDate = sigPkg.startDate || occ.moveInDate || getLocalDateString();
+                                const effSignedAt = sigPkg.signedAt || (occ.moveInDate ? createLocalIsoString(occ.moveInDate) : new Date().toISOString());
+
+                                const effNoticePeriodDays = sigPkg.noticePeriodDays ?? (property?.noticePeriodDays ?? 30);
+                                const effLockInMonths = sigPkg.lockInMonths ?? (property?.lockInPeriodValue ?? property?.lockInMonths ?? 1);
+                                const effLockInPeriodValue = sigPkg.lockInPeriodValue ?? (property?.lockInPeriodValue ?? property?.lockInMonths ?? 1);
+                                const effLockInPeriodUnit = (sigPkg.lockInPeriodUnit as any) || (property?.lockInPeriodUnit as any) || 'MONTHS';
+                                const effMonthlyRent = sigPkg.monthlyRent || occ.monthlyRent;
+                                const effSecurityDeposit = sigPkg.securityDeposit || occ.securityDeposit;
+
+                                if (sigPkg.noticePeriodDays === undefined || sigPkg.lockInPeriodValue === undefined || !sigPkg.isExecuted) {
+                                  saveAgreementSignature({
+                                    ...sigPkg,
+                                    bedId: selectedBed.id,
+                                    tenantId: occ.tenantId || sigPkg.tenantId,
+                                    tenantName: sigPkg.tenantName || occ.tenantName,
+                                    isExecuted: true,
+                                    isSigned: true,
+                                    noticePeriodDays: effNoticePeriodDays,
+                                    lockInMonths: effLockInMonths,
+                                    lockInPeriodValue: effLockInPeriodValue,
+                                    lockInPeriodUnit: effLockInPeriodUnit,
+                                    monthlyRent: effMonthlyRent,
+                                    securityDeposit: effSecurityDeposit,
+                                    startDate: effStartDate,
+                                    signedAt: effSignedAt,
+                                    propertyName: sigPkg.propertyName || property?.name || 'PG Facility',
+                                    propertyAddress: sigPkg.propertyAddress || fullPropertyAddress,
+                                    propertyType: 'PG',
+                                    ownerName: effOwnerName,
+                                    ownerPhone: effOwnerPhone,
+                                    ownerAddress: effOwnerAddress,
+                                    ownerSignature: effOwnerSignature,
+                                  });
+                                }
+
                                 const baseDetails = isPG ? getPgAgreementDetails() : getRentalAgreementDetails();
                                 setViewingAgreementDoc({
                                   ...baseDetails,
-                                  tenantName: occ.tenantName,
-                                  tenantPhone: occ.phone,
-                                  tenantEmail: occ.email || undefined,
-                                  tenantAddress: occ.permanentAddress || undefined,
-                                  tenantAadhaar: occ.governmentId || undefined,
-                                  propertyName: property?.name || 'Property',
-                                  propertyAddress: fullPropertyAddress,
-                                  unitOrBedName: `Bed ${selectedBed.bedNumber} (Room ${selectedBedRoom?.roomNumber || '—'})`,
-                                  propertyType: isPG ? 'PG' : 'RENTAL_HOUSE',
-                                  monthlyRent: occ.monthlyRent,
-                                  securityDeposit: occ.securityDeposit,
-                                  lockInMonths: property?.lockInMonths ?? 1,
-                                  lockInPeriodValue: property?.lockInPeriodValue ?? property?.lockInMonths ?? 1,
-                                  lockInPeriodUnit: (property?.lockInPeriodUnit as any) || 'MONTHS',
-                                  noticePeriodDays: property?.noticePeriodDays ?? 30,
-                                  ownerName: property?.ownerName || 'Arun Sharma',
-                                  ownerPhone: property?.ownerPhone || property?.contactPhone || '+91 98765 43210',
-                                  ownerAddress: property?.ownerAddress || fullPropertyAddress,
-                                  ownerSignature: property?.ownerSignature || generateDigitalSignatureDataUrl(property?.ownerName || 'Arun Sharma', 'Authorized Landlord / Owner'),
+                                  id: selectedBed.id,
+                                  tenantName: sigPkg.tenantName || occ.tenantName,
+                                  tenantPhone: sigPkg.tenantPhone || occ.phone,
+                                  tenantEmail: sigPkg.tenantEmail || occ.email || undefined,
+                                  tenantAddress: sigPkg.tenantAddress || occ.permanentAddress || undefined,
+                                  tenantAadhaar: sigPkg.tenantAadhaar || occ.governmentId || undefined,
+                                  propertyName: sigPkg.propertyName || property?.name || 'Property',
+                                  propertyAddress: sigPkg.propertyAddress || fullPropertyAddress,
+                                  unitOrBedName: sigPkg.unitName || `Bed ${selectedBed.bedNumber} (Room ${selectedBedRoom?.roomNumber || '—'})`,
+                                  propertyType: 'PG',
+                                  monthlyRent: effMonthlyRent,
+                                  securityDeposit: effSecurityDeposit,
+                                  lockInMonths: effLockInMonths,
+                                  lockInPeriodValue: effLockInPeriodValue,
+                                  lockInPeriodUnit: effLockInPeriodUnit,
+                                  noticePeriodDays: effNoticePeriodDays,
+                                  startDate: effStartDate,
+                                  endDate: sigPkg.endDate || undefined,
+                                  ownerName: effOwnerName,
+                                  ownerPhone: effOwnerPhone,
+                                  ownerAddress: effOwnerAddress,
+                                  ownerSignature: effOwnerSignature,
                                   residentSignature: sigPkg.signatureImage,
-                                  sharingType: selectedBedRoom?.sharingType,
+                                  sharingType: sigPkg.sharingType || selectedBedRoom?.sharingType,
                                   witnesses: sigPkg.witnesses,
-                                  signedAt: sigPkg.signedAt || occ.moveInDate || new Date().toISOString(),
+                                  signedAt: effSignedAt,
                                   status: 'OCCUPIED',
                                   hideDownloadButton: true,
                                 });
@@ -6844,10 +7134,10 @@ export default function PropertyDetailPage() {
                                   setViewingAgreementDoc({
                                     ...signDetails,
                                     tenantPhone: signDetails.tenantPhone || '',
-                                    ownerName: property?.ownerName || 'Arun Sharma',
-                                    ownerPhone: property?.ownerPhone || property?.contactPhone || '+91 98765 43210',
-                                    ownerAddress: property?.ownerAddress || fullPropertyAddress,
-                                    ownerSignature: property?.ownerSignature || generateDigitalSignatureDataUrl(property?.ownerName || 'Arun Sharma', 'Authorized Landlord / Owner'),
+                                    ownerName: ownerProfile.fullName || property?.ownerName || undefined,
+                                    ownerPhone: ownerProfile.phone || property?.ownerPhone || property?.contactPhone || undefined,
+                                    ownerAddress: ownerProfile.address || property?.ownerAddress || fullPropertyAddress || undefined,
+                                    ownerSignature: ownerProfile.signature || property?.ownerSignature || undefined,
                                     residentSignature: agreementSignatureMap[selectedBed.id]?.signatureImage || `SIGNED:${agreementSignatureMap[selectedBed.id]?.signerName}`,
                                     sharingType: selectedBedRoom?.sharingType,
                                     noticePeriodDays: property?.noticePeriodDays ?? 30,
@@ -8369,8 +8659,8 @@ export default function PropertyDetailPage() {
                     const tPhone = activeTenant?.phone || (selectedRentalUnit.activeLease as any)?.tenantPhone || '+91 98765 43210';
                     const tEmail = activeTenant?.email || (selectedRentalUnit.activeLease as any)?.tenantEmail || '';
                     const moveInDate = selectedRentalUnit.activeLease?.startDate
-                      ? String(selectedRentalUnit.activeLease.startDate).split('T')[0]
-                      : '2026-09-03';
+                      ? getLocalDateString(selectedRentalUnit.activeLease.startDate)
+                      : getLocalDateString();
                     const rent = Number(selectedRentalUnit.activeLease?.monthlyRent || selectedRentalUnit.monthlyRent) || 25000;
                     const deposit = Number(selectedRentalUnit.activeLease?.securityDeposit || selectedRentalUnit.securityDeposit) || 50000;
                     const emergName = activeTenant?.emergencyContactName || 'Murugan (Father)';
@@ -8412,10 +8702,6 @@ export default function PropertyDetailPage() {
                               <button
                                 type="button"
                                 onClick={() => {
-                                  const effOwnerName = property?.ownerName || (user ? `${user.firstName} ${user.lastName}`.trim() : 'Arun Sharma');
-                                  const effOwnerPhone = property?.ownerPhone || property?.contactPhone || user?.phone || '+91 98765 43210';
-                                  const effOwnerAddress = property?.ownerAddress || fullPropertyAddress || '#12, Royal Palm Residency, Coimbatore, Tamil Nadu';
-                                  const effOwnerSignature = property?.ownerSignature || generateDigitalSignatureDataUrl(effOwnerName, 'Authorized Landlord / Owner');
                                   const sigPkg = getOrGenerateAgreementSignature({
                                     unitId: selectedRentalUnit.id,
                                     tenantId: activeTenant?.id,
@@ -8423,39 +8709,92 @@ export default function PropertyDetailPage() {
                                     tenantPhone: tPhone,
                                     unitName: `Flat ${selectedRentalUnit.unitNumber.replace(/^(flat|unit|house|room)\s*/i, '').trim() || selectedRentalUnit.unitNumber}`,
                                     moveInDate,
-                                    ownerName: effOwnerName,
-                                    ownerPhone: effOwnerPhone,
-                                    ownerAddress: effOwnerAddress,
-                                    ownerSignature: effOwnerSignature,
+                                    startDate: moveInDate,
+                                    monthlyRent: rent,
+                                    securityDeposit: deposit,
+                                    noticePeriodDays: Number(selectedRentalUnit.activeLease?.noticePeriodDays) || property?.noticePeriodDays || 30,
+                                    lockInMonths: Number(selectedRentalUnit.activeLease?.lockInMonths) || property?.lockInPeriodValue || 1,
+                                    lockInPeriodValue: Number(selectedRentalUnit.activeLease?.lockInMonths) || property?.lockInPeriodValue || 1,
+                                    lockInPeriodUnit: property?.lockInPeriodUnit || 'MONTHS',
+                                    propertyName: property?.name || 'Residential Property',
+                                    propertyAddress: fullPropertyAddress,
+                                    propertyType: 'RENTAL_HOUSE',
+                                    ownerName: ownerProfile.fullName,
+                                    ownerPhone: ownerProfile.phone,
+                                    ownerAddress: ownerProfile.address,
+                                    ownerSignature: ownerProfile.signature,
                                   });
+
+                                  // Preserve frozen agreement snapshot details for executed past agreements
+                                  const effOwnerName = sigPkg.ownerName || ownerProfile.fullName || property?.ownerName || (user ? `${user.firstName} ${user.lastName}`.trim() : 'Landlord');
+                                  const effOwnerPhone = sigPkg.ownerPhone || ownerProfile.phone || property?.ownerPhone || property?.contactPhone || user?.phone || '';
+                                  const effOwnerAddress = sigPkg.ownerAddress || ownerProfile.address || property?.ownerAddress || fullPropertyAddress || '';
+                                  const effOwnerSignature = sigPkg.ownerSignature || ownerProfile.signature || property?.ownerSignature || '';
+                                  const effStartDate = sigPkg.startDate || moveInDate || getLocalDateString();
+                                  const effSignedAt = sigPkg.signedAt || (selectedRentalUnit.activeLease?.startDate ? String(selectedRentalUnit.activeLease.startDate) : (moveInDate ? createLocalIsoString(moveInDate) : new Date().toISOString()));
+
+                                  const effNoticePeriodDays = sigPkg.noticePeriodDays ?? (Number(selectedRentalUnit.activeLease?.noticePeriodDays) || property?.noticePeriodDays || 30);
+                                  const effLockInMonths = sigPkg.lockInMonths ?? (Number(selectedRentalUnit.activeLease?.lockInMonths) || property?.lockInPeriodValue || 1);
+                                  const effLockInPeriodValue = sigPkg.lockInPeriodValue ?? (Number(selectedRentalUnit.activeLease?.lockInMonths) || property?.lockInPeriodValue || 1);
+                                  const effLockInPeriodUnit = (sigPkg.lockInPeriodUnit as any) || (property?.lockInPeriodUnit as any) || 'MONTHS';
+                                  const effMonthlyRent = sigPkg.monthlyRent || rent;
+                                  const effSecurityDeposit = sigPkg.securityDeposit || deposit;
+
+                                  if (sigPkg.noticePeriodDays === undefined || sigPkg.lockInPeriodValue === undefined || !sigPkg.isExecuted) {
+                                    saveAgreementSignature({
+                                      ...sigPkg,
+                                      unitId: selectedRentalUnit.id,
+                                      tenantId: activeTenant?.id || sigPkg.tenantId,
+                                      tenantName: sigPkg.tenantName || tName,
+                                      isExecuted: true,
+                                      isSigned: true,
+                                      noticePeriodDays: effNoticePeriodDays,
+                                      lockInMonths: effLockInMonths,
+                                      lockInPeriodValue: effLockInPeriodValue,
+                                      lockInPeriodUnit: effLockInPeriodUnit,
+                                      monthlyRent: effMonthlyRent,
+                                      securityDeposit: effSecurityDeposit,
+                                      startDate: effStartDate,
+                                      signedAt: effSignedAt,
+                                      propertyName: sigPkg.propertyName || property?.name || 'Residential Property',
+                                      propertyAddress: sigPkg.propertyAddress || fullPropertyAddress,
+                                      propertyType: 'RENTAL_HOUSE',
+                                      ownerName: effOwnerName,
+                                      ownerPhone: effOwnerPhone,
+                                      ownerAddress: effOwnerAddress,
+                                      ownerSignature: effOwnerSignature,
+                                    });
+                                  }
 
                                   const docType = activeTenant?.documentType || 'Aadhaar Card';
                                   const docNum = activeTenant?.documentNumber || '';
 
                                   setViewingAgreementDoc({
                                     id: selectedRentalUnit.activeLease?.id || selectedRentalUnit.id,
-                                    tenantName: tName,
-                                    tenantPhone: tPhone,
-                                    tenantEmail: tEmail || undefined,
-                                    tenantAddress: activeTenant?.permanentAddress || 'Resident Permanent Address on Record',
-                                    tenantAadhaar: formatIdProofDisplay(docType, docNum) || 'Government Photo ID Verified',
-                                    propertyName: property?.name || 'Residential Property',
-                                    propertyAddress: fullPropertyAddress,
-                                    unitOrBedName: `Flat ${selectedRentalUnit.unitNumber.replace(/^(flat|unit|house|room)\s*/i, '').trim() || selectedRentalUnit.unitNumber}`,
+                                    tenantName: sigPkg.tenantName || tName,
+                                    tenantPhone: sigPkg.tenantPhone || tPhone,
+                                    tenantEmail: sigPkg.tenantEmail || tEmail || undefined,
+                                    tenantAddress: sigPkg.tenantAddress || activeTenant?.permanentAddress || 'Resident Permanent Address on Record',
+                                    tenantAadhaar: sigPkg.tenantAadhaar || (formatIdProofDisplay(docType, docNum) || 'Government Photo ID Verified'),
+                                    propertyName: sigPkg.propertyName || property?.name || 'Residential Property',
+                                    propertyAddress: sigPkg.propertyAddress || fullPropertyAddress,
+                                    unitOrBedName: sigPkg.unitName || `Flat ${selectedRentalUnit.unitNumber.replace(/^(flat|unit|house|room)\s*/i, '').trim() || selectedRentalUnit.unitNumber}`,
                                     propertyType: 'RENTAL_HOUSE',
-                                    monthlyRent: rent,
-                                    securityDeposit: deposit,
-                                    noticePeriodDays: Number(selectedRentalUnit.activeLease?.noticePeriodDays) || property?.noticePeriodDays || 30,
-                                    lockInMonths: Number(selectedRentalUnit.activeLease?.lockInMonths) || property?.lockInPeriodValue || 1,
-                                    startDate: moveInDate,
-                                    endDate: selectedRentalUnit.activeLease?.endDate ? String(selectedRentalUnit.activeLease.endDate).split('T')[0] : undefined,
+                                    monthlyRent: effMonthlyRent,
+                                    securityDeposit: effSecurityDeposit,
+                                    noticePeriodDays: effNoticePeriodDays,
+                                    lockInMonths: effLockInMonths,
+                                    lockInPeriodValue: effLockInPeriodValue,
+                                    lockInPeriodUnit: effLockInPeriodUnit,
+                                    startDate: effStartDate,
+                                    endDate: sigPkg.endDate || (selectedRentalUnit.activeLease?.endDate ? getLocalDateString(selectedRentalUnit.activeLease.endDate) : undefined),
                                     ownerName: effOwnerName,
                                     ownerPhone: effOwnerPhone,
                                     ownerAddress: effOwnerAddress,
                                     ownerSignature: effOwnerSignature,
                                     residentSignature: sigPkg.signatureImage,
                                     witnesses: sigPkg.witnesses,
-                                    signedAt: sigPkg.signedAt || (selectedRentalUnit.activeLease?.startDate ? String(selectedRentalUnit.activeLease.startDate) : new Date().toISOString()),
+                                    signedAt: effSignedAt,
                                     status: 'OCCUPIED',
                                     hideDownloadButton: true,
                                   });
@@ -9466,10 +9805,10 @@ export default function PropertyDetailPage() {
                                 type="button"
                                 onClick={() => {
                                   const signDetails = getRentalAgreementDetails();
-                                  const effOwnerName = property?.ownerName || (user ? `${user.firstName} ${user.lastName}`.trim() : 'Arun Sharma');
-                                  const effOwnerPhone = property?.ownerPhone || property?.contactPhone || user?.phone || '+91 98765 43210';
-                                  const effOwnerAddress = property?.ownerAddress || fullPropertyAddress || '#12, Royal Palm Residency, Coimbatore, Tamil Nadu';
-                                  const effOwnerSignature = property?.ownerSignature || generateDigitalSignatureDataUrl(effOwnerName, 'Authorized Landlord / Owner');
+                                  const effOwnerName = ownerProfile.fullName || property?.ownerName || (user ? `${user.firstName} ${user.lastName}`.trim() : 'Landlord');
+                                  const effOwnerPhone = ownerProfile.phone || property?.ownerPhone || property?.contactPhone || user?.phone || '';
+                                  const effOwnerAddress = ownerProfile.address || property?.ownerAddress || fullPropertyAddress || '';
+                                  const effOwnerSignature = ownerProfile.signature || property?.ownerSignature || '';
 
                                   setViewingAgreementDoc({
                                     ...signDetails,
@@ -9481,7 +9820,7 @@ export default function PropertyDetailPage() {
                                     residentSignature: agreementSignatureMap[selectedRentalUnit.id]?.signatureImage || `SIGNED:${agreementSignatureMap[selectedRentalUnit.id]?.signerName}`,
                                     noticePeriodDays: Number(rentalCheckInTerms.noticePeriodDays) || property?.noticePeriodDays || 30,
                                     lockInPeriodValue: Number(rentalCheckInTerms.lockInMonths) || property?.lockInPeriodValue || 1,
-                                    lockInPeriodUnit: 'MONTHS',
+                                    lockInPeriodUnit: (property?.lockInPeriodUnit as any) || 'MONTHS',
                                     witnesses: agreementSignatureMap[selectedRentalUnit.id]?.witnesses,
                                     hideDownloadButton: true,
                                   });
@@ -10033,13 +10372,14 @@ export default function PropertyDetailPage() {
                       unitOrBedName: postCheckInAgreement.unitName,
                       propertyType: isPG ? 'PG' : 'RENTAL_HOUSE',
                       monthlyRent: postCheckInAgreement.monthlyRent,
-                      ownerName: property?.ownerName || 'Arun Sharma',
-                      ownerPhone: property?.ownerPhone || property?.contactPhone || '+91 98765 43210',
-                      ownerAddress: property?.ownerAddress || fullPropertyAddress,
-                      ownerSignature: property?.ownerSignature || generateDigitalSignatureDataUrl(property?.ownerName || 'Arun Sharma', 'Authorized Landlord / Owner'),
+                      ownerName: sig?.ownerName || ownerProfile.fullName || property?.ownerName || undefined,
+                      ownerPhone: sig?.ownerPhone || ownerProfile.phone || property?.ownerPhone || property?.contactPhone || undefined,
+                      ownerAddress: sig?.ownerAddress || ownerProfile.address || property?.ownerAddress || fullPropertyAddress || undefined,
+                      ownerSignature: sig?.ownerSignature || ownerProfile.signature || property?.ownerSignature || undefined,
                       residentSignature: sig?.signatureImage || `SIGNED:${postCheckInAgreement.tenantName}`,
                       sharingType: selectedBedRoom?.sharingType,
                       witnesses: sig?.witnesses,
+                      signedAt: sig?.signedAt || baseDetails.startDate || new Date().toISOString(),
                     });
                   }}
                   className="w-full py-3 px-4 rounded-xl bg-white hover:bg-slate-50 text-black font-bold text-sm flex items-center justify-center gap-2 border-2 border-black shadow-xs transition cursor-pointer"
@@ -10068,13 +10408,14 @@ export default function PropertyDetailPage() {
                         propertyType: isPG ? 'PG' : 'RENTAL_HOUSE',
                         monthlyRent: postCheckInAgreement.monthlyRent,
                         securityDeposit: postCheckInAgreement.securityDeposit,
-                        ownerName: property?.ownerName || 'Arun Sharma',
-                        ownerPhone: property?.ownerPhone || property?.contactPhone || '+91 98765 43210',
-                        ownerAddress: property?.ownerAddress || fullPropertyAddress,
-                        ownerSignature: property?.ownerSignature || generateDigitalSignatureDataUrl(property?.ownerName || 'Arun Sharma', 'Authorized Landlord / Owner'),
+                        ownerName: sig?.ownerName || ownerProfile.fullName || property?.ownerName || undefined,
+                        ownerPhone: sig?.ownerPhone || ownerProfile.phone || property?.ownerPhone || property?.contactPhone || undefined,
+                        ownerAddress: sig?.ownerAddress || ownerProfile.address || property?.ownerAddress || fullPropertyAddress || undefined,
+                        ownerSignature: sig?.ownerSignature || ownerProfile.signature || property?.ownerSignature || undefined,
                         residentSignature: sig?.signatureImage || `SIGNED:${postCheckInAgreement.tenantName}`,
                         sharingType: selectedBedRoom?.sharingType,
                         witnesses: sig?.witnesses,
+                        signedAt: sig?.signedAt || baseDetails.startDate || new Date().toISOString(),
                       };
                       const downloadedFileName = await downloadAgreementPdf(agreementDocData);
                       setSuccessMessage(`Agreement PDF downloaded successfully to your system Downloads folder: ${downloadedFileName}`);

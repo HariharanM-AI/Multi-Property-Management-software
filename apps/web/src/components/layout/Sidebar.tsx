@@ -27,6 +27,7 @@ import {
   Sparkles,
   History,
   CalendarClock,
+  UserCircle,
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -66,6 +67,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentPropertyType, activePat
     { name: 'Notifications', href: '/notifications', icon: Bell },
     { name: 'Audit Trail', href: '/audit', icon: History },
     { name: 'Jobs & Automation', href: '/jobs', icon: CalendarClock },
+    { name: 'Profile', href: '/profile', icon: UserCircle },
     { name: 'Settings', href: '/settings/organization', icon: Settings },
   ];
 
@@ -90,6 +92,9 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentPropertyType, activePat
     if (itemHref === '/settings/organization') {
       return currentPath.startsWith('/settings');
     }
+    if (itemHref === '/profile') {
+      return currentPath.startsWith('/profile');
+    }
     return currentPath === itemHref || currentPath.startsWith(itemHref + '/');
   };
 
@@ -102,7 +107,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentPropertyType, activePat
     <aside className="w-64 bg-brand-navy text-brand-white flex flex-col h-screen border-r border-slate-800 shrink-0">
       {/* Brand Header */}
       <div className="h-16 flex items-center px-6 border-b border-slate-800 gap-3">
-        <div className="w-8 h-8 rounded-lg bg-brand-teal flex items-center justify-center font-bold text-brand-white text-base">
+        <div className="w-8 h-8 rounded-lg flex items-center justify-center font-bold text-white text-base bg-brand-teal">
           P
         </div>
         <div>
@@ -115,7 +120,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentPropertyType, activePat
       <div className="px-4 py-3 bg-slate-900/60 border-b border-slate-800/80">
         <div className="flex items-center justify-between text-xs">
           <span className="text-slate-400 font-medium">Active Mode:</span>
-          <span className="px-2 py-0.5 rounded bg-brand-teal/20 text-teal-300 font-semibold border border-brand-teal/30">
+          <span className="px-2 py-0.5 rounded font-semibold border bg-brand-teal/20 text-teal-300 border-brand-teal/30">
             {currentPropertyType === PropertyType.PG ? 'PG / Co-Living' : 'Whole-Unit Rental'}
           </span>
         </div>

@@ -7,6 +7,8 @@ import { AppShell } from '@/components/layout/AppShell';
 import { Button } from '@/components/ui/Button';
 import { BackButton } from '@/components/ui/BackButton';
 import { useAuth } from '@/lib/auth-context';
+import { getOwnerProfile, onOwnerProfileChange } from '@/lib/ownerProfileStorage';
+import { getCleanPropertyDescription } from '@/lib/propertyUtils';
 import {
   PropertyType,
   RoomSharingType,
@@ -125,7 +127,7 @@ export interface RentalFloorSetupItem {
 
 export default function NewPropertyPage() {
   const router = useRouter();
-  const { isAuthenticated, isLoading: authLoading } = useAuth();
+  const { isAuthenticated, isLoading: authLoading, user } = useAuth();
 
   const [step, setStep] = useState<number>(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -167,6 +169,8 @@ export default function NewPropertyPage() {
   const ownerCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const [isOwnerDrawing, setIsOwnerDrawing] = useState(false);
   const [hasOwnerDrawn, setHasOwnerDrawn] = useState(false);
+  const hasOwnerDrawnRef = useRef(false);
+  const ownerLastPointRef = useRef<{ x: number; y: number } | null>(null);
 
   const startOwnerDrawing = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
     const canvas = ownerCanvasRef.current;
@@ -175,12 +179,24 @@ export default function NewPropertyPage() {
     if (!ctx) return;
     setIsOwnerDrawing(true);
     setHasOwnerDrawn(true);
+    hasOwnerDrawnRef.current = true;
+    setErrorMessage(null);
+
     const rect = canvas.getBoundingClientRect();
-    const x = 'touches' in e ? e.touches[0].clientX - rect.left : e.clientX - rect.left;
-    const y = 'touches' in e ? e.touches[0].clientY - rect.top : e.clientY - rect.top;
-    ctx.strokeStyle = '#0f766e';
-    ctx.lineWidth = 2.5;
+    const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
+    const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    const x = (clientX - rect.left) * scaleX;
+    const y = (clientY - rect.top) * scaleY;
+
+    ownerLastPointRef.current = { x, y };
+
+    const inkColor = formData.propertyType === PropertyType.RENTAL_HOUSE ? '#1e3a8a' : '#0f766e';
+    ctx.strokeStyle = inkColor;
+    ctx.lineWidth = 3.5;
     ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
     ctx.beginPath();
     ctx.moveTo(x, y);
   };
@@ -191,18 +207,42 @@ export default function NewPropertyPage() {
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
+
     const rect = canvas.getBoundingClientRect();
-    const x = 'touches' in e ? e.touches[0].clientX - rect.left : e.clientX - rect.left;
-    const y = 'touches' in e ? e.touches[0].clientY - rect.top : e.clientY - rect.top;
-    ctx.lineTo(x, y);
-    ctx.stroke();
+    const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
+    const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    const x = (clientX - rect.left) * scaleX;
+    const y = (clientY - rect.top) * scaleY;
+
+    if (ownerLastPointRef.current) {
+      const midX = (ownerLastPointRef.current.x + x) / 2;
+      const midY = (ownerLastPointRef.current.y + y) / 2;
+      ctx.quadraticCurveTo(ownerLastPointRef.current.x, ownerLastPointRef.current.y, midX, midY);
+      ctx.stroke();
+    } else {
+      ctx.lineTo(x, y);
+      ctx.stroke();
+    }
+
+    ownerLastPointRef.current = { x, y };
+    hasOwnerDrawnRef.current = true;
+    setHasOwnerDrawn(true);
+    setErrorMessage(null);
   };
 
   const stopOwnerDrawing = () => {
-    setIsOwnerDrawing(false);
-    if (ownerCanvasRef.current && hasOwnerDrawn) {
-      const sigData = ownerCanvasRef.current.toDataURL('image/png');
-      setFormData((prev) => ({ ...prev, ownerSignature: sigData }));
+    if (isOwnerDrawing) {
+      setIsOwnerDrawing(false);
+      ownerLastPointRef.current = null;
+      const canvas = ownerCanvasRef.current;
+      if (canvas && hasOwnerDrawnRef.current) {
+        const sigData = canvas.toDataURL('image/png');
+        setFormData((prev) => ({ ...prev, ownerSignature: sigData }));
+        setHasOwnerDrawn(true);
+        setErrorMessage(null);
+      }
     }
   };
 
@@ -212,9 +252,70 @@ export default function NewPropertyPage() {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+    hasOwnerDrawnRef.current = false;
+    ownerLastPointRef.current = null;
     setHasOwnerDrawn(false);
     setFormData((prev) => ({ ...prev, ownerSignature: '' }));
   };
+
+  // Auto-populate owner details & digital signature from Owner Profile
+  useEffect(() => {
+    const profile = getOwnerProfile(user);
+    setFormData((prev) => ({
+      ...prev,
+      ownerName: profile.fullName || prev.ownerName,
+      ownerPhone: profile.phone || prev.ownerPhone,
+      ownerAddress: profile.address || prev.ownerAddress,
+      ownerSignature: profile.signature || prev.ownerSignature,
+    }));
+
+    if (profile.signature) {
+      hasOwnerDrawnRef.current = true;
+      setHasOwnerDrawn(true);
+      if (profile.signMode) {
+        setOwnerSignMode(profile.signMode);
+      }
+      if (profile.typedName) {
+        setOwnerTypedName(profile.typedName);
+      }
+    }
+  }, [user]);
+
+  useEffect(() => {
+    const unsubscribe = onOwnerProfileChange((updated) => {
+      setFormData((prev) => ({
+        ...prev,
+        ownerName: updated.fullName,
+        ownerPhone: updated.phone,
+        ownerAddress: updated.address,
+        ownerSignature: updated.signature,
+      }));
+      if (updated.signature) {
+        hasOwnerDrawnRef.current = true;
+        setHasOwnerDrawn(true);
+        if (updated.signMode) setOwnerSignMode(updated.signMode);
+        if (updated.typedName) setOwnerTypedName(updated.typedName);
+      }
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  // When step 2 is entered with draw mode and an existing signature, draw it on the canvas
+  useEffect(() => {
+    if (step === 2 && ownerSignMode === 'draw' && formData.ownerSignature) {
+      const canvas = ownerCanvasRef.current;
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+      const img = new Image();
+      img.onload = () => {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      };
+      img.src = formData.ownerSignature;
+    }
+  }, [step, ownerSignMode, formData.ownerSignature]);
 
   // 2. Flexible PG Floors & Rooms Inventory Configuration (Starts empty)
   const [pgFloors, setPgFloors] = useState<FloorSetupItem[]>([]);
@@ -551,7 +652,8 @@ export default function NewPropertyPage() {
         setErrorMessage('Property Name is required (at least 2 characters).');
         return;
       }
-      if (!formData.description?.trim() || formData.description.trim().length < 5) {
+      const cleanDesc = getCleanPropertyDescription(formData.description);
+      if (!cleanDesc || cleanDesc.length < 5) {
         setErrorMessage('Property Description is required (at least 5 characters).');
         return;
       }
@@ -585,18 +687,12 @@ export default function NewPropertyPage() {
       }
 
       // Check owner digital signature
-      const hasSignature = Boolean(
-        formData.ownerSignature ||
-        (ownerSignMode === 'type' && ownerTypedName.trim().length >= 2) ||
-        (ownerSignMode === 'draw' && hasOwnerDrawn)
-      );
-      if (!hasSignature) {
-        setErrorMessage('Landlord / Property Owner Digital Signature is required. Please draw or type your signature.');
+      const finalOwnerSig = formData.ownerSignature || getOwnerProfile(user).signature;
+      if (!finalOwnerSig) {
+        setErrorMessage('Landlord / Property Owner Digital Signature is required.');
         return;
       }
-      if (ownerSignMode === 'type' && !formData.ownerSignature && ownerTypedName.trim()) {
-        setFormData((prev) => ({ ...prev, ownerSignature: `TYPE:${ownerTypedName.trim()}` }));
-      }
+      setFormData((prev) => ({ ...prev, ownerSignature: finalOwnerSig }));
     }
 
     if (step === 3) {
@@ -743,7 +839,7 @@ export default function NewPropertyPage() {
       const payload: CreatePropertyDto = {
         ...formData,
         name: formData.name.trim(),
-        description: formData.description?.trim() || '',
+        description: getCleanPropertyDescription(formData.description).trim() || '',
         address: formData.address.trim(),
         city: formData.city.trim(),
         state: formData.state.trim(),
@@ -1216,133 +1312,84 @@ export default function NewPropertyPage() {
                         </p>
                       </div>
                     </div>
-                    <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
-                      MTA 2021 Ready
-                    </span>
+                    
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
                     <div>
                       <label className="block text-xs font-semibold text-slate-700 mb-1">
-                        Owner / Landlord Legal Name <span className="text-red-500">*</span>
+                        Owner / Landlord Legal Name 
                       </label>
                       <input
                         type="text"
-                        required
+                        readOnly
+                        tabIndex={-1}
                         value={formData.ownerName || ''}
-                        onChange={(e) => setFormData({ ...formData, ownerName: e.target.value })}
-                        placeholder="e.g. Ramesh Chandra (Owner)"
-                        className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-brand-teal"
+                        className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 cursor-default select-none focus:outline-none"
                       />
                     </div>
                     <div>
                       <label className="block text-xs font-semibold text-slate-700 mb-1">
-                        Owner WhatsApp / Contact Number <span className="text-red-500">*</span>
+                        Owner WhatsApp / Contact Number 
                       </label>
                       <input
                         type="tel"
-                        required
+                        readOnly
+                        tabIndex={-1}
                         value={formData.ownerPhone || ''}
-                        onChange={(e) => setFormData({ ...formData, ownerPhone: e.target.value })}
-                        placeholder="e.g. 9876543210"
-                        className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-brand-teal"
+                        className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 cursor-default select-none focus:outline-none"
                       />
                     </div>
                     <div>
                       <label className="block text-xs font-semibold text-slate-700 mb-1">
-                        Owner Office / Permanent Address <span className="text-red-500">*</span>
+                        Owner Office / Permanent Address 
                       </label>
                       <input
                         type="text"
-                        required
+                        readOnly
+                        tabIndex={-1}
                         value={formData.ownerAddress || ''}
-                        onChange={(e) => setFormData({ ...formData, ownerAddress: e.target.value })}
-                        placeholder="e.g. #12, 5th Cross, Indiranagar"
-                        className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-brand-teal"
+                        className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 cursor-default select-none focus:outline-none"
                       />
                     </div>
                   </div>
 
-                  {/* Owner Signature Canvas Pad */}
+                  {/* Owner Signature Non-Editable Display */}
                   <div className="pt-2 space-y-2">
                     <div className="flex items-center justify-between text-xs font-bold text-slate-700">
                       <span className="flex items-center gap-1.5">
                         <PenTool className="w-3.5 h-3.5 text-brand-teal" />
-                        Owner Digital Signature (Drawn or Typed) <span className="text-red-500">*</span>
+                        Owner Digital Signature 
                       </span>
-                      <div className="flex items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => setOwnerSignMode('draw')}
-                          className={`px-2.5 py-1 text-[11px] font-bold rounded-md transition ${
-                            ownerSignMode === 'draw' ? 'bg-brand-teal text-white' : 'bg-slate-200 text-slate-700'
-                          }`}
-                        >
-                          Draw Pad
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setOwnerSignMode('type')}
-                          className={`px-2.5 py-1 text-[11px] font-bold rounded-md transition ${
-                            ownerSignMode === 'type' ? 'bg-brand-teal text-white' : 'bg-slate-200 text-slate-700'
-                          }`}
-                        >
-                          Type Script
-                        </button>
-                        {ownerSignMode === 'draw' && (
-                          <button
-                            type="button"
-                            onClick={clearOwnerCanvas}
-                            className="px-2.5 py-1 text-[11px] font-bold rounded-md bg-amber-50 text-amber-800 border border-amber-200 hover:bg-amber-100 flex items-center gap-1"
-                          >
-                            <RotateCcw className="w-3 h-3" />
-                            Clear
-                          </button>
-                        )}
-                      </div>
                     </div>
 
-                    {ownerSignMode === 'draw' ? (
-                      <div className="border-2 border-dashed border-teal-300 rounded-xl bg-white relative overflow-hidden shadow-2xs">
-                        <canvas
-                          ref={ownerCanvasRef}
-                          width={600}
-                          height={120}
-                          onMouseDown={startOwnerDrawing}
-                          onMouseMove={drawOwner}
-                          onMouseUp={stopOwnerDrawing}
-                          onMouseLeave={stopOwnerDrawing}
-                          onTouchStart={startOwnerDrawing}
-                          onTouchMove={drawOwner}
-                          onTouchEnd={stopOwnerDrawing}
-                          className="w-full h-28 cursor-crosshair touch-none bg-transparent"
-                        />
-                        {!hasOwnerDrawn && !formData.ownerSignature && (
-                          <div className="absolute inset-0 flex items-center justify-center pointer-events-none text-slate-400 text-xs italic">
-                            ✍️ Sign inside this box to set your default landlord signature...
+                    <div className={`relative rounded-2xl bg-white border-2 overflow-hidden shadow-inner flex items-center justify-center p-3 h-44 sm:h-52 ${
+                      formData.propertyType === PropertyType.RENTAL_HOUSE ? 'border-blue-300' : 'border-teal-300'
+                    }`}>
+                      {formData.ownerSignature ? (
+                        formData.ownerSignature.startsWith('data:image/') ? (
+                          <img
+                            src={formData.ownerSignature}
+                            alt="Owner Digital Signature"
+                            className="h-full w-full object-contain pointer-events-none select-none"
+                          />
+                        ) : formData.ownerSignature.startsWith('TYPE:') ? (
+                          <div className="font-sans font-semibold text-slate-800 text-xl tracking-wide select-none">
+                            {formData.ownerSignature.replace('TYPE:', '')}
                           </div>
-                        )}
-                      </div>
-                    ) : (
-                      <div className="space-y-2">
-                        <input
-                          type="text"
-                          value={ownerTypedName}
-                          onChange={(e) => {
-                            setOwnerTypedName(e.target.value);
-                            setFormData((prev) => ({
-                              ...prev,
-                              ownerSignature: e.target.value ? `TYPE:${e.target.value}` : '',
-                            }));
-                          }}
-                          placeholder="Type your official legal signature name..."
-                          className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm text-slate-900 font-serif"
-                        />
-                        <div className="p-3 bg-white border border-teal-200 rounded-xl text-center font-serif italic text-xl text-brand-teal shadow-2xs">
-                          {ownerTypedName || 'Signature Preview'}
+                        ) : (
+                          <img
+                            src={formData.ownerSignature}
+                            alt="Owner Digital Signature"
+                            className="h-full w-full object-contain pointer-events-none select-none"
+                          />
+                        )
+                      ) : (
+                        <div className="flex items-center justify-center pointer-events-none text-slate-400 text-xs sm:text-sm italic">
+                          No digital signature configured in profile
                         </div>
-                      </div>
-                    )}
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
