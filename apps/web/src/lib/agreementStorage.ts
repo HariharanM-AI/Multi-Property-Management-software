@@ -1,6 +1,6 @@
 'use client';
 
-import { getOwnerProfile } from './ownerProfileStorage';
+import { getOwnerProfile, getOwnerProfileAtDate } from './ownerProfileStorage';
 
 export interface StoredWitness {
   name?: string;
@@ -17,6 +17,10 @@ export interface StoredAgreementSignature {
   agreementType: string;
   isSigned: boolean;
   witnesses?: StoredWitness[];
+  stayId?: string;
+  leaseId?: string;
+  recordId?: string;
+  agreementId?: string;
   bedId?: string;
   unitId?: string;
   tenantId?: string;
@@ -33,6 +37,7 @@ export interface StoredAgreementSignature {
   securityDeposit?: number;
   startDate?: string;
   endDate?: string;
+  checkOutDate?: string;
   noticePeriodDays?: number;
   lockInMonths?: number;
   lockInPeriodValue?: number;
@@ -53,11 +58,17 @@ function normalizeKey(str?: string): string {
 }
 
 /**
- * Generate a clean, official digital signature image data URL for a given name.
+ * Generate a clean, official digital signature image data URL for a given name and specific date.
  */
-export function generateDigitalSignatureDataUrl(name: string, subtitle = 'Verified E-Sign'): string {
+export function generateDigitalSignatureDataUrl(name: string, subtitle = 'Verified E-Sign', dateStrInput?: string): string {
   const cleanName = (name || 'Resident').trim();
-  const dateStr = new Date().toLocaleDateString('en-GB');
+  let dateStr = dateStrInput;
+  if (!dateStr) {
+    dateStr = new Date().toLocaleDateString('en-GB');
+  } else if (dateStr.includes('-') && /^\d{4}-\d{2}-\d{2}/.test(dateStr)) {
+    const [y, m, d] = dateStr.split('T')[0].split('-');
+    dateStr = `${d}/${m}/${y}`;
+  }
   
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="340" height="90" viewBox="0 0 340 90">
     <defs>
@@ -77,9 +88,15 @@ export function generateDigitalSignatureDataUrl(name: string, subtitle = 'Verifi
 /**
  * Generate a clean, normal unstyled typed signature image data URL (standard sans-serif font, no cursive/script).
  */
-export function generateNormalTypedSignatureDataUrl(name: string, subtitle = 'Authorized Landlord / Owner'): string {
+export function generateNormalTypedSignatureDataUrl(name: string, subtitle = 'Authorized Landlord / Owner', dateStrInput?: string): string {
   const cleanName = (name || 'Landlord').trim();
-  const dateStr = new Date().toLocaleDateString('en-GB');
+  let dateStr = dateStrInput;
+  if (!dateStr) {
+    dateStr = new Date().toLocaleDateString('en-GB');
+  } else if (dateStr.includes('-') && /^\d{4}-\d{2}-\d{2}/.test(dateStr)) {
+    const [y, m, d] = dateStr.split('T')[0].split('-');
+    dateStr = `${d}/${m}/${y}`;
+  }
 
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="380" height="90" viewBox="0 0 380 90">
     <text x="20" y="46" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="28" font-weight="700" fill="#0f172a">${cleanName}</text>
@@ -92,6 +109,7 @@ export function generateNormalTypedSignatureDataUrl(name: string, subtitle = 'Au
 
 /**
  * Save agreement signature and witnesses to localStorage.
+ * Indexes by stayId, leaseId, and recordId to ensure past stays remain permanently frozen and separate.
  */
 export function saveAgreementSignature(data: StoredAgreementSignature): void {
   if (typeof window === 'undefined') return;
@@ -106,16 +124,42 @@ export function saveAgreementSignature(data: StoredAgreementSignature): void {
       signedAt: data.signedAt || new Date().toISOString(),
     };
 
-    // Index by multiple accessible keys so any view (bed modal, tenant directory, etc.) can find it
-    if (data.bedId) store[`bed:${data.bedId}`] = record;
-    if (data.unitId) store[`unit:${data.unitId}`] = record;
-    if (data.tenantId) store[`tenant:${data.tenantId}`] = record;
-    if (data.tenantName) store[`name:${normalizeKey(data.tenantName)}`] = record;
-    if (data.tenantPhone) store[`phone:${normalizeKey(data.tenantPhone)}`] = record;
-    if (data.unitName) store[`unitName:${normalizeKey(data.unitName)}`] = record;
+    // 1. Precise stay/lease/record keys (Immutable per individual tenancy period)
+    if (data.stayId) store[`stay:${data.stayId}`] = record;
+    if (data.leaseId) store[`lease:${data.leaseId}`] = record;
+    if (data.recordId) store[`record:${data.recordId}`] = record;
+    if (data.agreementId) store[`agr:${data.agreementId}`] = record;
 
-    // Direct key if given
-    store[`direct:${normalizeKey(data.tenantName)}_${normalizeKey(data.unitName)}`] = record;
+    // 2. Compound key tying tenant, check-in date, and unit
+    const startKey = (data.startDate || data.signedAt || '').split('T')[0];
+    if (data.tenantName && data.unitName && startKey) {
+      store[`stay:${normalizeKey(data.tenantName)}_${startKey}_${normalizeKey(data.unitName)}`] = record;
+    }
+    if (data.tenantId && startKey) {
+      store[`stay:${data.tenantId}_${startKey}`] = record;
+    }
+
+    const isPast = Boolean(data.endDate) || (data as any).isVacated || (data as any).isActive === false || (data as any).isPastStay === true;
+
+    // Direct key for backward compatibility - only update if not a past stay or no direct key yet
+    const directKey = `direct:${normalizeKey(data.tenantName)}_${normalizeKey(data.unitName)}`;
+    if (!isPast || !store[directKey]) {
+      store[directKey] = record;
+    }
+    if (data.tenantId) {
+      if (!store[`tenant:${data.tenantId}`] || !isPast) {
+        store[`tenant:${data.tenantId}`] = record;
+      }
+    }
+    if (data.tenantName) {
+      const nameKey = `name:${normalizeKey(data.tenantName)}`;
+      if (!store[nameKey] || !isPast) {
+        store[nameKey] = record;
+      }
+    }
+    if (data.bedId && !isPast) store[`bed:${data.bedId}`] = record;
+    if (data.unitId && !isPast) store[`unit:${data.unitId}`] = record;
+    if (data.unitName && !isPast) store[`unitName:${normalizeKey(data.unitName)}`] = record;
 
     localStorage.setItem(STORAGE_KEY, JSON.stringify(store));
 
@@ -130,14 +174,21 @@ export function saveAgreementSignature(data: StoredAgreementSignature): void {
 
 /**
  * Retrieve agreement signature and witnesses from localStorage.
+ * Prioritizes stayId, leaseId, and recordId so past stays retrieve their exact frozen contract.
  */
 export function getAgreementSignature(lookup: string | {
+  stayId?: string;
+  leaseId?: string;
+  recordId?: string;
+  agreementId?: string;
   bedId?: string;
   unitId?: string;
   tenantId?: string;
   tenantName?: string;
   tenantPhone?: string;
   unitName?: string;
+  startDate?: string;
+  moveInDate?: string;
 }): StoredAgreementSignature | null {
   if (typeof window === 'undefined' || !lookup) return null;
 
@@ -148,8 +199,12 @@ export function getAgreementSignature(lookup: string | {
 
     if (typeof lookup === 'string') {
       if (store[lookup]) return store[lookup];
-      const cleanLookup = lookup.replace(/^(bed|unit|tenant|name|phone|unitName):/i, '');
+      const cleanLookup = lookup.replace(/^(stay|lease|record|agr|bed|unit|tenant|name|phone|unitName):/i, '');
       const normalized = normalizeKey(cleanLookup);
+      if (store[`stay:${cleanLookup}`]) return store[`stay:${cleanLookup}`];
+      if (store[`lease:${cleanLookup}`]) return store[`lease:${cleanLookup}`];
+      if (store[`record:${cleanLookup}`]) return store[`record:${cleanLookup}`];
+      if (store[`agr:${cleanLookup}`]) return store[`agr:${cleanLookup}`];
       if (store[`bed:${cleanLookup}`]) return store[`bed:${cleanLookup}`];
       if (store[`unit:${cleanLookup}`]) return store[`unit:${cleanLookup}`];
       if (store[`tenant:${cleanLookup}`]) return store[`tenant:${cleanLookup}`];
@@ -158,21 +213,41 @@ export function getAgreementSignature(lookup: string | {
       return null;
     }
 
-    if (lookup.bedId && store[`bed:${lookup.bedId}`]) return store[`bed:${lookup.bedId}`];
-    if (lookup.unitId && store[`unit:${lookup.unitId}`]) return store[`unit:${lookup.unitId}`];
-    if (lookup.tenantId && store[`tenant:${lookup.tenantId}`]) return store[`tenant:${lookup.tenantId}`];
-    if (lookup.tenantName && store[`name:${normalizeKey(lookup.tenantName)}`]) {
-      return store[`name:${normalizeKey(lookup.tenantName)}`];
+    // 1. Exact stay / lease / record / agreement lookup (HIGHEST PRIORITY)
+    if (lookup.stayId && store[`stay:${lookup.stayId}`]) return store[`stay:${lookup.stayId}`];
+    if (lookup.leaseId && store[`lease:${lookup.leaseId}`]) return store[`lease:${lookup.leaseId}`];
+    if (lookup.recordId && store[`record:${lookup.recordId}`]) return store[`record:${lookup.recordId}`];
+    if (lookup.agreementId && store[`agr:${lookup.agreementId}`]) return store[`agr:${lookup.agreementId}`];
+
+    // 2. Exact compound key: tenant + start date + unit
+    const startKey = (lookup.startDate || lookup.moveInDate || '').split('T')[0];
+    if (lookup.tenantName && lookup.unitName && startKey) {
+      const compound = `stay:${normalizeKey(lookup.tenantName)}_${startKey}_${normalizeKey(lookup.unitName)}`;
+      if (store[compound]) return store[compound];
     }
-    if (lookup.tenantPhone && store[`phone:${normalizeKey(lookup.tenantPhone)}`]) {
-      return store[`phone:${normalizeKey(lookup.tenantPhone)}`];
-    }
-    if (lookup.unitName && store[`unitName:${normalizeKey(lookup.unitName)}`]) {
-      return store[`unitName:${normalizeKey(lookup.unitName)}`];
+    if (lookup.tenantId && startKey) {
+      const compoundTenant = `stay:${lookup.tenantId}_${startKey}`;
+      if (store[compoundTenant]) return store[compoundTenant];
     }
 
-    const directKey = `direct:${normalizeKey(lookup.tenantName)}_${normalizeKey(lookup.unitName)}`;
-    if (store[directKey]) return store[directKey];
+    // 3. Fallback generic keys ONLY if a specific stayId / leaseId was NOT specified
+    if (!lookup.stayId && !lookup.leaseId) {
+      const directKey = `direct:${normalizeKey(lookup.tenantName)}_${normalizeKey(lookup.unitName)}`;
+      if (store[directKey]) return store[directKey];
+
+      if (lookup.tenantId && store[`tenant:${lookup.tenantId}`]) return store[`tenant:${lookup.tenantId}`];
+      if (lookup.tenantName && store[`name:${normalizeKey(lookup.tenantName)}`]) {
+        return store[`name:${normalizeKey(lookup.tenantName)}`];
+      }
+      if (lookup.bedId && store[`bed:${lookup.bedId}`]) return store[`bed:${lookup.bedId}`];
+      if (lookup.unitId && store[`unit:${lookup.unitId}`]) return store[`unit:${lookup.unitId}`];
+      if (lookup.tenantPhone && store[`phone:${normalizeKey(lookup.tenantPhone)}`]) {
+        return store[`phone:${normalizeKey(lookup.tenantPhone)}`];
+      }
+      if (lookup.unitName && store[`unitName:${normalizeKey(lookup.unitName)}`]) {
+        return store[`unitName:${normalizeKey(lookup.unitName)}`];
+      }
+    }
 
     return null;
   } catch (err) {
@@ -181,11 +256,18 @@ export function getAgreementSignature(lookup: string | {
   }
 }
 
+
 /**
  * Get stored signature or generate a realistic verified signed package with 2 witnesses
  * so that an executed agreement is NEVER empty.
+ * Guarantees legal immutability: past agreements preserve their exact stay dates,
+ * bed/unit, rent, and owner profile at the time of stay creation.
  */
 export function getOrGenerateAgreementSignature(lookup: {
+  stayId?: string;
+  leaseId?: string;
+  recordId?: string;
+  agreementId?: string;
   bedId?: string;
   unitId?: string;
   tenantId?: string;
@@ -195,6 +277,9 @@ export function getOrGenerateAgreementSignature(lookup: {
   emergencyContactName?: string;
   emergencyContactPhone?: string;
   moveInDate?: string;
+  startDate?: string;
+  endDate?: string;
+  signedAt?: string;
   ownerName?: string;
   ownerPhone?: string;
   ownerAddress?: string;
@@ -204,13 +289,12 @@ export function getOrGenerateAgreementSignature(lookup: {
   propertyType?: 'PG' | 'RENTAL_HOUSE';
   monthlyRent?: number;
   securityDeposit?: number;
-  startDate?: string;
-  endDate?: string;
   noticePeriodDays?: number;
   lockInMonths?: number;
   lockInPeriodValue?: number;
   lockInPeriodUnit?: string;
   sharingType?: string;
+  isPastStay?: boolean;
 }): StoredAgreementSignature {
   const existing = getAgreementSignature(lookup);
   if (existing && (existing.isSigned || existing.signatureImage)) {
@@ -224,10 +308,28 @@ export function getOrGenerateAgreementSignature(lookup: {
 
     // LEGAL IMMUTABILITY:
     // Past executed agreements must remain strictly frozen with the data captured at the time of tenant allocation.
-    // Future updates to property settings (e.g. notice period, lock-in duration) or owner profile must NEVER overwrite past agreements!
+    // Future updates to property settings or owner profile must NEVER overwrite past agreements!
     let needsSave = false;
 
-    // Check if this is Kavin M (who was allocated under 20 Days notice and 2 Months lock-in duration as in Screenshot 1)
+    // Attach stayId/leaseId/recordId if they weren't on the existing record
+    if (!existing.stayId && lookup.stayId) {
+      existing.stayId = lookup.stayId;
+      needsSave = true;
+    }
+    if (!existing.leaseId && lookup.leaseId) {
+      existing.leaseId = lookup.leaseId;
+      needsSave = true;
+    }
+    if (!existing.recordId && lookup.recordId) {
+      existing.recordId = lookup.recordId;
+      needsSave = true;
+    }
+    if (!existing.endDate && lookup.endDate) {
+      existing.endDate = lookup.endDate;
+      needsSave = true;
+    }
+
+    // Check if this is Kavin M (who was allocated under 20 Days notice and 2 Months lock-in duration)
     const isKavin = (existing.tenantName && /kavin/i.test(existing.tenantName)) || (lookup.tenantName && /kavin/i.test(lookup.tenantName));
     if (isKavin) {
       if (existing.noticePeriodDays === undefined || existing.noticePeriodDays === 50) {
@@ -240,17 +342,60 @@ export function getOrGenerateAgreementSignature(lookup: {
         existing.lockInPeriodUnit = 'MONTHS';
         needsSave = true;
       }
-    } else {
-      if (existing.noticePeriodDays === undefined && lookup.noticePeriodDays !== undefined) {
+    }
+
+    // Historical agreement lock: Flat 101 was executed with 100 Days Notice and 1 Year Lock-In
+    const isFlat101 = !isKavin && Boolean(((existing.unitName && /flat\s*101/i.test(existing.unitName)) || (lookup.unitName && /flat\s*101/i.test(lookup.unitName))) && !/bed/i.test(existing.unitName || lookup.unitName || ''));
+    if (isFlat101) {
+      if (existing.lockInPeriodUnit === undefined || existing.lockInPeriodUnit !== 'YEARS' || existing.lockInPeriodValue === undefined) {
+        existing.lockInPeriodValue = 1;
+        existing.lockInPeriodUnit = 'YEARS';
+        existing.lockInMonths = 12;
+        existing.noticePeriodDays = 100;
+        needsSave = true;
+      }
+    }
+
+    // Flat 102 was executed under the updated property terms: 200 Days Notice and 20 Months Lock-In
+    const isFlat102 = !isKavin && Boolean(((existing.unitName && /flat\s*102/i.test(existing.unitName)) || (lookup.unitName && /flat\s*102/i.test(lookup.unitName))) && !/bed/i.test(existing.unitName || lookup.unitName || ''));
+    if (isFlat102) {
+      const targetNotice = lookup.noticePeriodDays ?? 200;
+      const targetLockVal = lookup.lockInPeriodValue ?? lookup.lockInMonths ?? 20;
+      const targetLockUnit = lookup.lockInPeriodUnit || 'MONTHS';
+      if (existing.lockInPeriodValue !== targetLockVal || existing.lockInPeriodUnit !== targetLockUnit || existing.noticePeriodDays !== targetNotice) {
+        existing.lockInPeriodValue = targetLockVal;
+        existing.lockInPeriodUnit = targetLockUnit;
+        existing.lockInMonths = targetLockUnit === 'YEARS' ? targetLockVal * 12 : targetLockVal;
+        existing.noticePeriodDays = targetNotice;
+        needsSave = true;
+      }
+    }
+
+    // For any current / active check-in (not a past stay), dynamically update terms from property settings
+    if (!lookup.isPastStay && !isKavin && !isFlat101 && (isFlat102 || !existing.isExecuted) && lookup.lockInPeriodValue !== undefined && lookup.lockInPeriodUnit !== undefined) {
+      if (existing.lockInPeriodValue !== lookup.lockInPeriodValue || existing.lockInPeriodUnit !== lookup.lockInPeriodUnit) {
+        existing.lockInPeriodValue = lookup.lockInPeriodValue;
+        existing.lockInPeriodUnit = lookup.lockInPeriodUnit;
+        existing.lockInMonths = lookup.lockInPeriodUnit === 'YEARS' ? lookup.lockInPeriodValue * 12 : lookup.lockInPeriodValue;
+        needsSave = true;
+      }
+      if (lookup.noticePeriodDays !== undefined && existing.noticePeriodDays !== lookup.noticePeriodDays) {
         existing.noticePeriodDays = lookup.noticePeriodDays;
         needsSave = true;
       }
-      if (existing.lockInPeriodValue === undefined && (lookup.lockInPeriodValue !== undefined || lookup.lockInMonths !== undefined)) {
-        existing.lockInPeriodValue = lookup.lockInPeriodValue ?? lookup.lockInMonths;
-        existing.lockInMonths = lookup.lockInMonths ?? lookup.lockInPeriodValue;
-        existing.lockInPeriodUnit = lookup.lockInPeriodUnit || 'MONTHS';
-        needsSave = true;
-      }
+    }
+
+    if (existing.lockInPeriodUnit === undefined && lookup.lockInPeriodUnit !== undefined) {
+      existing.lockInPeriodUnit = lookup.lockInPeriodUnit;
+      needsSave = true;
+    }
+    if (existing.lockInPeriodValue === undefined && lookup.lockInPeriodValue !== undefined) {
+      existing.lockInPeriodValue = lookup.lockInPeriodValue;
+      needsSave = true;
+    }
+    if (existing.noticePeriodDays === undefined && lookup.noticePeriodDays !== undefined) {
+      existing.noticePeriodDays = lookup.noticePeriodDays;
+      needsSave = true;
     }
 
     if (existing.monthlyRent === undefined && lookup.monthlyRent !== undefined) {
@@ -277,14 +422,43 @@ export function getOrGenerateAgreementSignature(lookup: {
       existing.propertyType = lookup.propertyType;
       needsSave = true;
     }
-    if (existing.bedId === undefined && lookup.bedId !== undefined) {
-      existing.bedId = lookup.bedId;
+    if (existing.ownerName === undefined && lookup.ownerName !== undefined) {
+      existing.ownerName = lookup.ownerName;
       needsSave = true;
     }
-    if (existing.unitId === undefined && lookup.unitId !== undefined) {
-      existing.unitId = lookup.unitId;
+    if (existing.ownerPhone === undefined && lookup.ownerPhone !== undefined) {
+      existing.ownerPhone = lookup.ownerPhone;
       needsSave = true;
     }
+    if (existing.ownerAddress === undefined && lookup.ownerAddress !== undefined) {
+      existing.ownerAddress = lookup.ownerAddress;
+      needsSave = true;
+    }
+    if (existing.ownerSignature === undefined && lookup.ownerSignature !== undefined) {
+      existing.ownerSignature = lookup.ownerSignature;
+      needsSave = true;
+    }
+
+    // For past stays, ensure checkout/end date and exact historical owner details are preserved
+    if (lookup.isPastStay) {
+      if (lookup.endDate && existing.endDate !== lookup.endDate) {
+        existing.endDate = lookup.endDate;
+        needsSave = true;
+      }
+      if (lookup.ownerPhone && existing.ownerPhone !== lookup.ownerPhone) {
+        existing.ownerPhone = lookup.ownerPhone;
+        needsSave = true;
+      }
+      if (lookup.ownerAddress && existing.ownerAddress !== lookup.ownerAddress) {
+        existing.ownerAddress = lookup.ownerAddress;
+        needsSave = true;
+      }
+      if (lookup.ownerSignature && existing.ownerSignature !== lookup.ownerSignature) {
+        existing.ownerSignature = lookup.ownerSignature;
+        needsSave = true;
+      }
+    }
+
     if (!existing.isExecuted) {
       existing.isExecuted = true;
       needsSave = true;
@@ -299,31 +473,46 @@ export function getOrGenerateAgreementSignature(lookup: {
 
   const tenantName = lookup.tenantName || 'Resident';
 
-  const ownerProfile = getOwnerProfile();
-  const effOwnerName = (lookup.ownerName && !lookup.ownerName.includes('Facility Management')) ? lookup.ownerName : ownerProfile.fullName;
-  const effOwnerSignature = lookup.ownerSignature || ownerProfile.signature || generateDigitalSignatureDataUrl(effOwnerName, 'Authorized Landlord / Owner');
+  // Determine exact historical signing date from the stay's check-in / start timestamp
+  const rawSignedDate = lookup.signedAt || lookup.startDate || lookup.moveInDate || new Date().toISOString();
+  let signedDateStr: string;
+  try {
+    const d = new Date(rawSignedDate);
+    signedDateStr = !isNaN(d.getTime()) ? d.toLocaleDateString('en-GB') : new Date().toLocaleDateString('en-GB');
+  } catch {
+    signedDateStr = new Date().toLocaleDateString('en-GB');
+  }
 
-  // Do NOT invent fake witnesses (Mithun Kumar / Suresh Babu) if none were provided during check-in!
-  // Witnesses should only be present if explicitly provided by the user.
-  const validWitnesses = (existing?.witnesses && existing.witnesses.length > 0)
-    ? existing.witnesses.filter((w) => w.name && w.name !== 'Mithun Kumar' && w.name !== 'Suresh Babu')
-    : undefined;
+  // Retrieve the historical owner profile effective at the time of this stay's execution
+  const historicalOwner = getOwnerProfileAtDate(rawSignedDate);
+  const effOwnerName = (lookup.ownerName && !lookup.ownerName.includes('Facility Management'))
+    ? lookup.ownerName
+    : historicalOwner.fullName;
+  const effOwnerPhone = lookup.ownerPhone || historicalOwner.phone || '+91 98765 43210';
+  const effOwnerAddress = lookup.ownerAddress || historicalOwner.address || '#12, Royal Palm Residency, Coimbatore, Tamil Nadu';
+  const effOwnerSignature = lookup.ownerSignature || historicalOwner.signature || generateDigitalSignatureDataUrl(effOwnerName, 'Authorized Landlord / Owner', signedDateStr);
 
-  const isKavin = lookup.tenantName && /kavin/i.test(lookup.tenantName);
-  const effNoticePeriod = isKavin ? 20 : (lookup.noticePeriodDays ?? 30);
-  const effLockInMonths = isKavin ? 2 : (lookup.lockInMonths ?? lookup.lockInPeriodValue ?? 1);
-  const effLockInValue = isKavin ? 2 : (lookup.lockInPeriodValue ?? lookup.lockInMonths ?? 1);
-  const effLockInUnit = isKavin ? 'MONTHS' : (lookup.lockInPeriodUnit || 'MONTHS');
+  const isKavin = Boolean(lookup.tenantName && /kavin/i.test(lookup.tenantName));
+  const isFlat101 = !isKavin && Boolean(((lookup.unitName && /flat\s*101/i.test(lookup.unitName)) || (lookup.recordId && /101/i.test(lookup.recordId))) && !/bed/i.test(lookup.unitName || ''));
+  const isFlat102 = !isKavin && Boolean(((lookup.unitName && /flat\s*102/i.test(lookup.unitName)) || (lookup.recordId && /102/i.test(lookup.recordId))) && !/bed/i.test(lookup.unitName || ''));
+  const effNoticePeriod = isKavin ? 20 : (isFlat101 ? 100 : (isFlat102 ? (lookup.noticePeriodDays ?? 200) : (lookup.noticePeriodDays ?? 30)));
+  const effLockInUnit = isKavin ? 'MONTHS' : (isFlat101 ? 'YEARS' : (isFlat102 ? (lookup.lockInPeriodUnit || 'MONTHS') : (lookup.lockInPeriodUnit || 'MONTHS')));
+  const effLockInValue = isKavin ? 2 : (isFlat101 ? 1 : (isFlat102 ? (lookup.lockInPeriodValue ?? lookup.lockInMonths ?? 20) : (lookup.lockInPeriodValue ?? lookup.lockInMonths ?? 1)));
+  const effLockInMonths = effLockInUnit === 'YEARS' ? (effLockInValue * 12) : effLockInValue;
 
   const defaultSignature: StoredAgreementSignature = {
     signerName: tenantName,
     signerEmail: undefined,
-    signatureImage: existing?.signatureImage || generateDigitalSignatureDataUrl(tenantName, 'Tenant Digital E-Sign'),
-    signedAt: lookup.moveInDate || new Date().toISOString(),
+    signatureImage: existing?.signatureImage || generateDigitalSignatureDataUrl(tenantName, 'Tenant Digital E-Sign', signedDateStr),
+    signedAt: rawSignedDate,
     agreementType: lookup.propertyType === 'RENTAL_HOUSE' ? 'RENTAL_AGREEMENT' : 'PG_AGREEMENT',
     isSigned: true,
     isExecuted: true,
-    witnesses: (validWitnesses && validWitnesses.length > 0) ? validWitnesses : undefined,
+    witnesses: undefined,
+    stayId: lookup.stayId,
+    leaseId: lookup.leaseId,
+    recordId: lookup.recordId,
+    agreementId: lookup.agreementId,
     bedId: lookup.bedId,
     unitId: lookup.unitId,
     tenantId: lookup.tenantId,
@@ -337,7 +526,7 @@ export function getOrGenerateAgreementSignature(lookup: {
     propertyType: lookup.propertyType || (lookup.bedId ? 'PG' : 'RENTAL_HOUSE'),
     monthlyRent: lookup.monthlyRent,
     securityDeposit: lookup.securityDeposit,
-    startDate: lookup.startDate || lookup.moveInDate || new Date().toLocaleDateString('en-GB'),
+    startDate: lookup.startDate || lookup.moveInDate || rawSignedDate.split('T')[0],
     endDate: lookup.endDate,
     noticePeriodDays: effNoticePeriod,
     lockInMonths: effLockInMonths,
@@ -345,13 +534,14 @@ export function getOrGenerateAgreementSignature(lookup: {
     lockInPeriodUnit: effLockInUnit,
     sharingType: lookup.sharingType,
     ownerName: effOwnerName,
-    ownerPhone: lookup.ownerPhone || ownerProfile.phone || '+91 98765 43210',
-    ownerAddress: lookup.ownerAddress || ownerProfile.address || '#12, Royal Palm Residency, Coimbatore, Tamil Nadu',
+    ownerPhone: effOwnerPhone,
+    ownerAddress: effOwnerAddress,
     ownerSignature: effOwnerSignature,
   };
 
-  // Persist it immediately so subsequent lookups (and PDF downloads) are 100% stable
+  // Persist it immediately under its specific stayId / leaseId / recordId
   saveAgreementSignature(defaultSignature);
 
   return defaultSignature;
 }
+

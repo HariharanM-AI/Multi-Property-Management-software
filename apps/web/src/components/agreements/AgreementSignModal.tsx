@@ -699,6 +699,53 @@ export function AgreementSignModal({
         return `${String(end.getDate()).padStart(2, '0')}/${String(end.getMonth() + 1).padStart(2, '0')}/${end.getFullYear()}`;
       })();
 
+  const tenancyPeriodLabel = (() => {
+    const sDate = agreementData.startDate ? new Date(agreementData.startDate) : new Date();
+    let eDate: Date;
+    if (agreementData.endDate) {
+      eDate = new Date(agreementData.endDate);
+    } else {
+      eDate = new Date(sDate);
+      eDate.setMonth(eDate.getMonth() + 11);
+      eDate.setDate(eDate.getDate() - 1);
+    }
+
+    if (isNaN(sDate.getTime()) || isNaN(eDate.getTime())) {
+      return '11 Months';
+    }
+
+    const diffMs = eDate.getTime() - sDate.getTime();
+    const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24));
+
+    if (diffDays >= 325 && diffDays <= 345) {
+      return '11 Months';
+    }
+    if (diffDays >= 360 && diffDays <= 366) {
+      return '12 Months (1 Year)';
+    }
+
+    const startYear = sDate.getFullYear();
+    const startMonth = sDate.getMonth();
+    const startDay = sDate.getDate();
+
+    const endYear = eDate.getFullYear();
+    const endMonth = eDate.getMonth();
+    const endDay = eDate.getDate();
+
+    const totalMonths = (endYear - startYear) * 12 + (endMonth - startMonth);
+    const adjustedMonths = (endDay >= startDay - 2) ? totalMonths : totalMonths - 1;
+
+    if (adjustedMonths === 11) return '11 Months';
+    if (adjustedMonths === 12) return '12 Months (1 Year)';
+    if (adjustedMonths > 12 && adjustedMonths % 12 === 0) {
+      const yrs = adjustedMonths / 12;
+      return `${yrs} ${yrs === 1 ? 'Year' : 'Years'}`;
+    }
+    if (adjustedMonths > 0) return `${adjustedMonths} Months`;
+    if (diffDays > 0) return `${diffDays} Days`;
+    return '11 Months';
+  })();
+
   // ID Proof Extraction
   const rawId = agreementData.tenantAadhaar || '5489-3231-3231';
   const isPan = /PAN/i.test(rawId);
@@ -946,7 +993,7 @@ export function AgreementSignModal({
                           <span className="font-bold">{formattedStartDate}</span>
                         ) : (
                           <span>
-                            11 Months (Commencing: <strong className="font-black">{formattedStartDate}</strong> to{' '}
+                            {tenancyPeriodLabel} (Commencing: <strong className="font-black">{formattedStartDate}</strong> to{' '}
                             <strong className="font-black">{formattedEndDate}</strong>)
                           </span>
                         )}

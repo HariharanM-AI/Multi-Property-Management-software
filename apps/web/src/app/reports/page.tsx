@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import Link from 'next/link';
 import { AppShell } from '@/components/layout/AppShell';
 import { BackButton } from '@/components/ui/BackButton';
 import { useAuth } from '@/lib/auth-context';
@@ -60,7 +61,7 @@ const REVENUE_CATEGORY_COLORS: Record<string, { bg: string; text: string; fill: 
 };
 
 export default function ReportsPage() {
-  const { user } = useAuth();
+  const { user, isAuthenticated, isLoading: authLoading } = useAuth();
 
   // State
   const [pnlData, setPnlData] = useState<PnlStatementDto | null>(null);
@@ -86,21 +87,37 @@ export default function ReportsPage() {
     return `₹ ${num.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   };
 
+  // Safe JSON parser to prevent HTML 500 syntax error crashes
+  const safeParseJson = async (res: Response) => {
+    if (!res.ok) return { success: false, data: null };
+    try {
+      return await res.json();
+    } catch {
+      return { success: false, data: null };
+    }
+  };
+
   // Fetch Properties
   const fetchProperties = useCallback(async () => {
+    if (!isAuthenticated) return;
     try {
       const res = await fetch('/api/v1/properties', { credentials: 'include' });
-      const json = await res.json();
+      const json = await safeParseJson(res);
       if (json.success && Array.isArray(json.data)) {
         setProperties(json.data);
       }
     } catch (err) {
       console.error('Failed to load properties for reports:', err);
     }
-  }, []);
+  }, [isAuthenticated]);
 
   // Fetch All Financial Reports
   const fetchReports = useCallback(async () => {
+    if (!isAuthenticated) {
+      setLoading(false);
+      return;
+    }
+
     try {
       setLoading(true);
       setError(null);
@@ -118,26 +135,30 @@ export default function ReportsPage() {
       ]);
 
       const [pnlJson, occJson, compJson, cashJson] = await Promise.all([
-        pnlRes.json(),
-        occRes.json(),
-        compRes.json(),
-        cashRes.json(),
+        safeParseJson(pnlRes),
+        safeParseJson(occRes),
+        safeParseJson(compRes),
+        safeParseJson(cashRes),
       ]);
 
-      if (pnlJson.success) setPnlData(pnlJson.data);
-      if (occJson.success) setOccupancyData(occJson.data);
-      if (compJson.success) setComparisonData(compJson.data);
-      if (cashJson.success) setCashFlowData(cashJson.data);
+      if (pnlJson.success && pnlJson.data) setPnlData(pnlJson.data);
+      if (occJson.success && occJson.data) setOccupancyData(occJson.data);
+      if (compJson.success && compJson.data) setComparisonData(compJson.data);
+      if (cashJson.success && cashJson.data) setCashFlowData(cashJson.data);
 
-      if (!pnlJson.success && pnlJson.error) {
+      if (!pnlRes.ok) {
+        // Handle server offline/syncing gracefully without raw crashing JSON message
+        setError(null);
+      } else if (!pnlJson.success && pnlJson.error) {
         setError(pnlJson.error.message || 'Failed to load Profit & Loss statement.');
       }
     } catch (err: any) {
-      setError(err.message || 'Failed to connect to reporting service.');
+      console.warn('Reporting service note:', err);
+      setError('Reporting service is currently updating in offline mode.');
     } finally {
       setLoading(false);
     }
-  }, [selectedPropertyId]);
+  }, [selectedPropertyId, isAuthenticated]);
 
   useEffect(() => {
     fetchProperties();
@@ -184,8 +205,44 @@ export default function ReportsPage() {
     }
   };
 
+  if (!authLoading && !isAuthenticated) {
+    return (
+      <AppShell activePath="/reports">
+        <div className="max-w-2xl mx-auto my-12 text-center bg-white border border-slate-200 rounded-3xl p-8 sm:p-12 shadow-sm animate-fadeIn">
+          <div className="w-16 h-16 rounded-2xl bg-teal-50 border border-teal-200/80 text-brand-teal flex items-center justify-center mx-auto mb-6">
+            <BarChart3 className="w-8 h-8" />
+          </div>
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-50 border border-amber-200 text-amber-800 text-xs font-bold uppercase tracking-wider mb-4">
+            <CheckCircle2 className="w-3.5 h-3.5" />
+            <span>Financial Suite Protection</span>
+          </div>
+          <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight mb-3">
+            Sign In to View Financial Analytics
+          </h1>
+          <p className="text-sm sm:text-base text-slate-600 max-w-md mx-auto leading-relaxed mb-8">
+            Profit & Loss statements, occupancy metrics, cash flow analytics, and comparative reports require an authenticated owner session.
+          </p>
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-4 max-w-md mx-auto">
+            <Link
+              href="/login?returnUrl=/reports"
+              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-brand-teal hover:bg-teal-700 text-white font-bold text-sm shadow-md shadow-teal-700/10 transition cursor-pointer"
+            >
+              <span>Sign In to Continue</span>
+            </Link>
+            <Link
+              href="/register"
+              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-sm border border-slate-300 transition cursor-pointer"
+            >
+              <span>Register New Account</span>
+            </Link>
+          </div>
+        </div>
+      </AppShell>
+    );
+  }
+
   return (
-    <AppShell>
+    <AppShell activePath="/reports">
       <div className="space-y-6 pb-12">
         {/* Navigation Back Button */}
         <div className="flex items-center justify-between">

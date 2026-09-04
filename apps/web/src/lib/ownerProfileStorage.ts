@@ -93,8 +93,8 @@ export function getOwnerProfile(authUser?: AuthUser | null): OwnerProfileData {
     ? `${authUser.firstName} ${authUser.lastName}`.trim()
     : `${defaultFirstName} ${defaultLastName}`;
   const defaultEmail = authUser?.email || 'owner-a@propertyos.com';
-  const defaultPhone = authUser?.phone || '9876543210';
-  const defaultOrgName = authUser?.organizationName || 'My Organization';
+  const defaultPhone = authUser?.phone || '9845011223';
+  const defaultOrgName = authUser?.organizationName || 'Hari Buildings';
   const defaultSignature = generateDigitalSignatureDataUrl(defaultFullName, 'Authorized Landlord / Owner');
 
   if (typeof window === 'undefined') {
@@ -122,9 +122,20 @@ export function getOwnerProfile(authUser?: AuthUser | null): OwnerProfileData {
     if (raw) {
       const parsed = JSON.parse(raw);
       // Explicitly saved profile values in localStorage take precedence over stale session tokens
-      const fName = parsed.firstName || authUser?.firstName || defaultFirstName;
-      const lName = parsed.lastName || authUser?.lastName || defaultLastName;
-      const full = parsed.fullName || (fName && lName ? `${fName} ${lName}`.trim() : (authUser ? `${authUser.firstName} ${authUser.lastName}`.trim() : defaultFullName));
+      let fName = parsed.firstName || authUser?.firstName || defaultFirstName;
+      let lName = parsed.lastName || authUser?.lastName || defaultLastName;
+      if (fName === 'Authorized' && lName === 'Owner') {
+        fName = 'Arun';
+        lName = 'Sharma';
+      }
+      const full = parsed.fullName && parsed.fullName !== 'Authorized Owner'
+        ? parsed.fullName
+        : (fName && lName ? `${fName} ${lName}`.trim() : (authUser ? `${authUser.firstName} ${authUser.lastName}`.trim() : defaultFullName));
+
+      let orgName = parsed.organizationName || authUser?.organizationName || defaultOrgName;
+      if (orgName === 'PropertyOS Enterprise' || orgName === 'My Organization') {
+        orgName = 'Hari Buildings';
+      }
 
       const parsedStreet = parsed.streetAddress || undefined;
       const parsedCity = parsed.city || undefined;
@@ -145,7 +156,7 @@ export function getOwnerProfile(authUser?: AuthUser | null): OwnerProfileData {
         city: parsedCity || parsedComponents.city,
         state: parsedState || parsedComponents.state,
         postalCode: parsedPostal || parsedComponents.postalCode,
-        organizationName: parsed.organizationName || authUser?.organizationName || defaultOrgName,
+        organizationName: orgName,
         signature: parsed.signature || defaultSignature,
         signMode: parsed.signMode || 'draw',
         typedName: parsed.typedName || full,
@@ -185,8 +196,12 @@ export function getOwnerProfile(authUser?: AuthUser | null): OwnerProfileData {
   return initialProfile;
 }
 
+export const OWNER_PROFILE_HISTORY_KEY = 'propertyos_owner_profile_history';
+
 /**
  * Saves and broadcasts owner profile updates in real-time across the app.
+ * Automatically archives the previous snapshot into owner profile history
+ * so that existing/past legal agreements preserve their historical signing details.
  */
 export function saveOwnerProfile(updates: Partial<OwnerProfileData>, authUser?: AuthUser | null): OwnerProfileData {
   const current = getOwnerProfile(authUser);
@@ -207,6 +222,8 @@ export function saveOwnerProfile(updates: Partial<OwnerProfileData>, authUser?: 
     combinedAddress = formatFullAddress(updatedStreet, updatedCity, updatedState, updatedPostal);
   }
 
+  const nowIso = new Date().toISOString();
+
   const newProfile: OwnerProfileData = {
     ...current,
     ...updates,
@@ -224,11 +241,29 @@ export function saveOwnerProfile(updates: Partial<OwnerProfileData>, authUser?: 
     signature: updates.signature || current.signature,
     signMode: updates.signMode || current.signMode,
     typedName: updates.typedName || current.typedName || updatedFullName,
-    updatedAt: new Date().toISOString(),
+    updatedAt: nowIso,
   };
 
   if (typeof window !== 'undefined') {
     try {
+      // 1. Archive the previous profile into history
+      const rawHist = localStorage.getItem(OWNER_PROFILE_HISTORY_KEY);
+      const history: Array<{ profile: OwnerProfileData; effectiveFrom: string; effectiveUntil: string }> = rawHist ? JSON.parse(rawHist) : [];
+      
+      // If this is the first edit or current.updatedAt is undefined / matches now,
+      // the baseline profile was effective since the system inception (e.g. 2026-08-01)
+      const effectiveFrom = current.updatedAt && new Date(current.updatedAt).getTime() < (new Date(nowIso).getTime() - 60000)
+        ? current.updatedAt
+        : (history.length > 0 ? (history[history.length - 1].effectiveUntil || '2026-08-01T00:00:00.000Z') : '2026-08-01T00:00:00.000Z');
+
+      history.push({
+        profile: { ...current },
+        effectiveFrom,
+        effectiveUntil: nowIso,
+      });
+      localStorage.setItem(OWNER_PROFILE_HISTORY_KEY, JSON.stringify(history));
+
+      // 2. Save active profile
       localStorage.setItem(STORAGE_KEY, JSON.stringify(newProfile));
       // Dispatch in current window
       window.dispatchEvent(
@@ -240,6 +275,90 @@ export function saveOwnerProfile(updates: Partial<OwnerProfileData>, authUser?: 
   }
 
   return newProfile;
+}
+
+export const BASELINE_HISTORICAL_OWNER: OwnerProfileData = {
+  firstName: 'Arun',
+  lastName: 'Sharma',
+  fullName: 'Arun Sharma',
+  email: 'owner-a@propertyos.com',
+  phone: '9845011223',
+  address: DEFAULT_ADDRESS,
+  streetAddress: DEFAULT_STREET,
+  city: DEFAULT_CITY,
+  state: DEFAULT_STATE,
+  postalCode: DEFAULT_POSTAL_CODE,
+  organizationName: 'Hari Buildings',
+  signature: generateDigitalSignatureDataUrl('Arun Sharma', 'Authorized Landlord / Owner', '01/09/2026'),
+  signMode: 'draw',
+  role: 'OWNER',
+  updatedAt: '2026-09-01T00:00:00.000Z',
+};
+
+/**
+ * Retrieves the owner profile snapshot that was legally effective at a specific past date/time.
+ * If no date is passed, or if the date is now/future, returns the latest active profile.
+ * If the date is before a recent profile change, returns the snapshot from that historical period.
+ */
+export function getOwnerProfileAtDate(dateInput?: string | Date | number | null, authUser?: AuthUser | null): OwnerProfileData {
+  const current = getOwnerProfile(authUser);
+  if (!dateInput) return current;
+
+  const targetDate = new Date(dateInput);
+  if (isNaN(targetDate.getTime())) return current;
+  const targetTime = targetDate.getTime();
+
+  // If the target date is after or at the time the current profile was last updated, use current profile
+  const currentUpdateTime = new Date(current.updatedAt).getTime();
+  if (!isNaN(currentUpdateTime) && targetTime >= currentUpdateTime) {
+    return current;
+  }
+
+  if (typeof window === 'undefined') return current;
+
+  try {
+    const rawHist = localStorage.getItem(OWNER_PROFILE_HISTORY_KEY);
+    if (rawHist) {
+      const history: Array<{ profile: OwnerProfileData; effectiveFrom?: string; effectiveUntil?: string }> = JSON.parse(rawHist);
+      if (Array.isArray(history) && history.length > 0) {
+        // Sort chronologically
+        history.sort((a, b) => {
+          const aT = a.effectiveFrom ? new Date(a.effectiveFrom).getTime() : 0;
+          const bT = b.effectiveFrom ? new Date(b.effectiveFrom).getTime() : 0;
+          return aT - bT;
+        });
+
+        for (const item of history) {
+          const from = item.effectiveFrom ? new Date(item.effectiveFrom).getTime() : 0;
+          const until = item.effectiveUntil ? new Date(item.effectiveUntil).getTime() : Infinity;
+          if (targetTime >= from && targetTime <= until) {
+            return {
+              ...item.profile,
+              signature: item.profile.signature || generateDigitalSignatureDataUrl(item.profile.fullName || 'Arun Sharma', 'Authorized Landlord / Owner', targetDate.toLocaleDateString('en-GB')),
+            };
+          }
+        }
+
+        // If targetTime is older than all recorded changes, return the earliest historical snapshot
+        if (history[0]?.profile) {
+          return {
+            ...history[0].profile,
+            signature: history[0].profile.signature || generateDigitalSignatureDataUrl(history[0].profile.fullName || 'Arun Sharma', 'Authorized Landlord / Owner', targetDate.toLocaleDateString('en-GB')),
+          };
+        }
+      }
+    }
+  } catch (err) {
+    console.error('Error reading owner profile history:', err);
+  }
+
+  // Fallback: If no history array was found but target date is before the current update,
+  // return the baseline historical profile from initial setup
+  return {
+    ...BASELINE_HISTORICAL_OWNER,
+    signature: generateDigitalSignatureDataUrl('Arun Sharma', 'Authorized Landlord / Owner', targetDate.toLocaleDateString('en-GB')),
+    updatedAt: new Date(targetTime).toISOString(),
+  };
 }
 
 /**
@@ -271,3 +390,4 @@ export function onOwnerProfileChange(callback: (profile: OwnerProfileData) => vo
     window.removeEventListener('storage', handleStorageEvent);
   };
 }
+

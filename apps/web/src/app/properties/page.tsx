@@ -68,7 +68,7 @@ export default function PropertiesListPage() {
     try {
       const queryParams = new URLSearchParams();
       queryParams.set('page', currentPage.toString());
-      queryParams.set('pageSize', '9');
+      queryParams.set('pageSize', '12');
 
       if (searchTerm.trim()) {
         queryParams.set('search', searchTerm.trim());

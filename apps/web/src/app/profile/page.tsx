@@ -36,11 +36,12 @@ import {
   ExternalLink,
   User,
   RotateCcw,
+  Lock,
 } from 'lucide-react';
 import Link from 'next/link';
 
 export default function OwnerProfilePage() {
-  const { user, organization, updateProfile, refreshUser } = useAuth();
+  const { user, organization, updateProfile, refreshUser, isAuthenticated, isLoading } = useAuth();
 
   const [profile, setProfile] = useState<OwnerProfileData>(() => getOwnerProfile(user));
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -74,9 +75,11 @@ export default function OwnerProfilePage() {
 
   const [mounted, setMounted] = useState(false);
 
-  // Synchronize profile with storage and real-time events
+  // Synchronize profile with storage and real-time events only when authenticated
   useEffect(() => {
     setMounted(true);
+    if (!isAuthenticated) return;
+
     setProfile(getOwnerProfile(user));
 
     const unsubscribe = onOwnerProfileChange((updated) => {
@@ -84,10 +87,11 @@ export default function OwnerProfilePage() {
     });
 
     return () => unsubscribe();
-  }, [user]);
+  }, [user, isAuthenticated]);
 
   // Handle opening edit profile modal
   const handleOpenEditModal = () => {
+    if (!isAuthenticated) return;
     const current = getOwnerProfile(user);
     setEditFirstName(current.firstName);
     setEditLastName(current.lastName);
@@ -387,6 +391,43 @@ export default function OwnerProfilePage() {
     }
   };
 
+  if (!isLoading && !isAuthenticated) {
+    return (
+      <AppShell activePath="/profile">
+        <div className="max-w-3xl mx-auto my-12 text-center bg-white border border-slate-200 rounded-3xl p-8 sm:p-12 shadow-sm animate-fadeIn">
+          <div className="w-16 h-16 rounded-2xl bg-teal-50 border border-teal-200/80 text-brand-teal flex items-center justify-center mx-auto mb-6">
+            <Lock className="w-8 h-8" />
+          </div>
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-50 border border-amber-200 text-amber-800 text-xs font-bold uppercase tracking-wider mb-4">
+            <ShieldCheck className="w-3.5 h-3.5" />
+            <span>DPDP Privacy Restricted</span>
+          </div>
+          <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight mb-3">
+            Landlord Profile Restricted
+          </h1>
+          <p className="text-sm sm:text-base text-slate-600 max-w-lg mx-auto leading-relaxed mb-8">
+            Landlord personal details, verified addresses, and legal digital signatures are confidential. Please sign in to your owner account or register to manage your profile.
+          </p>
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-4 max-w-md mx-auto">
+            <Link
+              href="/login?returnUrl=/profile"
+              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-brand-teal hover:bg-teal-700 text-white font-bold text-sm shadow-md shadow-teal-700/10 transition"
+            >
+              <User className="w-4 h-4" />
+              <span>Sign In as Landlord</span>
+            </Link>
+            <Link
+              href="/register"
+              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-sm border border-slate-300 transition"
+            >
+              <span>Register New Entity</span>
+            </Link>
+          </div>
+        </div>
+      </AppShell>
+    );
+  }
+
   return (
     <AppShell activePath="/profile">
       <div className="max-w-6xl mx-auto space-y-8 pb-16">
@@ -510,7 +551,6 @@ export default function OwnerProfilePage() {
 
           <div className="bg-slate-50/70 border-2 border-dashed border-slate-300/80 rounded-2xl p-8 flex flex-col items-center justify-center min-h-[170px] relative">
             {profile.signature ? (
-              // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={profile.signature}
                 alt="Landlord Digital Signature"

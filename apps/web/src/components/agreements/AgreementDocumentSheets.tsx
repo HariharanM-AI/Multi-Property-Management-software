@@ -73,9 +73,63 @@ export function AgreementDocumentSheets({
 
   const formattedStartDate = formatAgreementDate(agreementData.startDate || rawDateToUse);
 
-  const formattedEndDate = agreementData.endDate
-    ? formatAgreementDate(agreementData.endDate)
-    : formatAgreementDate(new Date(execDate.getTime() + 334 * 24 * 60 * 60 * 1000));
+  const formattedEndDate = (() => {
+    if (agreementData.endDate) {
+      return formatAgreementDate(agreementData.endDate);
+    }
+    const start = agreementData.startDate ? new Date(agreementData.startDate) : execDate;
+    const end = new Date(start);
+    end.setMonth(end.getMonth() + 11);
+    end.setDate(end.getDate() - 1);
+    return formatAgreementDate(end);
+  })();
+
+  const tenancyPeriodLabel = (() => {
+    const sDate = agreementData.startDate ? new Date(agreementData.startDate) : execDate;
+    let eDate: Date;
+    if (agreementData.endDate) {
+      eDate = new Date(agreementData.endDate);
+    } else {
+      eDate = new Date(sDate);
+      eDate.setMonth(eDate.getMonth() + 11);
+      eDate.setDate(eDate.getDate() - 1);
+    }
+
+    if (isNaN(sDate.getTime()) || isNaN(eDate.getTime())) {
+      return '11 Months';
+    }
+
+    const diffMs = eDate.getTime() - sDate.getTime();
+    const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24));
+
+    if (diffDays >= 325 && diffDays <= 345) {
+      return '11 Months';
+    }
+    if (diffDays >= 360 && diffDays <= 366) {
+      return '12 Months (1 Year)';
+    }
+
+    const startYear = sDate.getFullYear();
+    const startMonth = sDate.getMonth();
+    const startDay = sDate.getDate();
+
+    const endYear = eDate.getFullYear();
+    const endMonth = eDate.getMonth();
+    const endDay = eDate.getDate();
+
+    const totalMonths = (endYear - startYear) * 12 + (endMonth - startMonth);
+    const adjustedMonths = (endDay >= startDay - 2) ? totalMonths : totalMonths - 1;
+
+    if (adjustedMonths === 11) return '11 Months';
+    if (adjustedMonths === 12) return '12 Months (1 Year)';
+    if (adjustedMonths > 12 && adjustedMonths % 12 === 0) {
+      const yrs = adjustedMonths / 12;
+      return `${yrs} ${yrs === 1 ? 'Year' : 'Years'}`;
+    }
+    if (adjustedMonths > 0) return `${adjustedMonths} Months`;
+    if (diffDays > 0) return `${diffDays} Days`;
+    return '11 Months';
+  })();
 
   const getWitnessDateDisplay = (wDate?: string) => {
     if (!wDate) return executedDateFormatted;
@@ -313,10 +367,19 @@ export function AgreementDocumentSheets({
                   </td>
                   <td className="p-2.5 sm:p-3 text-slate-950">
                     {isPG ? (
-                      <span className="font-bold">{formattedStartDate}</span>
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span className="font-bold">{formattedStartDate}</span>
+                        {agreementData.endDate ? (
+                          <span className="text-slate-700 font-semibold">
+                            (Checked Out / Vacated: <strong className="font-black text-slate-950">{formatAgreementDate(agreementData.endDate)}</strong>)
+                          </span>
+                        ) : (
+                          <span className="text-emerald-700 font-bold text-xs bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">Active Tenancy</span>
+                        )}
+                      </div>
                     ) : (
                       <span>
-                        11 Months (Commencing: <strong className="font-black">{formattedStartDate}</strong> to{' '}
+                        {tenancyPeriodLabel} (Commencing: <strong className="font-black">{formattedStartDate}</strong> to{' '}
                         <strong className="font-black">{formattedEndDate}</strong>)
                       </span>
                     )}
@@ -554,7 +617,7 @@ export function AgreementDocumentSheets({
                   </div>
                 ) : (
                   <img
-                    src={generateDigitalSignatureDataUrl(ownerDisplayName, 'Owner Verified E-Sign')}
+                    src={generateDigitalSignatureDataUrl(ownerDisplayName, 'Owner Verified E-Sign', executedDateFormatted)}
                     alt="Owner Signature"
                     className="max-h-16 sm:max-h-20 max-w-full object-contain"
                   />

@@ -181,7 +181,13 @@ export class AgreementsService {
         skip,
         take: limit,
         orderBy: { createdAt: 'desc' },
-        include: { signatures: true },
+        include: {
+          tenant: true,
+          property: true,
+          lease: { include: { rentalUnit: true } },
+          checkIn: { include: { bed: true } },
+          signatures: true,
+        },
       }),
       this.prisma.agreement.count({ where }),
     ]);

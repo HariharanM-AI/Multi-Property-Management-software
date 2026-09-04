@@ -186,17 +186,29 @@ export default function CheckoutsPage() {
     setWizardError(null);
   };
 
+  const broadcastTenancyEvent = () => {
+    try {
+      const bc = new BroadcastChannel('propertyos_realtime_events');
+      bc.postMessage({ type: 'TENANCY_CHANGED', timestamp: Date.now() });
+      bc.close();
+    } catch {}
+    try {
+      localStorage.setItem('propertyos_last_tenancy_event', String(Date.now()));
+      window.dispatchEvent(new CustomEvent('propertyos_tenancy_event'));
+    } catch {}
+  };
+
   const handleInitiateCheckout = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!wizardPropertyId || !wizardTenantId || !wizardCheckoutDate) {
-      setWizardError('Please fill in all required fields');
+    if (!wizardTenantId) {
+      setWizardError('Please select a tenant');
       return;
     }
 
     setWizardLoading(true);
     setWizardError(null);
     try {
-      const res = await fetch(`/api/v1/properties/${wizardPropertyId}/checkouts`, {
+      const res = await fetch('/api/v1/checkouts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -214,6 +226,7 @@ export default function CheckoutsPage() {
 
       setActionMessage('Checkout initiated successfully with draft settlement calculated!');
       setIsWizardOpen(false);
+      broadcastTenancyEvent();
       fetchInitialData();
     } catch (err: any) {
       setWizardError(err.message || 'Error initiating checkout');
@@ -256,6 +269,7 @@ export default function CheckoutsPage() {
         throw new Error(data.message || data.error?.message || 'Failed to complete checkout');
       }
       setActionMessage('Checkout successfully completed! Occupancy released and settlement finalized.');
+      broadcastTenancyEvent();
       fetchInitialData();
     } catch (err: any) {
       alert(err.message || 'Error completing checkout');
@@ -281,6 +295,7 @@ export default function CheckoutsPage() {
         throw new Error(data.message || data.error?.message || 'Failed to cancel checkout');
       }
       setActionMessage('Checkout was cancelled successfully.');
+      broadcastTenancyEvent();
       fetchInitialData();
     } catch (err: any) {
       alert(err.message || 'Error cancelling checkout');

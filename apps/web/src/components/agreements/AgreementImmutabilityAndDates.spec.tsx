@@ -392,5 +392,178 @@ describe('Agreement Dates Consistency & Legal Immutability Suite', () => {
       expect(newUpcomingAgreement.lockInPeriodValue).toBe(1);
       expect(newUpcomingAgreement.lockInPeriodUnit).toBe('YEARS');
     });
+
+    it('should keep past agreement frozen with historical owner details when owner updates profile later, while new agreements get updated details', () => {
+      // 1. Yesterday's check-in for Kavin M (04 Sept 2026) under initial baseline owner
+      const yesterdayStay = getOrGenerateAgreementSignature({
+        stayId: 'stay-kavin-yesterday',
+        tenantId: 'tenant-kavin',
+        tenantName: 'Kavin M',
+        tenantPhone: '+91 98765 43210',
+        unitName: 'Bed 102-B',
+        startDate: '2026-09-04',
+        endDate: '2026-09-04',
+        signedAt: '2026-09-04T05:20:00.000Z',
+        isPastStay: true,
+      });
+
+      expect(yesterdayStay.ownerName).toBe('Arun Sharma');
+      expect(yesterdayStay.ownerPhone).toBe('9845011223');
+      expect(yesterdayStay.ownerAddress).toContain('Indiranagar, Bengaluru');
+      expect(yesterdayStay.startDate).toBe('2026-09-04');
+      expect(yesterdayStay.endDate).toBe('2026-09-04');
+
+      // 2. Later, Landlord updates profile in /profile
+      saveOwnerProfile({
+        phone: '+91 9845011999',
+        streetAddress: '#99, Tech Corridor, Whitefield',
+        city: 'Bengaluru',
+        state: 'Karnataka',
+        postalCode: '560066',
+      });
+
+      // 3. Re-opening yesterday's agreement MUST strictly preserve the historical owner phone & address
+      const reopenedYesterdayAgreement = getOrGenerateAgreementSignature({
+        stayId: 'stay-kavin-yesterday',
+        tenantId: 'tenant-kavin',
+        tenantName: 'Kavin M',
+        startDate: '2026-09-04',
+        endDate: '2026-09-04',
+        isPastStay: true,
+      });
+
+      expect(reopenedYesterdayAgreement.ownerPhone).toBe('9845011223');
+      expect(reopenedYesterdayAgreement.ownerAddress).toContain('Indiranagar');
+      expect(reopenedYesterdayAgreement.ownerAddress).not.toContain('Whitefield');
+
+      // 4. Rendered HTML for yesterday's agreement shows checked-out status and original details
+      const pastHtml = renderToStaticMarkup(
+        <AgreementDocumentSheets
+          agreementData={{
+            tenantName: 'Kavin M',
+            tenantPhone: '+91 98765 43210',
+            ownerName: reopenedYesterdayAgreement.ownerName,
+            ownerPhone: reopenedYesterdayAgreement.ownerPhone,
+            ownerAddress: reopenedYesterdayAgreement.ownerAddress,
+            propertyName: 'Test PG',
+            unitOrBedName: 'Bed 102-B',
+            propertyType: 'PG',
+            monthlyRent: 10000,
+            securityDeposit: 20000,
+            startDate: '2026-09-04',
+            endDate: '2026-09-04',
+            signedAt: '2026-09-04T05:20:00.000Z',
+          }}
+        />
+      );
+
+      expect(pastHtml).toContain('04/09/2026');
+      expect(pastHtml).toContain('(Checked Out / Vacated:');
+      expect(pastHtml).not.toContain('Active Tenancy');
+
+      // 5. Creating a brand new agreement (today or future) DOES receive the updated owner details (+91 9845011999)
+      const newTodayAgreement = getOrGenerateAgreementSignature({
+        stayId: 'stay-new-tenant-today',
+        tenantId: 'tenant-new',
+        tenantName: 'Anand Kumar',
+        tenantPhone: '+91 97777 88888',
+        unitName: 'Bed 201-A',
+        startDate: '2026-09-05',
+        signedAt: new Date().toISOString(),
+        isPastStay: false,
+      });
+
+      expect(newTodayAgreement.ownerPhone).toBe('+91 9845011999');
+      expect(newTodayAgreement.ownerAddress).toContain('Whitefield');
+
+      // 6. Rendered HTML for new agreement displays 'Active Tenancy'
+      const newHtml = renderToStaticMarkup(
+        <AgreementDocumentSheets
+          agreementData={{
+            tenantName: 'Anand Kumar',
+            tenantPhone: '+91 97777 88888',
+            ownerName: newTodayAgreement.ownerName,
+            ownerPhone: newTodayAgreement.ownerPhone,
+            ownerAddress: newTodayAgreement.ownerAddress,
+            propertyName: 'Test PG',
+            unitOrBedName: 'Bed 201-A',
+            propertyType: 'PG',
+            monthlyRent: 10000,
+            securityDeposit: 20000,
+            startDate: '2026-09-05',
+            signedAt: new Date().toISOString(),
+          }}
+        />
+      );
+
+      expect(newHtml).toContain('Active Tenancy');
+      expect(newHtml).not.toContain('Checked Out / Vacated');
+    });
+
+    it('should cleanly isolate past check-in records from newly checked-in records for the same tenant', () => {
+      // Past Stay (1 year ago)
+      const pastStayId = 'stay-kavin-2025-past';
+      const pastCheckIn = '2025-09-04T10:00:00.000Z';
+      const pastCheckOut = '2025-12-04T18:00:00.000Z';
+
+      const pastSig = getOrGenerateAgreementSignature({
+        stayId: pastStayId,
+        tenantId: 'tenant-kavin-id',
+        tenantName: 'Kavin M',
+        tenantPhone: '+91 73395 27453',
+        unitName: 'Bed 102-B',
+        propertyName: 'Test PG',
+        propertyType: 'PG',
+        monthlyRent: 8000,
+        securityDeposit: 16000,
+        startDate: '2025-09-04',
+        moveInDate: '2025-09-04',
+        endDate: pastCheckOut,
+        signedAt: pastCheckIn,
+        isPastStay: true,
+      });
+
+      expect(pastSig.monthlyRent).toBe(8000);
+      expect(pastSig.startDate).toBe('2025-09-04');
+      expect(pastSig.endDate).toBe(pastCheckOut);
+
+      // Now tenant re-checks in 1 year later (current active stay)
+      const newActiveStayId = 'stay-kavin-2026-active';
+      const newCheckIn = '2026-09-05T00:12:00.000Z';
+
+      const activeSig = getOrGenerateAgreementSignature({
+        stayId: newActiveStayId,
+        tenantId: 'tenant-kavin-id',
+        tenantName: 'Kavin M',
+        tenantPhone: '+91 73395 27453',
+        unitName: 'Bed 102-B',
+        propertyName: 'Test PG',
+        propertyType: 'PG',
+        monthlyRent: 10000,
+        securityDeposit: 20000,
+        startDate: '2026-09-05',
+        moveInDate: '2026-09-05',
+        signedAt: newCheckIn,
+        isPastStay: false,
+      });
+
+      expect(activeSig.monthlyRent).toBe(10000);
+      expect(activeSig.startDate).toBe('2026-09-05');
+      expect(activeSig.endDate).toBeUndefined();
+
+      // Retrieve past stay again: it must remain 100% frozen with 2025 data!
+      const reFetchedPast = getAgreementSignature({ stayId: pastStayId });
+      expect(reFetchedPast).not.toBeNull();
+      expect(reFetchedPast?.monthlyRent).toBe(8000);
+      expect(reFetchedPast?.startDate).toBe('2025-09-04');
+      expect(reFetchedPast?.endDate).toBe(pastCheckOut);
+
+      // Retrieve active stay again: must have current 2026 data!
+      const reFetchedActive = getAgreementSignature({ stayId: newActiveStayId });
+      expect(reFetchedActive).not.toBeNull();
+      expect(reFetchedActive?.monthlyRent).toBe(10000);
+      expect(reFetchedActive?.startDate).toBe('2026-09-05');
+      expect(reFetchedActive?.endDate).toBeUndefined();
+    });
   });
 });

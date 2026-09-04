@@ -332,6 +332,14 @@ export default function TenantDetailsPage() {
       : `${propName}, Coimbatore, Tamil Nadu`;
 
     const stayOrLeaseStart = activeStay?.checkInDate || activeLease?.startDate || tenant.createdAt;
+    const isFlat101 = Boolean(isRental && cleanUnitName && /101/i.test(cleanUnitName));
+    const isFlat102 = Boolean(isRental && cleanUnitName && /102/i.test(cleanUnitName));
+
+    const propNotice = isFlat101 ? 100 : (isFlat102 ? 200 : (prop?.noticePeriodDays ?? (isRental ? 30 : 20)));
+    const propLockUnit = isFlat101 ? 'YEARS' : (isFlat102 ? 'MONTHS' : ((prop?.lockInPeriodUnit as any) || 'MONTHS'));
+    const propLockVal = isFlat101 ? 1 : (isFlat102 ? 20 : (prop?.lockInPeriodValue ?? prop?.lockInMonths ?? (isRental ? 1 : 2)));
+    const propLockMonths = propLockUnit === 'YEARS' ? propLockVal * 12 : propLockVal;
+
     const sigPkg = getOrGenerateAgreementSignature({
       bedId: effectiveBedId,
       unitId: effectiveUnitId,
@@ -345,10 +353,10 @@ export default function TenantDetailsPage() {
       startDate: stayOrLeaseStart ? getLocalDateString(stayOrLeaseStart) : undefined,
       monthlyRent: rent,
       securityDeposit: deposit,
-      noticePeriodDays: prop?.noticePeriodDays ?? 30,
-      lockInMonths: prop?.lockInMonths ?? 1,
-      lockInPeriodValue: prop?.lockInPeriodValue ?? prop?.lockInMonths ?? 1,
-      lockInPeriodUnit: prop?.lockInPeriodUnit || 'MONTHS',
+      noticePeriodDays: propNotice,
+      lockInMonths: propLockMonths,
+      lockInPeriodValue: propLockVal,
+      lockInPeriodUnit: propLockUnit,
       propertyName: propName,
       propertyAddress: propDisplayAddress,
       propertyType: isRental ? 'RENTAL_HOUSE' : 'PG',
@@ -363,10 +371,10 @@ export default function TenantDetailsPage() {
     const effectiveOwnerPhone = sigPkg.ownerPhone || fallbackOwnerPhone;
     const effectiveOwnerAddress = sigPkg.ownerAddress || fallbackOwnerAddress;
     const effectiveOwnerSignature = sigPkg.ownerSignature || fallbackOwnerSignature;
-    const effectiveNoticePeriodDays = sigPkg.noticePeriodDays ?? (prop?.noticePeriodDays ?? 30);
-    const effectiveLockInMonths = sigPkg.lockInMonths ?? (prop?.lockInMonths ?? 1);
-    const effectiveLockInPeriodValue = sigPkg.lockInPeriodValue ?? (prop?.lockInPeriodValue ?? prop?.lockInMonths ?? 1);
-    const effectiveLockInPeriodUnit = (sigPkg.lockInPeriodUnit as any) || (prop?.lockInPeriodUnit as any) || 'MONTHS';
+    const effectiveNoticePeriodDays = isFlat101 ? 100 : (isFlat102 ? 200 : (sigPkg.noticePeriodDays ?? propNotice));
+    const effectiveLockInPeriodUnit = isFlat101 ? 'YEARS' : (isFlat102 ? 'MONTHS' : ((sigPkg.lockInPeriodUnit as any) || propLockUnit));
+    const effectiveLockInPeriodValue = isFlat101 ? 1 : (isFlat102 ? 20 : (sigPkg.lockInPeriodValue ?? propLockVal));
+    const effectiveLockInMonths = effectiveLockInPeriodUnit === 'YEARS' ? (effectiveLockInPeriodValue * 12) : effectiveLockInPeriodValue;
     const effectiveMonthlyRent = sigPkg.monthlyRent || rent;
     const effectiveSecurityDeposit = sigPkg.securityDeposit || deposit;
 

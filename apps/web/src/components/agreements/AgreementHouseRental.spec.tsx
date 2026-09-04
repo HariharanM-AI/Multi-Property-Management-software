@@ -238,4 +238,40 @@ describe('House Rental Model Agreement & Flow Verification', () => {
     const htmlSingleDay = renderToStaticMarkup(<AgreementDocumentSheets agreementData={singleDayData} />);
     expect(htmlSingleDay).toContain('1</span> Day fixed duration');
   });
+
+  it('should accurately calculate statutory 11 Months Tenancy Period (Commencing 05/09/2026 to 04/08/2027) and display 20 Months lock-in', () => {
+    const flat102Data = {
+      tenantName: 'Hari M',
+      tenantPhone: '+91 98765 43231',
+      propertyName: 'Hari Homes',
+      unitOrBedName: 'Flat 102',
+      propertyType: 'RENTAL_HOUSE' as const,
+      monthlyRent: 3000,
+      securityDeposit: 6000,
+      startDate: '2026-09-05',
+      endDate: '2027-08-04',
+      noticePeriodDays: 200,
+      lockInPeriodValue: 20,
+      lockInPeriodUnit: 'MONTHS',
+    };
+
+    const html = renderToStaticMarkup(<AgreementDocumentSheets agreementData={flat102Data} />);
+
+    // Row 9: Agreement Tenancy Period
+    expect(html).toContain('9. Agreement Tenancy Period:');
+    expect(html).toContain('11 Months (Commencing:');
+    expect(html).toContain('05/09/2026');
+    expect(html).toContain('04/08/2027');
+    // Must NOT say 05/09/2027 (which would be 12 months/1 full year)
+    expect(html).not.toContain('05/09/2027');
+
+    // Row 10: Notice Period Required
+    expect(html).toContain('10. Notice Period Required:');
+    expect(html).toContain('200</span> Days standard written/verbal notice from either side');
+
+    // Row 11: Stay / Lock-In Bracket
+    expect(html).toContain('11. Stay / Lock-In Bracket:');
+    expect(html).toContain('20</span> Months fixed duration');
+  });
 });
+

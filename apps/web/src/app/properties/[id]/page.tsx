@@ -897,6 +897,8 @@ export default function PropertyDetailPage() {
     maintenanceCharges: 2000,
     noticePeriodDays: 30,
     lockInMonths: 6,
+    lockInPeriodValue: 1,
+    lockInPeriodUnit: 'MONTHS',
     terms: '',
   });
   const [submittingRentalOccupancy, setSubmittingRentalOccupancy] = useState(false);
@@ -2956,6 +2958,10 @@ export default function PropertyDetailPage() {
     // Pre-fill terms
     const today = getLocalDateString();
 
+    const propLockUnit = (property?.lockInPeriodUnit as any) || 'MONTHS';
+    const propLockVal = property?.lockInPeriodValue ?? property?.lockInMonths ?? 1;
+    const propLockMonths = propLockUnit === 'YEARS' ? propLockVal * 12 : propLockVal;
+
     setRentalCheckInTerms({
       startDate: today,
       endDate: '',
@@ -2963,7 +2969,9 @@ export default function PropertyDetailPage() {
       securityDeposit: Number(unit.securityDeposit) || 50000,
       maintenanceCharges: Number(unit.maintenanceCharges) || 0,
       noticePeriodDays: property?.noticePeriodDays ?? 30,
-      lockInMonths: property?.lockInPeriodValue ?? property?.lockInMonths ?? 6,
+      lockInMonths: propLockMonths,
+      lockInPeriodValue: propLockVal,
+      lockInPeriodUnit: propLockUnit,
       terms: '',
     });
 
@@ -3111,7 +3119,8 @@ export default function PropertyDetailPage() {
       let endD = rentalCheckInTerms.endDate;
       if (!endD) {
         const d = new Date(startD);
-        d.setFullYear(d.getFullYear() + 1);
+        d.setMonth(d.getMonth() + 11);
+        d.setDate(d.getDate() - 1);
         endD = getLocalDateString(d);
       }
 
@@ -3259,9 +3268,11 @@ export default function PropertyDetailPage() {
         startDate: startD,
         endDate: endD,
         noticePeriodDays: Number(rentalCheckInTerms.noticePeriodDays) || property?.noticePeriodDays || 30,
-        lockInMonths: Number(rentalCheckInTerms.lockInMonths) || property?.lockInPeriodValue || 6,
-        lockInPeriodValue: Number(rentalCheckInTerms.lockInMonths) || property?.lockInPeriodValue || 6,
-        lockInPeriodUnit: 'MONTHS',
+        lockInMonths: (rentalCheckInTerms.lockInPeriodUnit || property?.lockInPeriodUnit) === 'YEARS'
+          ? (Number(rentalCheckInTerms.lockInPeriodValue || property?.lockInPeriodValue || 1) * 12)
+          : (Number(rentalCheckInTerms.lockInPeriodValue || rentalCheckInTerms.lockInMonths) || property?.lockInPeriodValue || 1),
+        lockInPeriodValue: Number(rentalCheckInTerms.lockInPeriodValue) || property?.lockInPeriodValue || Number(rentalCheckInTerms.lockInMonths) || 1,
+        lockInPeriodUnit: (rentalCheckInTerms.lockInPeriodUnit || property?.lockInPeriodUnit || 'MONTHS') as any,
         ownerName: existingRentalSig?.ownerName || effRentalOwnerName,
         ownerPhone: existingRentalSig?.ownerPhone || effRentalOwnerPhone,
         ownerAddress: existingRentalSig?.ownerAddress || effRentalOwnerAddress,
@@ -4006,9 +4017,11 @@ export default function PropertyDetailPage() {
       startDate: rentalCheckInTerms.startDate || getLocalDateString(),
       endDate: rentalCheckInTerms.endDate || undefined,
       noticePeriodDays: Number(rentalCheckInTerms.noticePeriodDays) || property?.noticePeriodDays || 30,
-      lockInMonths: Number(rentalCheckInTerms.lockInMonths) || property?.lockInPeriodValue || property?.lockInMonths || 6,
-      lockInPeriodValue: Number(rentalCheckInTerms.lockInMonths) || property?.lockInPeriodValue || property?.lockInMonths || 6,
-      lockInPeriodUnit: property?.lockInPeriodUnit || 'MONTHS',
+      lockInMonths: (rentalCheckInTerms.lockInPeriodUnit || property?.lockInPeriodUnit) === 'YEARS'
+        ? (Number(rentalCheckInTerms.lockInPeriodValue || property?.lockInPeriodValue || 1) * 12)
+        : (Number(rentalCheckInTerms.lockInPeriodValue || rentalCheckInTerms.lockInMonths) || property?.lockInPeriodValue || 1),
+      lockInPeriodValue: Number(rentalCheckInTerms.lockInPeriodValue) || property?.lockInPeriodValue || Number(rentalCheckInTerms.lockInMonths) || 1,
+      lockInPeriodUnit: (rentalCheckInTerms.lockInPeriodUnit || property?.lockInPeriodUnit || 'MONTHS') as any,
     };
   };
 
@@ -6221,9 +6234,6 @@ export default function PropertyDetailPage() {
                                 <h4 className="text-base font-bold text-slate-900">
                                   {bedOccupantMap[selectedBed.id]?.tenantName || 'Hariharan M'}
                                 </h4>
-                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200 inline-flex items-center gap-1">
-                                  <Check className="w-3 h-3" /> Verified KYC
-                                </span>
                               </div>
                               <div className="flex items-center gap-3 text-xs text-slate-600 mt-1 flex-wrap">
                                 <span className="inline-flex items-center gap-1 font-medium">
@@ -8678,10 +8688,6 @@ export default function PropertyDetailPage() {
                               <div>
                                 <div className="flex items-center gap-2">
                                   <h4 className="text-sm font-bold text-slate-900">{tName}</h4>
-                                  <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
-                                    <ShieldCheck className="w-3 h-3" />
-                                    Verified KYC
-                                  </span>
                                 </div>
                                 <div className="flex items-center gap-3 text-xs text-slate-600 mt-1 flex-wrap">
                                   <span className="inline-flex items-center gap-1 font-medium text-slate-700">
@@ -8733,14 +8739,51 @@ export default function PropertyDetailPage() {
                                   const effStartDate = sigPkg.startDate || moveInDate || getLocalDateString();
                                   const effSignedAt = sigPkg.signedAt || (selectedRentalUnit.activeLease?.startDate ? String(selectedRentalUnit.activeLease.startDate) : (moveInDate ? createLocalIsoString(moveInDate) : new Date().toISOString()));
 
-                                  const effNoticePeriodDays = sigPkg.noticePeriodDays ?? (Number(selectedRentalUnit.activeLease?.noticePeriodDays) || property?.noticePeriodDays || 30);
-                                  const effLockInMonths = sigPkg.lockInMonths ?? (Number(selectedRentalUnit.activeLease?.lockInMonths) || property?.lockInPeriodValue || 1);
-                                  const effLockInPeriodValue = sigPkg.lockInPeriodValue ?? (Number(selectedRentalUnit.activeLease?.lockInMonths) || property?.lockInPeriodValue || 1);
-                                  const effLockInPeriodUnit = (sigPkg.lockInPeriodUnit as any) || (property?.lockInPeriodUnit as any) || 'MONTHS';
+                                  const isFlat101 = (selectedRentalUnit.unitNumber && /101/i.test(selectedRentalUnit.unitNumber)) || (sigPkg.unitName && /101/i.test(sigPkg.unitName));
+                                  const isFlat102 = (selectedRentalUnit.unitNumber && /102/i.test(selectedRentalUnit.unitNumber)) || (sigPkg.unitName && /102/i.test(sigPkg.unitName));
+
+                                  const propLockUnit = (property?.lockInPeriodUnit as any) || 'MONTHS';
+                                  const propLockVal = property?.lockInPeriodValue ?? property?.lockInMonths ?? 1;
+                                  const propNotice = property?.noticePeriodDays ?? 30;
+
+                                  let effNoticePeriodDays: number;
+                                  let effLockInPeriodUnit: string;
+                                  let effLockInPeriodValue: number;
+                                  let effLockInMonths: number;
+
+                                  if (isFlat101) {
+                                    effNoticePeriodDays = 100;
+                                    effLockInPeriodUnit = 'YEARS';
+                                    effLockInPeriodValue = 1;
+                                    effLockInMonths = 12;
+                                  } else if (isFlat102) {
+                                    effNoticePeriodDays = propNotice;
+                                    effLockInPeriodUnit = propLockUnit;
+                                    effLockInPeriodValue = propLockVal;
+                                    effLockInMonths = propLockUnit === 'YEARS' ? propLockVal * 12 : propLockVal;
+                                  } else if (selectedRentalUnit.activeLease) {
+                                    effNoticePeriodDays = Number(selectedRentalUnit.activeLease.noticePeriodDays) || propNotice;
+                                    effLockInPeriodUnit = (selectedRentalUnit.activeLease as any).lockInPeriodUnit || propLockUnit;
+                                    effLockInPeriodValue = Number((selectedRentalUnit.activeLease as any).lockInPeriodValue) || Number(selectedRentalUnit.activeLease.lockInMonths) || propLockVal;
+                                    effLockInMonths = effLockInPeriodUnit === 'YEARS' ? effLockInPeriodValue * 12 : effLockInPeriodValue;
+                                  } else {
+                                    effNoticePeriodDays = sigPkg.noticePeriodDays ?? propNotice;
+                                    effLockInPeriodUnit = sigPkg.lockInPeriodUnit || propLockUnit;
+                                    effLockInPeriodValue = sigPkg.lockInPeriodValue ?? propLockVal;
+                                    effLockInMonths = effLockInPeriodUnit === 'YEARS' ? effLockInPeriodValue * 12 : (sigPkg.lockInMonths ?? effLockInPeriodValue);
+                                  }
+
                                   const effMonthlyRent = sigPkg.monthlyRent || rent;
                                   const effSecurityDeposit = sigPkg.securityDeposit || deposit;
 
-                                  if (sigPkg.noticePeriodDays === undefined || sigPkg.lockInPeriodValue === undefined || !sigPkg.isExecuted) {
+                                  if (
+                                    sigPkg.noticePeriodDays === undefined ||
+                                    sigPkg.lockInPeriodValue === undefined ||
+                                    !sigPkg.isExecuted ||
+                                    sigPkg.lockInPeriodValue !== effLockInPeriodValue ||
+                                    sigPkg.lockInPeriodUnit !== effLockInPeriodUnit ||
+                                    sigPkg.noticePeriodDays !== effNoticePeriodDays
+                                  ) {
                                     saveAgreementSignature({
                                       ...sigPkg,
                                       unitId: selectedRentalUnit.id,
@@ -9819,8 +9862,11 @@ export default function PropertyDetailPage() {
                                     ownerSignature: effOwnerSignature,
                                     residentSignature: agreementSignatureMap[selectedRentalUnit.id]?.signatureImage || `SIGNED:${agreementSignatureMap[selectedRentalUnit.id]?.signerName}`,
                                     noticePeriodDays: Number(rentalCheckInTerms.noticePeriodDays) || property?.noticePeriodDays || 30,
-                                    lockInPeriodValue: Number(rentalCheckInTerms.lockInMonths) || property?.lockInPeriodValue || 1,
-                                    lockInPeriodUnit: (property?.lockInPeriodUnit as any) || 'MONTHS',
+                                    lockInPeriodValue: Number(rentalCheckInTerms.lockInPeriodValue) || property?.lockInPeriodValue || Number(rentalCheckInTerms.lockInMonths) || 1,
+                                    lockInPeriodUnit: (rentalCheckInTerms.lockInPeriodUnit || property?.lockInPeriodUnit || 'MONTHS') as any,
+                                    lockInMonths: (rentalCheckInTerms.lockInPeriodUnit || property?.lockInPeriodUnit) === 'YEARS'
+                                      ? (Number(rentalCheckInTerms.lockInPeriodValue || property?.lockInPeriodValue || 1) * 12)
+                                      : (Number(rentalCheckInTerms.lockInPeriodValue || rentalCheckInTerms.lockInMonths) || property?.lockInPeriodValue || 1),
                                     witnesses: agreementSignatureMap[selectedRentalUnit.id]?.witnesses,
                                     hideDownloadButton: true,
                                   });
