@@ -332,18 +332,24 @@ export function getOwnerProfileAtDate(dateInput?: string | Date | number | null,
           const from = item.effectiveFrom ? new Date(item.effectiveFrom).getTime() : 0;
           const until = item.effectiveUntil ? new Date(item.effectiveUntil).getTime() : Infinity;
           if (targetTime >= from && targetTime <= until) {
+            const histSig = item.profile.signature;
+            const isHistDrawn = histSig && (histSig.startsWith('data:image/png') || histSig.startsWith('data:image/jpeg') || histSig.startsWith('data:image/webp') || histSig.startsWith('TYPE:'));
+            const isCurrentDrawn = current.signature && (current.signature.startsWith('data:image/png') || current.signature.startsWith('data:image/jpeg') || current.signature.startsWith('data:image/webp'));
             return {
               ...item.profile,
-              signature: item.profile.signature || generateDigitalSignatureDataUrl(item.profile.fullName || 'Arun Sharma', 'Authorized Landlord / Owner', targetDate.toLocaleDateString('en-GB')),
+              signature: isHistDrawn ? histSig : (isCurrentDrawn ? current.signature : (histSig || generateDigitalSignatureDataUrl(item.profile.fullName || 'Arun Sharma', 'Authorized Landlord / Owner', targetDate.toLocaleDateString('en-GB')))),
             };
           }
         }
 
         // If targetTime is older than all recorded changes, return the earliest historical snapshot
         if (history[0]?.profile) {
+          const histSig = history[0].profile.signature;
+          const isHistDrawn = histSig && (histSig.startsWith('data:image/png') || histSig.startsWith('data:image/jpeg') || histSig.startsWith('data:image/webp') || histSig.startsWith('TYPE:'));
+          const isCurrentDrawn = current.signature && (current.signature.startsWith('data:image/png') || current.signature.startsWith('data:image/jpeg') || current.signature.startsWith('data:image/webp'));
           return {
             ...history[0].profile,
-            signature: history[0].profile.signature || generateDigitalSignatureDataUrl(history[0].profile.fullName || 'Arun Sharma', 'Authorized Landlord / Owner', targetDate.toLocaleDateString('en-GB')),
+            signature: isHistDrawn ? histSig : (isCurrentDrawn ? current.signature : (histSig || generateDigitalSignatureDataUrl(history[0].profile.fullName || 'Arun Sharma', 'Authorized Landlord / Owner', targetDate.toLocaleDateString('en-GB')))),
           };
         }
       }
@@ -353,10 +359,11 @@ export function getOwnerProfileAtDate(dateInput?: string | Date | number | null,
   }
 
   // Fallback: If no history array was found but target date is before the current update,
-  // return the baseline historical profile from initial setup
+  // return the baseline historical profile with real drawn signature if available
+  const isCurrentDrawn = current.signature && (current.signature.startsWith('data:image/png') || current.signature.startsWith('data:image/jpeg') || current.signature.startsWith('data:image/webp'));
   return {
     ...BASELINE_HISTORICAL_OWNER,
-    signature: generateDigitalSignatureDataUrl('Arun Sharma', 'Authorized Landlord / Owner', targetDate.toLocaleDateString('en-GB')),
+    signature: isCurrentDrawn ? current.signature : generateDigitalSignatureDataUrl('Arun Sharma', 'Authorized Landlord / Owner', targetDate.toLocaleDateString('en-GB')),
     updatedAt: new Date(targetTime).toISOString(),
   };
 }

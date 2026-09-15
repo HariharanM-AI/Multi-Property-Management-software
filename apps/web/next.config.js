@@ -2,11 +2,14 @@ const path = require('path');
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  reactStrictMode: true,
+  reactStrictMode: false,
   poweredByHeader: false,
   compress: true,
   outputFileTracingRoot: path.resolve(__dirname, '../../'),
   transpilePackages: ['@propertyos/types', '@propertyos/validation', '@propertyos/config'],
+  experimental: {
+    optimizePackageImports: ['lucide-react', 'recharts'],
+  },
   async rewrites() {
     return [
       {

@@ -45,6 +45,7 @@ export interface AuthResponseData {
   user: AuthUser;
   organization: AuthOrganization;
   message?: string;
+  token?: string;
 }
 
 export interface SessionData {

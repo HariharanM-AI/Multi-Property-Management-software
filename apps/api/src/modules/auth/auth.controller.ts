@@ -71,7 +71,10 @@ export class AuthController {
     const result = await this.authService.registerOwner(body, ip, userAgent);
     this.setSessionCookie(res, result.rawSessionToken);
 
-    return result.data;
+    return {
+      ...result.data,
+      token: result.rawSessionToken,
+    };
   }
 
   @Public()
@@ -90,7 +93,10 @@ export class AuthController {
     const result = await this.authService.login(body, ip, userAgent);
     this.setSessionCookie(res, result.rawSessionToken);
 
-    return result.data;
+    return {
+      ...result.data,
+      token: result.rawSessionToken,
+    };
   }
 
   @Post('logout')

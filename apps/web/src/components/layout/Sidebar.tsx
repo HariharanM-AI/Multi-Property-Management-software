@@ -194,14 +194,14 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentPropertyType, activePat
 
       {/* User / Organization Footer */}
       <div className="p-3.5 border-t border-slate-800 flex items-center gap-3 bg-slate-900/40">
-        <div className="w-8 h-8 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-xs font-bold text-brand-teal shrink-0">
+        <div suppressHydrationWarning className="w-8 h-8 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-xs font-bold text-brand-teal shrink-0">
           {getInitials()}
         </div>
         <div className="flex-1 min-w-0">
-          <p className="text-xs font-semibold text-brand-white truncate">
+          <p suppressHydrationWarning className="text-xs font-semibold text-brand-white truncate">
             {organization?.name || (isAuthenticated ? 'My Organization' : 'PropertyOS Enterprise')}
           </p>
-          <p className="text-[11px] text-slate-400 truncate">
+          <p suppressHydrationWarning className="text-[11px] text-slate-400 truncate">
             {user ? `${user.roles[0] || 'OWNER'} Account` : 'Guest Session'}
           </p>
         </div>

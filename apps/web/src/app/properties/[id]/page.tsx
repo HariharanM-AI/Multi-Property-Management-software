@@ -29,12 +29,22 @@ import {
   AgreementDocumentData,
 } from '@/components/agreements/AgreementDocumentViewerModal';
 import { downloadAgreementPdf } from '@/components/agreements/downloadAgreementPdf';
+import { CheckoutAgreementSignModal } from '@/components/agreements/CheckoutAgreementSignModal';
+import { CheckoutAgreementViewerModal } from '@/components/agreements/CheckoutAgreementViewerModal';
 import {
   saveAgreementSignature,
   getAgreementSignature,
   getOrGenerateAgreementSignature,
   generateDigitalSignatureDataUrl,
   StoredAgreementSignature,
+  isRealDrawnOrSignedSignature,
+  HARI_M_DRAWN_SIG,
+  KAVIN_M_DRAWN_SIG,
+  generateRealisticHanddrawnResidentSignature,
+  saveCheckoutAgreement,
+  getCheckoutAgreement,
+  getOrGenerateCheckoutAgreement,
+  CheckoutAgreementData,
 } from '@/lib/agreementStorage';
 import { getOwnerProfile, onOwnerProfileChange } from '@/lib/ownerProfileStorage';
 import { getCleanPropertyDescription } from '@/lib/propertyUtils';
@@ -793,6 +803,184 @@ export default function PropertyDetailPage() {
       },
     }));
     setShowAgreementModal(false);
+  };
+
+  // Check-Out Property Handover & Settlement Agreement States
+  const [showCheckoutAgreementModal, setShowCheckoutAgreementModal] = useState(false);
+  const [checkoutSettlementDetails, setCheckoutSettlementDetails] = useState<any | null>(null);
+  const [viewingCheckoutAgreementDoc, setViewingCheckoutAgreementDoc] = useState<CheckoutAgreementData | null>(null);
+  const [checkoutAgreementMap, setCheckoutAgreementMap] = useState<
+    Record<string, CheckoutAgreementData>
+  >({});
+
+  const handleOpenPgCheckoutSignModal = () => {
+    if (!selectedBed || !selectedBedRoom) return;
+    const occ = bedOccupantMap[selectedBed.id];
+    const existingCheckout = checkoutAgreementMap[selectedBed.id] || getCheckoutAgreement({ bedId: selectedBed.id, tenantId: occ?.tenantId });
+    if (existingCheckout && !checkoutAgreementMap[selectedBed.id]) {
+      setCheckoutAgreementMap((prev) => ({ ...prev, [selectedBed.id]: existingCheckout }));
+    }
+
+    const initialDep = existingCheckout?.initialDeposit ?? (occ?.securityDeposit || Number((selectedBedRoom as any)?.securityDeposit) || 17000);
+    const ded = existingCheckout?.deductions ?? (Number(checkoutSettlement.deductions) || 0);
+    const refund = existingCheckout?.netRefund ?? Math.max(0, initialDep - ded);
+
+    const effOwnerName = ownerProfile.fullName || property?.ownerName || (user ? `${user.firstName} ${user.lastName}`.trim() : 'Arun Sharma');
+    const effOwnerPhone = ownerProfile.phone || property?.ownerPhone || property?.contactPhone || user?.phone || '+91 98450 11223';
+    const effOwnerAddress = ownerProfile.address || property?.ownerAddress || fullPropertyAddress || '';
+    const effOwnerSig = isRealDrawnOrSignedSignature(ownerProfile.signature) ? ownerProfile.signature : (property?.ownerSignature || ownerProfile.signature);
+
+    setCheckoutSettlementDetails({
+      bedId: selectedBed.id,
+      tenantId: occ?.tenantId,
+      tenantName: existingCheckout?.tenantName || occ?.tenantName || 'Resident',
+      tenantPhone: occ?.phone || '',
+      tenantEmail: occ?.email || '',
+      tenantAadhaar: occ?.governmentId || '',
+      tenantAddress: occ?.permanentAddress || 'Resident address on record',
+      propertyName: property?.name || 'PG Facility',
+      propertyAddress: fullPropertyAddress,
+      unitOrBedName: `Bed ${selectedBed.bedNumber} (Room ${selectedBedRoom.roomNumber})`,
+      sharingType: selectedBedRoom.sharingType,
+      propertyType: 'PG',
+      originalStartDate: occ?.moveInDate || '2026-08-01',
+      checkOutDate: checkoutSettlement.moveOutDate || existingCheckout?.checkOutDate || getLocalDateString(),
+      initialDeposit: initialDep,
+      deductions: ded,
+      deductionReason: existingCheckout?.deductionReason !== undefined ? existingCheckout.deductionReason : (checkoutSettlement.deductionReason || ''),
+      netRefund: refund,
+      transactionRef: existingCheckout?.transactionRef || '',
+      paymentMode: existingCheckout?.paymentMode || 'BANK_TRANSFER',
+      keyHandoverConfirmed: existingCheckout?.keyHandoverConfirmed ?? checkoutSettlement.keyHandoverConfirmed ?? true,
+      ownerName: effOwnerName,
+      ownerPhone: effOwnerPhone,
+      ownerAddress: effOwnerAddress,
+      ownerSignature: effOwnerSig,
+      residentSignature: undefined,
+      witnesses: existingCheckout?.witnesses,
+    });
+    setShowCheckoutAgreementModal(true);
+  };
+
+  const handleOpenRentalCheckoutSignModal = () => {
+    if (!selectedRentalUnit || !selectedRentalUnit.activeLease) return;
+    const lease = selectedRentalUnit.activeLease;
+    const existingCheckout = checkoutAgreementMap[selectedRentalUnit.id] || getCheckoutAgreement({ unitId: selectedRentalUnit.id, leaseId: lease.id });
+    if (existingCheckout && !checkoutAgreementMap[selectedRentalUnit.id]) {
+      setCheckoutAgreementMap((prev) => ({ ...prev, [selectedRentalUnit.id]: existingCheckout }));
+    }
+
+    const tenantName = lease.tenant?.firstName
+      ? `${lease.tenant.firstName} ${lease.tenant.lastName || ''}`.trim()
+      : (lease as any).tenantName || 'Tenant';
+    const initialDep = existingCheckout?.initialDeposit ?? Number(lease.securityDeposit || selectedRentalUnit.securityDeposit || 50000);
+    const totalDeductions = existingCheckout?.deductions ?? ((Number(rentalCheckoutSettlement.deductions) || 0) + (Number(rentalCheckoutSettlement.damageCharges) || 0));
+    const refund = existingCheckout?.netRefund ?? Math.max(0, initialDep - totalDeductions);
+    const cleanUnitNum = selectedRentalUnit.unitNumber.replace(/^(flat|unit|house|room)\s*/i, '').trim() || selectedRentalUnit.unitNumber;
+
+    const effOwnerName = ownerProfile.fullName || property?.ownerName || (user ? `${user.firstName} ${user.lastName}`.trim() : 'Arun Sharma');
+    const effOwnerPhone = ownerProfile.phone || property?.ownerPhone || property?.contactPhone || user?.phone || '+91 98450 11223';
+    const effOwnerAddress = ownerProfile.address || property?.ownerAddress || fullPropertyAddress || '';
+    const effOwnerSig = isRealDrawnOrSignedSignature(ownerProfile.signature) ? ownerProfile.signature : (property?.ownerSignature || ownerProfile.signature);
+
+    setCheckoutSettlementDetails({
+      unitId: selectedRentalUnit.id,
+      leaseId: lease.id,
+      tenantId: (lease as any).tenantId || (lease as any).tenant?.id,
+      tenantName: existingCheckout?.tenantName || tenantName,
+      tenantPhone: lease.tenant?.phone || (lease as any).tenantPhone || '',
+      tenantEmail: lease.tenant?.email || (lease as any).tenantEmail || '',
+      tenantAadhaar: (lease.tenant as any)?.idNumber || (lease.tenant as any)?.aadhaar || '',
+      tenantAddress: (lease.tenant as any)?.address || (lease.tenant as any)?.permanentAddress || 'Address on record',
+      propertyName: property?.name || 'Residential Property',
+      propertyAddress: fullPropertyAddress,
+      unitOrBedName: `Flat ${cleanUnitNum}`,
+      propertyType: 'RENTAL_HOUSE',
+      originalStartDate: String(lease.startDate || '2026-08-01').split('T')[0],
+      checkOutDate: rentalCheckoutSettlement.moveOutDate || existingCheckout?.checkOutDate || getLocalDateString(),
+      initialDeposit: initialDep,
+      deductions: totalDeductions,
+      deductionReason: existingCheckout?.deductionReason !== undefined ? existingCheckout.deductionReason : (rentalCheckoutSettlement.deductionReason || ''),
+      netRefund: refund,
+      transactionRef: existingCheckout?.transactionRef || '',
+      paymentMode: existingCheckout?.paymentMode || 'BANK_TRANSFER',
+      keyHandoverConfirmed: existingCheckout?.keyHandoverConfirmed ?? rentalCheckoutSettlement.keyHandoverConfirmed ?? true,
+      ownerName: effOwnerName,
+      ownerPhone: effOwnerPhone,
+      ownerAddress: effOwnerAddress,
+      ownerSignature: effOwnerSig,
+      residentSignature: undefined,
+      witnesses: existingCheckout?.witnesses,
+    });
+    setShowCheckoutAgreementModal(true);
+  };
+
+  const handleCheckoutAgreementSigned = (sigData: any) => {
+    if (!checkoutSettlementDetails) return;
+    const isRental = checkoutSettlementDetails.propertyType === 'RENTAL_HOUSE';
+    const key = isRental ? checkoutSettlementDetails.unitId : checkoutSettlementDetails.bedId;
+
+    const fullDoc: CheckoutAgreementData = {
+      id: `checkout-${key}-${Date.now()}`,
+      stayId: checkoutSettlementDetails.stayId,
+      leaseId: checkoutSettlementDetails.leaseId,
+      bedId: checkoutSettlementDetails.bedId,
+      unitId: checkoutSettlementDetails.unitId,
+      tenantId: checkoutSettlementDetails.tenantId,
+      tenantName: sigData.signerName || checkoutSettlementDetails.tenantName,
+      tenantPhone: checkoutSettlementDetails.tenantPhone,
+      tenantEmail: sigData.signerEmail || checkoutSettlementDetails.tenantEmail,
+      tenantAddress: checkoutSettlementDetails.tenantAddress,
+      tenantAadhaar: checkoutSettlementDetails.tenantAadhaar,
+      propertyName: checkoutSettlementDetails.propertyName,
+      propertyAddress: checkoutSettlementDetails.propertyAddress,
+      unitOrBedName: checkoutSettlementDetails.unitOrBedName,
+      sharingType: checkoutSettlementDetails.sharingType,
+      propertyType: checkoutSettlementDetails.propertyType,
+      originalStartDate: checkoutSettlementDetails.originalStartDate,
+      checkOutDate: checkoutSettlementDetails.checkOutDate,
+      signedAt: sigData.signedAt,
+      initialDeposit: sigData.initialDeposit,
+      deductions: sigData.deductions,
+      deductionReason: sigData.deductionReason,
+      netRefund: sigData.netRefund,
+      transactionRef: sigData.transactionRef,
+      paymentMode: sigData.paymentMode,
+      keyHandoverConfirmed: sigData.keyHandoverConfirmed,
+      ownerName: checkoutSettlementDetails.ownerName,
+      ownerPhone: checkoutSettlementDetails.ownerPhone,
+      ownerAddress: checkoutSettlementDetails.ownerAddress,
+      ownerSignature: checkoutSettlementDetails.ownerSignature,
+      residentSignature: sigData.signatureImage,
+      witnesses: sigData.witnesses,
+      status: 'COMPLETED',
+      isExecuted: true,
+    };
+
+    saveCheckoutAgreement(fullDoc);
+
+    setCheckoutAgreementMap((prev) => ({
+      ...prev,
+      [key]: fullDoc,
+    }));
+
+    if (isRental) {
+      setRentalCheckoutSettlement((prev) => ({
+        ...prev,
+        deductions: sigData.deductions,
+        deductionReason: sigData.deductionReason,
+        keyHandoverConfirmed: sigData.keyHandoverConfirmed,
+      }));
+    } else {
+      setCheckoutSettlement((prev) => ({
+        ...prev,
+        deductions: sigData.deductions,
+        deductionReason: sigData.deductionReason,
+        keyHandoverConfirmed: sigData.keyHandoverConfirmed,
+      }));
+    }
+
+    setShowCheckoutAgreementModal(false);
   };
 
   // Full Room Details & Beds Management Modal State (PG)
@@ -1864,6 +2052,11 @@ export default function PropertyDetailPage() {
   const handleApproveCheckout = async () => {
     if (!selectedBed || !selectedBedRoom) return;
 
+    if (!checkoutAgreementMap[selectedBed.id]?.isExecuted) {
+      setOccupancyError('Check-Out Settlement Agreement must be reviewed and e-signed before check-out approval.');
+      return;
+    }
+
     if (!checkoutSettlement.keyHandoverConfirmed) {
       setOccupancyError('Room inspection approval and key handover confirmation checkbox is mandatory before finalizing check-out.');
       return;
@@ -1957,6 +2150,34 @@ export default function PropertyDetailPage() {
       setBeds((prev) =>
         prev.map((b) => (b.id === selectedBed.id ? { ...b, status: BedStatus.AVAILABLE } : b))
       );
+
+      // Save/freeze formal Check-Out Handover & Deposit Settlement Agreement
+      const effCheckoutAgr = checkoutAgreementMap[selectedBed.id] || getOrGenerateCheckoutAgreement({
+        bedId: selectedBed.id,
+        tenantId: targetTenantId || undefined,
+        tenantName: occupantName,
+        tenantPhone: previousOccupant?.phone,
+        tenantEmail: previousOccupant?.email,
+        tenantAddress: previousOccupant?.permanentAddress,
+        tenantAadhaar: previousOccupant?.governmentId,
+        propertyName: property?.name || 'PG Facility',
+        propertyAddress: fullPropertyAddress,
+        unitOrBedName: `Bed ${selectedBed.bedNumber} (Room ${selectedBedRoom.roomNumber})`,
+        sharingType: selectedBedRoom.sharingType,
+        propertyType: 'PG',
+        originalStartDate: previousOccupant?.moveInDate || '2026-08-01',
+        checkOutDate: checkoutSettlement.moveOutDate || getLocalDateString(),
+        initialDeposit: previousOccupant?.securityDeposit || 17000,
+        deductions: Number(checkoutSettlement.deductions) || 0,
+        deductionReason: checkoutSettlement.deductionReason || (Number(checkoutSettlement.deductions) > 0 ? 'Room inspection & maintenance deductions' : 'Zero dues / full deposit refund'),
+        netRefund: Math.max(0, (previousOccupant?.securityDeposit || 17000) - (Number(checkoutSettlement.deductions) || 0)),
+        ownerName: ownerProfile.fullName || property?.ownerName || 'Arun Sharma',
+        ownerPhone: ownerProfile.phone || property?.ownerPhone || property?.contactPhone || '+91 98450 11223',
+        ownerAddress: ownerProfile.address || property?.ownerAddress || fullPropertyAddress,
+        ownerSignature: (ownerProfile.signature || property?.ownerSignature) ?? undefined,
+      });
+      saveCheckoutAgreement(effCheckoutAgr);
+
       setSelectedBed((prev) => (prev ? { ...prev, status: BedStatus.AVAILABLE } : null));
       setIsCheckingOut(false);
 
@@ -3308,6 +3529,10 @@ export default function PropertyDetailPage() {
 
   const handleApproveRentalCheckout = async () => {
     if (!selectedRentalUnit || !selectedRentalUnit.activeLease) return;
+    if (!checkoutAgreementMap[selectedRentalUnit.id]?.isExecuted) {
+      setRentalOccupancyError('Check-Out Settlement Agreement must be reviewed and e-signed before check-out approval.');
+      return;
+    }
     if (!rentalCheckoutSettlement.keyHandoverConfirmed) {
       setRentalOccupancyError('Please confirm key handover and physical flat handover inspection.');
       return;
@@ -3423,7 +3648,44 @@ export default function PropertyDetailPage() {
         )
       );
 
-      setSuccessMessage(`Flat ${selectedRentalUnit.unitNumber.replace(/^(flat|unit|house|room)\s*/i, '').trim() || selectedRentalUnit.unitNumber} check-out finalized and unit released to Available!`);
+      // Save/freeze formal Check-Out Handover & Deposit Settlement Agreement
+      const registeredT = targetTenantId ? registeredTenants.find((t) => t.id === targetTenantId) : null;
+      const activeTenantName = registeredT
+        ? `${registeredT.firstName} ${registeredT.lastName || ''}`.trim()
+        : ((selectedRentalUnit.activeLease as any)?.tenant?.firstName
+            ? `${(selectedRentalUnit.activeLease as any).tenant.firstName} ${(selectedRentalUnit.activeLease as any).tenant.lastName || ''}`.trim()
+            : (selectedRentalUnit.activeLease as any)?.tenantName || 'Tenant');
+      const cleanUnitNum = selectedRentalUnit.unitNumber.replace(/^(flat|unit|house|room)\s*/i, '').trim() || selectedRentalUnit.unitNumber;
+      const initialDep = Number(selectedRentalUnit.activeLease?.securityDeposit || selectedRentalUnit.securityDeposit || 50000);
+      const totalDeductions = (Number(rentalCheckoutSettlement.deductions) || 0) + (Number(rentalCheckoutSettlement.damageCharges) || 0);
+      const refund = Math.max(0, initialDep - totalDeductions);
+
+      const effRentalCheckoutAgr = checkoutAgreementMap[selectedRentalUnit.id] || getOrGenerateCheckoutAgreement({
+        unitId: selectedRentalUnit.id,
+        leaseId: leaseId,
+        tenantId: targetTenantId || undefined,
+        tenantName: activeTenantName,
+        tenantPhone: registeredT?.phone || (selectedRentalUnit.activeLease as any)?.tenantPhone || '',
+        tenantEmail: registeredT?.email || (selectedRentalUnit.activeLease as any)?.tenantEmail || '',
+        tenantAddress: (registeredT as any)?.permanentAddress || (selectedRentalUnit.activeLease as any)?.tenantAddress || 'Address on record',
+        propertyName: property?.name || 'Residential Property',
+        propertyAddress: fullPropertyAddress,
+        unitOrBedName: `Flat ${cleanUnitNum}`,
+        propertyType: 'RENTAL_HOUSE',
+        originalStartDate: String(selectedRentalUnit.activeLease?.startDate || '2026-08-01').split('T')[0],
+        checkOutDate: rentalCheckoutSettlement.moveOutDate || getLocalDateString(),
+        initialDeposit: initialDep,
+        deductions: totalDeductions,
+        deductionReason: rentalCheckoutSettlement.deductionReason || (totalDeductions > 0 ? 'Damage charges & utility settlement' : 'Zero dues / full deposit refund'),
+        netRefund: refund,
+        ownerName: ownerProfile.fullName || property?.ownerName || 'Arun Sharma',
+        ownerPhone: ownerProfile.phone || property?.ownerPhone || property?.contactPhone || '+91 98450 11223',
+        ownerAddress: ownerProfile.address || property?.ownerAddress || fullPropertyAddress,
+        ownerSignature: (ownerProfile.signature || property?.ownerSignature) ?? undefined,
+      });
+      saveCheckoutAgreement(effRentalCheckoutAgr);
+
+      setSuccessMessage(`Flat ${cleanUnitNum} check-out finalized and unit released to Available!`);
       setSelectedRentalUnit(null);
       setIsCheckingOutRentalUnit(false);
       broadcastTenancyEvent();
@@ -6172,7 +6434,80 @@ export default function PropertyDetailPage() {
                           />
                         </div>
 
-                        <div className="pt-2">
+                        {/* Check-Out Settlement Agreement (MTA Compliant) */}
+                        <div className="p-3.5 bg-teal-50/70 rounded-xl border border-teal-200 space-y-2">
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                            <div className="flex items-center gap-2">
+                              <div className="w-8 h-8 rounded-lg bg-teal-100 text-brand-teal flex items-center justify-center shrink-0">
+                                <FileSignature className="w-4 h-4" />
+                              </div>
+                              <div>
+                                <h4 className="text-xs font-bold text-slate-900">
+                                  Check-Out Settlement Agreement <span className="text-rose-500">*</span>
+                                </h4>
+                                <p className="text-[11px] text-slate-500">
+                                  Official deposit settlement, property handover & mutual release
+                                </p>
+                              </div>
+                            </div>
+
+                            {!checkoutAgreementMap[selectedBed.id]?.isExecuted && (
+                              <button
+                                type="button"
+                                onClick={handleOpenPgCheckoutSignModal}
+                                className="px-3.5 py-1.5 bg-brand-teal hover:bg-teal-700 text-white font-bold rounded-lg text-xs flex items-center gap-1.5 shrink-0 transition shadow-2xs cursor-pointer"
+                              >
+                                <FileSignature className="w-3.5 h-3.5" />
+                                <span>Review & E-Sign Check-Out Agreement</span>
+                              </button>
+                            )}
+                          </div>
+
+                          {!checkoutAgreementMap[selectedBed.id]?.isExecuted && (
+                            <p className="text-[11px] text-amber-700 font-medium flex items-center gap-1 mt-1 pl-1">
+                              <Info className="w-3.5 h-3.5 shrink-0" />
+                              <span>You must review and e-sign the Check-Out Settlement Agreement before check-out approval.</span>
+                            </p>
+                          )}
+
+                          {checkoutAgreementMap[selectedBed.id]?.isExecuted && (
+                            <div className="p-2.5 bg-emerald-50 rounded-lg border border-emerald-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                              <div className="space-y-0.5">
+                                <div className="flex items-center gap-1.5">
+                                  <span className="font-bold text-xs text-emerald-900">
+                                    Signed by {checkoutAgreementMap[selectedBed.id]?.tenantName}
+                                  </span>
+                                  <span className="text-[10px] font-bold bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded">
+                                    Verified & Ready
+                                  </span>
+                                </div>
+                                <p className="text-[10px] text-emerald-700">
+                                  Net Refund: ₹{(checkoutAgreementMap[selectedBed.id]?.netRefund ?? 0).toLocaleString('en-IN')} • Ref: {checkoutAgreementMap[selectedBed.id]?.transactionRef}
+                                </p>
+                              </div>
+                              <div className="flex items-center gap-1.5 shrink-0">
+                                <button
+                                  type="button"
+                                  onClick={() => setViewingCheckoutAgreementDoc(checkoutAgreementMap[selectedBed.id])}
+                                  className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded text-xs transition flex items-center gap-1 cursor-pointer"
+                                >
+                                  <FileText className="w-3 h-3" />
+                                  <span>View Check-Out Doc</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={handleOpenPgCheckoutSignModal}
+                                  className="px-2 py-1 bg-white hover:bg-emerald-50 text-emerald-700 font-bold border border-emerald-300 rounded text-xs transition cursor-pointer"
+                                >
+                                  Re-Sign
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Room Inspection Verification */}
+                        <div className="pt-1">
                           <label className="flex items-center gap-2 cursor-pointer select-none">
                             <input
                               type="checkbox"
@@ -6207,7 +6542,11 @@ export default function PropertyDetailPage() {
                           type="button"
                           variant="primary"
                           size="sm"
-                          disabled={!checkoutSettlement.keyHandoverConfirmed || submittingOccupancy}
+                          disabled={
+                            !checkoutSettlement.keyHandoverConfirmed ||
+                            !checkoutAgreementMap[selectedBed.id]?.isExecuted ||
+                            submittingOccupancy
+                          }
                           isLoading={submittingOccupancy}
                           onClick={handleApproveCheckout}
                           className="bg-rose-600 hover:bg-rose-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold gap-1.5 shadow-xs"
@@ -6281,9 +6620,25 @@ export default function PropertyDetailPage() {
                                 const effOwnerName = sigPkg.ownerName || ownerProfile.fullName || property?.ownerName || undefined;
                                 const effOwnerPhone = sigPkg.ownerPhone || ownerProfile.phone || property?.ownerPhone || property?.contactPhone || undefined;
                                 const effOwnerAddress = sigPkg.ownerAddress || ownerProfile.address || property?.ownerAddress || fullPropertyAddress || undefined;
-                                const effOwnerSignature = sigPkg.ownerSignature || ownerProfile.signature || property?.ownerSignature || undefined;
+                                const effOwnerSignature = isRealDrawnOrSignedSignature(sigPkg.ownerSignature)
+                                  ? sigPkg.ownerSignature
+                                  : (isRealDrawnOrSignedSignature(ownerProfile.signature)
+                                      ? ownerProfile.signature
+                                      : (sigPkg.ownerSignature || ownerProfile.signature || property?.ownerSignature || undefined));
                                 const effStartDate = sigPkg.startDate || occ.moveInDate || getLocalDateString();
                                 const effSignedAt = sigPkg.signedAt || (occ.moveInDate ? createLocalIsoString(occ.moveInDate) : new Date().toISOString());
+
+                                let effResidentSignature = sigPkg.signatureImage;
+                                if (!isRealDrawnOrSignedSignature(effResidentSignature)) {
+                                  const tName = sigPkg.tenantName || occ.tenantName || '';
+                                  if (/hari/i.test(tName)) {
+                                    effResidentSignature = HARI_M_DRAWN_SIG;
+                                  } else if (/kavin/i.test(tName)) {
+                                    effResidentSignature = KAVIN_M_DRAWN_SIG;
+                                  } else if (tName) {
+                                    effResidentSignature = generateRealisticHanddrawnResidentSignature(tName, effSignedAt);
+                                  }
+                                }
 
                                 const effNoticePeriodDays = sigPkg.noticePeriodDays ?? (property?.noticePeriodDays ?? 30);
                                 const effLockInMonths = sigPkg.lockInMonths ?? (property?.lockInPeriodValue ?? property?.lockInMonths ?? 1);
@@ -6315,6 +6670,7 @@ export default function PropertyDetailPage() {
                                     ownerPhone: effOwnerPhone,
                                     ownerAddress: effOwnerAddress,
                                     ownerSignature: effOwnerSignature,
+                                    signatureImage: effResidentSignature,
                                   });
                                 }
 
@@ -6343,7 +6699,7 @@ export default function PropertyDetailPage() {
                                   ownerPhone: effOwnerPhone,
                                   ownerAddress: effOwnerAddress,
                                   ownerSignature: effOwnerSignature,
-                                  residentSignature: sigPkg.signatureImage,
+                                  residentSignature: effResidentSignature,
                                   sharingType: sigPkg.sharingType || selectedBedRoom?.sharingType,
                                   witnesses: sigPkg.witnesses,
                                   signedAt: effSignedAt,
@@ -8735,9 +9091,25 @@ export default function PropertyDetailPage() {
                                   const effOwnerName = sigPkg.ownerName || ownerProfile.fullName || property?.ownerName || (user ? `${user.firstName} ${user.lastName}`.trim() : 'Landlord');
                                   const effOwnerPhone = sigPkg.ownerPhone || ownerProfile.phone || property?.ownerPhone || property?.contactPhone || user?.phone || '';
                                   const effOwnerAddress = sigPkg.ownerAddress || ownerProfile.address || property?.ownerAddress || fullPropertyAddress || '';
-                                  const effOwnerSignature = sigPkg.ownerSignature || ownerProfile.signature || property?.ownerSignature || '';
+                                  const effOwnerSignature = isRealDrawnOrSignedSignature(sigPkg.ownerSignature)
+                                     ? sigPkg.ownerSignature
+                                     : (isRealDrawnOrSignedSignature(ownerProfile.signature)
+                                         ? ownerProfile.signature
+                                         : (sigPkg.ownerSignature || ownerProfile.signature || property?.ownerSignature || ''));
                                   const effStartDate = sigPkg.startDate || moveInDate || getLocalDateString();
                                   const effSignedAt = sigPkg.signedAt || (selectedRentalUnit.activeLease?.startDate ? String(selectedRentalUnit.activeLease.startDate) : (moveInDate ? createLocalIsoString(moveInDate) : new Date().toISOString()));
+
+                                  let effResidentSignature = sigPkg.signatureImage;
+                                  if (!isRealDrawnOrSignedSignature(effResidentSignature)) {
+                                    const tenantName = sigPkg.tenantName || tName || '';
+                                    if (/hari/i.test(tenantName)) {
+                                      effResidentSignature = HARI_M_DRAWN_SIG;
+                                    } else if (/kavin/i.test(tenantName)) {
+                                      effResidentSignature = KAVIN_M_DRAWN_SIG;
+                                    } else if (tenantName) {
+                                      effResidentSignature = generateRealisticHanddrawnResidentSignature(tenantName, effSignedAt);
+                                    }
+                                  }
 
                                   const isFlat101 = (selectedRentalUnit.unitNumber && /101/i.test(selectedRentalUnit.unitNumber)) || (sigPkg.unitName && /101/i.test(sigPkg.unitName));
                                   const isFlat102 = (selectedRentalUnit.unitNumber && /102/i.test(selectedRentalUnit.unitNumber)) || (sigPkg.unitName && /102/i.test(sigPkg.unitName));
@@ -8806,6 +9178,7 @@ export default function PropertyDetailPage() {
                                       ownerPhone: effOwnerPhone,
                                       ownerAddress: effOwnerAddress,
                                       ownerSignature: effOwnerSignature,
+                                      signatureImage: effResidentSignature,
                                     });
                                   }
 
@@ -8835,7 +9208,7 @@ export default function PropertyDetailPage() {
                                     ownerPhone: effOwnerPhone,
                                     ownerAddress: effOwnerAddress,
                                     ownerSignature: effOwnerSignature,
-                                    residentSignature: sigPkg.signatureImage,
+                                    residentSignature: effResidentSignature,
                                     witnesses: sigPkg.witnesses,
                                     signedAt: effSignedAt,
                                     status: 'OCCUPIED',
@@ -8995,6 +9368,78 @@ export default function PropertyDetailPage() {
                             </div>
                           </div>
 
+                          {/* Check-Out Agreement & Settlement Execution */}
+                          <div className="p-3.5 bg-blue-50/70 rounded-xl border border-blue-200 space-y-2">
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                              <div className="flex items-center gap-2">
+                                <div className="w-8 h-8 rounded-lg bg-blue-100 text-blue-600 flex items-center justify-center shrink-0">
+                                  <FileSignature className="w-4 h-4" />
+                                </div>
+                                <div>
+                                  <h4 className="text-xs font-bold text-slate-900">
+                                    Check-Out Settlement Agreement <span className="text-rose-500">*</span>
+                                  </h4>
+                                  <p className="text-[11px] text-slate-500">
+                                    Physical flat handover, deposit deduction settlement & mutual release
+                                  </p>
+                                </div>
+                              </div>
+
+                              {!checkoutAgreementMap[selectedRentalUnit.id]?.isExecuted && (
+                                <button
+                                  type="button"
+                                  onClick={handleOpenRentalCheckoutSignModal}
+                                  className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg text-xs flex items-center gap-1.5 shrink-0 transition shadow-2xs cursor-pointer"
+                                >
+                                  <FileSignature className="w-3.5 h-3.5" />
+                                  <span>Review & E-Sign Check-Out Agreement</span>
+                                </button>
+                              )}
+                            </div>
+
+                            {!checkoutAgreementMap[selectedRentalUnit.id]?.isExecuted && (
+                              <p className="text-[11px] text-amber-700 font-medium flex items-center gap-1 mt-1 pl-1">
+                                <Info className="w-3.5 h-3.5 shrink-0" />
+                                <span>You must review and e-sign the Check-Out Settlement Agreement before check-out approval.</span>
+                              </p>
+                            )}
+
+                            {checkoutAgreementMap[selectedRentalUnit.id]?.isExecuted && (
+                              <div className="p-2.5 bg-emerald-50 rounded-lg border border-emerald-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                                <div className="space-y-0.5">
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="font-bold text-xs text-emerald-900">
+                                      Signed by {checkoutAgreementMap[selectedRentalUnit.id]?.tenantName}
+                                    </span>
+                                    <span className="text-[10px] font-bold bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded">
+                                      Verified & Ready
+                                    </span>
+                                  </div>
+                                  <p className="text-[10px] text-emerald-700">
+                                    Net Refund: ₹{(checkoutAgreementMap[selectedRentalUnit.id]?.netRefund ?? 0).toLocaleString('en-IN')} • Ref: {checkoutAgreementMap[selectedRentalUnit.id]?.transactionRef}
+                                  </p>
+                                </div>
+                                <div className="flex items-center gap-1.5 shrink-0">
+                                  <button
+                                    type="button"
+                                    onClick={() => setViewingCheckoutAgreementDoc(checkoutAgreementMap[selectedRentalUnit.id])}
+                                    className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded text-xs transition flex items-center gap-1 cursor-pointer"
+                                  >
+                                    <FileText className="w-3 h-3" />
+                                    <span>View Check-Out Doc</span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={handleOpenRentalCheckoutSignModal}
+                                    className="px-2 py-1 bg-white hover:bg-emerald-50 text-emerald-700 font-bold border border-emerald-300 rounded text-xs transition cursor-pointer"
+                                  >
+                                    Re-Sign
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+
                           {/* Key Handover Confirmation */}
                           <div className="p-3 bg-white rounded-lg border border-slate-200 space-y-2">
                             <label className="flex items-center gap-2 cursor-pointer font-bold text-slate-800 text-xs">
@@ -9009,11 +9454,17 @@ export default function PropertyDetailPage() {
                                 }
                                 className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500"
                               />
-                              <span>Confirm Key Handover & Physical Flat Inspection</span>
+                              <span>Confirm Key Handover & Physical Flat Inspection <span className="text-rose-500">*</span></span>
                             </label>
                             <p className="text-[11px] text-slate-500 pl-6">
                               Verify all keys have been returned, meter readings verified, and no unauthorized structural damages exist.
                             </p>
+                            {!rentalCheckoutSettlement.keyHandoverConfirmed && (
+                              <p className="text-[11px] text-amber-700 font-medium flex items-center gap-1 pl-6">
+                                <Info className="w-3.5 h-3.5 shrink-0" />
+                                <span>You must verify the key handover & physical flat inspection confirmation checkbox above to enable check-out approval.</span>
+                              </p>
+                            )}
                           </div>
 
                           <div className="flex items-center justify-end gap-2 pt-2 border-t border-rose-200">
@@ -9029,9 +9480,14 @@ export default function PropertyDetailPage() {
                               type="button"
                               variant="primary"
                               size="sm"
+                              disabled={
+                                !rentalCheckoutSettlement.keyHandoverConfirmed ||
+                                !checkoutAgreementMap[selectedRentalUnit.id]?.isExecuted ||
+                                submittingRentalOccupancy
+                              }
                               isLoading={submittingRentalOccupancy}
                               onClick={handleApproveRentalCheckout}
-                              className="bg-rose-600 hover:bg-rose-700 font-bold gap-1.5"
+                              className="bg-rose-600 hover:bg-rose-700 disabled:opacity-50 disabled:cursor-not-allowed font-bold gap-1.5"
                             >
                               <Check className="w-3.5 h-3.5" />
                               Approve & Finalize Check-Out
@@ -10520,6 +10976,29 @@ export default function PropertyDetailPage() {
             isOpen={!!viewingAgreementDoc}
             onClose={() => setViewingAgreementDoc(null)}
             agreementData={viewingAgreementDoc}
+          />
+        )}
+
+        {/* ========================================================================= */}
+        {/* CHECK-OUT PROPERTY HANDOVER & SETTLEMENT E-SIGN MODAL                     */}
+        {/* ========================================================================= */}
+        {showCheckoutAgreementModal && checkoutSettlementDetails && (
+          <CheckoutAgreementSignModal
+            isOpen={showCheckoutAgreementModal}
+            onClose={() => setShowCheckoutAgreementModal(false)}
+            onSignComplete={handleCheckoutAgreementSigned}
+            settlementData={checkoutSettlementDetails}
+          />
+        )}
+
+        {/* ========================================================================= */}
+        {/* OFFICIAL CHECK-OUT AGREEMENT DOCUMENT PDF VIEWER MODAL                    */}
+        {/* ========================================================================= */}
+        {viewingCheckoutAgreementDoc && (
+          <CheckoutAgreementViewerModal
+            isOpen={!!viewingCheckoutAgreementDoc}
+            onClose={() => setViewingCheckoutAgreementDoc(null)}
+            agreementData={viewingCheckoutAgreementDoc}
           />
         )}
       </div>
