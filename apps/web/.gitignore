@@ -1,0 +1,12 @@
+# apps/web .gitignore
+node_modules/
+.next/
+out/
+dist/
+coverage/
+.turbo/
+*.tsbuildinfo
+.env
+.env.*
+!.env.example
+*.log
