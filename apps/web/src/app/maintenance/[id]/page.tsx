@@ -154,7 +154,7 @@ export default function MaintenanceTicketDetailPage({ params }: { params: Promis
 
   return (
     <AppShell activePath="/maintenance">
-      <div className="space-y-6 max-w-7xl mx-auto pb-16">
+      <div className="space-y-6 w-full pb-16">
         {/* Back Link & Page Header */}
         <div className="flex items-center gap-2 mb-1">
           <Link

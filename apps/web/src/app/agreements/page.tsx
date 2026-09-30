@@ -1190,7 +1190,7 @@ export default function AgreementsDashboardPage() {
 
   return (
     <AppShell activePath="/agreements">
-      <PageTransition className="space-y-6 max-w-7xl mx-auto pb-16">
+      <PageTransition className="space-y-6 w-full pb-16">
         {/* Toast Alert */}
         {toastMessage && (
           <div
@@ -1388,7 +1388,7 @@ export default function AgreementsDashboardPage() {
         ) : (
           <div className="bg-white rounded-xl border border-slate-200 shadow-2xs overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
+              <table className="w-full text-center text-xs">
                 <thead className="bg-slate-50/80 border-b border-slate-200 text-slate-600 font-semibold uppercase tracking-wider">
                   <tr>
                     <th className="py-3 px-4">Type of Living</th>
@@ -1398,7 +1398,9 @@ export default function AgreementsDashboardPage() {
                     <th className="py-3 px-4">Lock-in / Notice</th>
                     <th className="py-3 px-4">Check-in Date & Time</th>
                     <th className="py-3 px-4">Check-out Date & Time</th>
-                    <th className="py-3 px-4 text-right">Actions</th>
+                    <th className="py-3 px-4">Check-in</th>
+                    <th className="py-3 px-4">Check-out</th>
+                    <th className="py-3 px-4">Download</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 text-slate-700">
@@ -1494,40 +1496,44 @@ export default function AgreementsDashboardPage() {
                             <span className="text-slate-400 text-xs italic">—</span>
                           )}
                         </td>
-                        <td className="py-3.5 px-4 text-right">
-                          <div className="flex items-center justify-end gap-2">
+                        <td className="py-3.5 px-4 whitespace-nowrap">
+                          <button
+                            onClick={() => setViewingAgreementData(mapToDocumentData(agr))}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 hover:text-brand-teal transition font-semibold text-xs shadow-2xs cursor-pointer"
+                            title="View Agreement"
+                          >
+                            <Eye className="w-3.5 h-3.5 text-slate-500" />
+                            <span>View Agreement</span>
+                          </button>
+                        </td>
+                        <td className="py-3.5 px-4 whitespace-nowrap">
+                          {(!agr.isActive || agr.checkOutDate) ? (
                             <button
-                              onClick={() => setViewingAgreementData(mapToDocumentData(agr))}
-                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 hover:text-brand-teal transition font-semibold text-xs shadow-2xs cursor-pointer"
-                              title="View Agreement"
+                              onClick={() => handleOpenCheckoutDoc(agr)}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-rose-300 bg-rose-50 text-rose-800 hover:bg-rose-100 transition font-semibold text-xs shadow-2xs cursor-pointer"
+                              title="View & Download Official Check-Out Handover & Deposit Settlement Agreement"
                             >
-                              <Eye className="w-3.5 h-3.5 text-slate-500" />
-                              <span>View Agreement</span>
+                              <FileSignature className="w-3.5 h-3.5 text-rose-600" />
+                              <span>Check-Out Settlement</span>
                             </button>
-                            {(!agr.isActive || agr.checkOutDate) && (
-                              <button
-                                onClick={() => handleOpenCheckoutDoc(agr)}
-                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-rose-300 bg-rose-50 text-rose-800 hover:bg-rose-100 transition font-semibold text-xs shadow-2xs cursor-pointer"
-                                title="View & Download Official Check-Out Handover & Deposit Settlement Agreement"
-                              >
-                                <FileSignature className="w-3.5 h-3.5 text-rose-600" />
-                                <span>Check-Out Settlement</span>
-                              </button>
+                          ) : (
+                            <span className="text-slate-400 text-xs italic">—</span>
+                          )}
+                        </td>
+                        <td className="py-3.5 px-4 whitespace-nowrap">
+                          <button
+                            onClick={() => handleDownloadPdf(agr)}
+                            disabled={isDownloading}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-brand-teal text-white hover:bg-teal-700 transition font-semibold text-xs shadow-xs cursor-pointer disabled:opacity-50"
+                            title="Download Agreement PDF"
+                          >
+                            {isDownloading ? (
+                              <Loader2 className="w-3.5 h-3.5 animate-spin text-white" />
+                            ) : (
+                              <Download className="w-3.5 h-3.5 text-white" />
                             )}
-                            <button
-                              onClick={() => handleDownloadPdf(agr)}
-                              disabled={isDownloading}
-                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-brand-teal text-white hover:bg-teal-700 transition font-semibold text-xs shadow-xs cursor-pointer disabled:opacity-50"
-                              title="Download Agreement PDF"
-                            >
-                              {isDownloading ? (
-                                <Loader2 className="w-3.5 h-3.5 animate-spin text-white" />
-                              ) : (
-                                <Download className="w-3.5 h-3.5 text-white" />
-                              )}
-                              <span>Download Agreement</span>
-                            </button>
-                          </div>
+                            <span>Download Agreement</span>
+                          </button>
                         </td>
                       </tr>
                     );

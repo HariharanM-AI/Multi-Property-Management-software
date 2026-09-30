@@ -74,7 +74,7 @@ export const AppShell: React.FC<AppShellProps> = ({
           }
         />
 
-        <main className="flex-1 overflow-y-auto p-8">
+        <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 w-full">
           {isLoading ? (
             <div className="flex flex-col items-center justify-center min-h-[60vh] gap-3 text-slate-500">
               <Loader2 className="w-8 h-8 animate-spin text-brand-teal" />

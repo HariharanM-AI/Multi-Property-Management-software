@@ -268,12 +268,23 @@ export default function PgFloorsPage() {
     }
   }, [selectedFloorId, isUsingFallback, fallbackRooms]);
 
+  const getAuthHeaders = (): Record<string, string> => {
+    if (typeof window === 'undefined') return {};
+    const token =
+      localStorage.getItem('propertyos_access_token') ||
+      localStorage.getItem('accessToken') ||
+      localStorage.getItem('token');
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  };
+
   const fetchPropertyDetails = async () => {
     setIsLoading(true);
     setError(null);
     try {
+      const headers = getAuthHeaders();
       const propRes = await fetch(`${API_BASE}/properties/${propertyId}`, {
         method: 'GET',
+        headers,
         credentials: 'include',
       });
       if (!propRes.ok) {
@@ -289,18 +300,27 @@ export default function PgFloorsPage() {
         throw new Error(propJson.error?.message || 'Property not found.');
       }
 
+      setProperty(propJson.data);
+
       if (propJson.data.propertyType !== PropertyType.PG) {
-        setProperty(propJson.data);
         setIsLoading(false);
         return;
       }
 
-      setProperty(propJson.data);
+      // Concurrently fetch summary and floors in parallel
+      const [sumRes, floorRes] = await Promise.all([
+        fetch(`${API_BASE}/properties/${propertyId}/pg/summary`, {
+          method: 'GET',
+          headers,
+          credentials: 'include',
+        }),
+        fetch(`${API_BASE}/properties/${propertyId}/floors`, {
+          method: 'GET',
+          headers,
+          credentials: 'include',
+        }),
+      ]);
 
-      const sumRes = await fetch(`${API_BASE}/properties/${propertyId}/pg/summary`, {
-        method: 'GET',
-        credentials: 'include',
-      });
       if (sumRes.ok) {
         const sumJson: ApiResponse<PgPropertySummaryDto> = await sumRes.json();
         if (sumJson.success && sumJson.data) {
@@ -308,10 +328,6 @@ export default function PgFloorsPage() {
         }
       }
 
-      const floorRes = await fetch(`${API_BASE}/properties/${propertyId}/floors`, {
-        method: 'GET',
-        credentials: 'include',
-      });
       if (floorRes.ok) {
         const floorJson: ApiResponse<FloorDto[]> = await floorRes.json();
         if (floorJson.success && floorJson.data) {
@@ -336,6 +352,7 @@ export default function PgFloorsPage() {
     try {
       const res = await fetch(`${API_BASE}/properties/${propertyId}/rooms?floorId=${floorId}`, {
         method: 'GET',
+        headers: getAuthHeaders(),
         credentials: 'include',
       });
       if (res.ok) {
@@ -383,7 +400,7 @@ export default function PgFloorsPage() {
     try {
       const res = await fetch(`${API_BASE}/properties/${propertyId}/floors`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         credentials: 'include',
         body: JSON.stringify({
           floorNumber: Number(floorNumber) || 1,
@@ -469,7 +486,7 @@ export default function PgFloorsPage() {
     try {
       const res = await fetch(`${API_BASE}/properties/${propertyId}/rooms`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         credentials: 'include',
         body: JSON.stringify({
           floorId: selectedFloorId,
@@ -551,7 +568,7 @@ export default function PgFloorsPage() {
     try {
       const res = await fetch(`${API_BASE}/properties/${propertyId}/beds/${selectedBed.id}`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         credentials: 'include',
         body: JSON.stringify({
           monthlyRent: bedPrice,
@@ -610,6 +627,7 @@ export default function PgFloorsPage() {
     try {
       const res = await fetch(`${API_BASE}/properties/${propertyId}/rooms/${roomId}`, {
         method: 'DELETE',
+        headers: getAuthHeaders(),
         credentials: 'include',
       });
       const json = await res.json();
@@ -657,6 +675,7 @@ export default function PgFloorsPage() {
     try {
       const res = await fetch(`${API_BASE}/properties/${propertyId}/floors/${floorId}`, {
         method: 'DELETE',
+        headers: getAuthHeaders(),
         credentials: 'include',
       });
       const json = await res.json();
@@ -722,7 +741,7 @@ export default function PgFloorsPage() {
 
   return (
     <AppShell>
-      <div className="max-w-7xl mx-auto py-8 px-4 space-y-6">
+      <div className="w-full space-y-6">
         {/* Navigation Back Button */}
         <div className="flex items-center justify-between">
           <BackButton fallbackHref={`/properties/${propertyId}`} label="Back to Property" />
@@ -979,7 +998,7 @@ export default function PgFloorsPage() {
 
                                 fetch(`${API_BASE}/properties/${propertyId}/beds`, {
                                   method: 'POST',
-                                  headers: { 'Content-Type': 'application/json' },
+                                  headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
                                   credentials: 'include',
                                   body: JSON.stringify({
                                     roomId: room.id,
@@ -1240,6 +1259,7 @@ export default function PgFloorsPage() {
 
                     const res = await fetch(`${API_BASE}/properties/${propertyId}/beds/${selectedBed.id}`, {
                       method: 'DELETE',
+                      headers: getAuthHeaders(),
                       credentials: 'include',
                     });
                     if (res.ok) {

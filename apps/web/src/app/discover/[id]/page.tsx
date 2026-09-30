@@ -79,7 +79,7 @@ export default function PropertyDetailPage() {
   if (isLoading) {
     return (
       <AppShell>
-        <div className="max-w-6xl mx-auto space-y-6 pb-16 animate-pulse">
+        <div className="w-full space-y-6 pb-16 animate-pulse">
           <div className="h-6 bg-slate-200 dark:bg-slate-800 w-1/4 rounded" />
           <div className="h-96 bg-slate-200 dark:bg-slate-800 rounded-2xl" />
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -116,7 +116,7 @@ export default function PropertyDetailPage() {
 
   return (
     <AppShell>
-      <div className="max-w-6xl mx-auto space-y-8 pb-20">
+      <div className="w-full space-y-8 pb-20">
         {/* ========================================================================= */}
         {/* 1. BREADCRUMB NAVIGATION */}
         {/* ========================================================================= */}

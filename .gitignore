@@ -96,3 +96,10 @@ scratch/
 .tempmediaStorage/
 tmp/
 temp/
+
+# Neon Context
+.neon
+
+# Agent Workspace & Skills
+.agents/
+skills-lock.json

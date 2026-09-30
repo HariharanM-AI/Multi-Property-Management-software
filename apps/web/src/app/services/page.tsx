@@ -597,7 +597,7 @@ export default function ServicesPage() {
 
   return (
     <AppShell activePath="/services">
-      <div className="space-y-8 max-w-7xl mx-auto pb-16">
+      <div className="space-y-8 w-full pb-16">
         {/* 1. Header Section */}
         <div id="overview" className="scroll-mt-24">
           <div className="mb-3">

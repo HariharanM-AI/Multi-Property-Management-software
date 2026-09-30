@@ -428,7 +428,7 @@ export default function JobsPage() {
 
   return (
     <AppShell activePath="/jobs">
-      <div className="space-y-6 max-w-7xl mx-auto pb-12">
+      <div className="space-y-6 w-full pb-12">
         {/* Navigation Back Button */}
         <div className="flex items-center justify-between">
           <BackButton fallbackHref="/" label="Back to Dashboard" />

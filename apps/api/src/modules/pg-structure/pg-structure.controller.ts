@@ -42,8 +42,34 @@ export class PgStructureController {
   }
 
   // ==========================================================================
-  // FLOORS
+  // FLOORS & BATCH INVENTORY
   // ==========================================================================
+
+  @Post('inventory/batch')
+  @RequirePermissions(Permission.PROPERTY_CREATE)
+  async createBatchInventory(
+    @Param('propertyId') propertyId: string,
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() body: any
+  ) {
+    if (!body || !Array.isArray(body.floors)) {
+      throw new BadRequestException({
+        success: false,
+        error: {
+          code: 'ValidationError',
+          message: 'Invalid payload: floors array is required',
+        },
+      });
+    }
+
+    const data = await this.pgService.createBatchInventory(
+      user.organizationId,
+      propertyId,
+      user.id,
+      body
+    );
+    return { success: true, data };
+  }
 
   @Post('floors')
   @RequirePermissions(Permission.PROPERTY_CREATE)

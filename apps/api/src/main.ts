@@ -4,8 +4,37 @@ import { ValidationPipe, Logger } from '@nestjs/common';
 import { AppModule } from './app.module';
 import helmet from 'helmet';
 import cookieParser from 'cookie-parser';
+import dns from 'node:dns/promises';
+
+async function resolveNeonDatabaseUrl(): Promise<void> {
+  const rawUrl = process.env.DATABASE_URL;
+  if (!rawUrl) return;
+  try {
+    const parsed = new URL(rawUrl);
+    if (parsed.hostname.includes('neon.tech')) {
+      const endpoint = parsed.hostname.split('.')[0];
+      const ips = await dns.resolve4(parsed.hostname);
+      if (ips && ips.length > 0) {
+        parsed.hostname = ips[0];
+        if (!parsed.port) parsed.port = '5432';
+        if (!parsed.searchParams.has('options')) {
+          parsed.searchParams.set('options', `endpoint=${endpoint}`);
+        }
+        process.env.DATABASE_URL = parsed.toString();
+        new Logger('NeonDnsResolver').log(
+          `Resolved Neon cloud host to IPv4 ${ips[0]} with endpoint ${endpoint} (IPv6 bypass enabled)`
+        );
+      }
+    }
+  } catch (err) {
+    new Logger('NeonDnsResolver').warn(
+      `Could not pre-resolve Neon host: ${err instanceof Error ? err.message : String(err)}`
+    );
+  }
+}
 
 async function bootstrap() {
+  await resolveNeonDatabaseUrl();
   const logger = new Logger('PropertyOS-Bootstrap');
   const app = await NestFactory.create(AppModule, {
     logger: process.env.NODE_ENV === 'production' ? ['error', 'warn', 'log'] : ['log', 'debug', 'error', 'warn'],

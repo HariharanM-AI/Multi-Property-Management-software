@@ -29,7 +29,6 @@ import {
   RefreshCw,
   UploadCloud,
   FileCheck,
-  FileText,
   User,
   ShieldCheck,
   MapPin,
@@ -38,7 +37,6 @@ import {
   Save,
   Lock,
   Sparkles,
-  FileSignature,
   Download,
 } from 'lucide-react';
 import {
@@ -1548,34 +1546,9 @@ export default function TenantsPage() {
                           )}
                         </td>
 
-                        {/* 9. Actions (View Tenant, Agreement PDF, Edit Profile) */}
+                        {/* 9. Actions (View Tenant, Edit Profile) */}
                         <td className="px-5 py-4 text-right whitespace-nowrap">
                           <div className="flex items-center justify-end gap-1.5">
-                            <button
-                              type="button"
-                              onClick={() => handleOpenAgreementDoc(rec)}
-                              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border font-bold text-xs transition shadow-2xs cursor-pointer ${
-                                rec.isRentalUnit
-                                  ? 'border-blue-200 bg-blue-50 text-blue-800 hover:bg-blue-100 hover:border-blue-300'
-                                  : 'border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 hover:border-emerald-300'
-                              }`}
-                              title={rec.isRentalUnit ? "View & Download House Rental Agreement PDF" : "View & Download PG Accommodation Agreement PDF"}
-                            >
-                              <FileText className={`w-3.5 h-3.5 ${rec.isRentalUnit ? 'text-blue-700' : 'text-emerald-700'}`} />
-                              <span>Agreement PDF</span>
-                            </button>
-
-                            {(rec.status === 'CHECKED_OUT' || !rec.isActiveStay || !!rec.checkOutDate) && (
-                              <button
-                                type="button"
-                                onClick={() => handleOpenCheckoutDoc(rec)}
-                                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-rose-300 bg-rose-50 text-rose-800 hover:bg-rose-100 hover:border-rose-400 font-bold text-xs transition shadow-2xs cursor-pointer"
-                                title="View & Download Official Check-Out Settlement Agreement PDF"
-                              >
-                                <FileSignature className="w-3.5 h-3.5 text-rose-700" />
-                                <span>Check-Out PDF</span>
-                              </button>
-                            )}
 
                             <Link
                               href={`/tenants/${rec.tenantId}`}

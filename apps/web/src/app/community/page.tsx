@@ -382,7 +382,7 @@ export default function CommunityPage() {
   };
 
   return (
-    <div className="p-6 md:p-8 space-y-6 max-w-7xl mx-auto">
+    <div className="space-y-6 w-full">
       {/* Header Banner */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-gradient-to-r from-brand-navy via-slate-900 to-teal-950 text-brand-white p-6 md:p-8 rounded-2xl shadow-xl">
         <div className="space-y-1.5">

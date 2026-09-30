@@ -193,7 +193,7 @@ export default function PgRoomsHubPage() {
 
   return (
     <AppShell activePath="/pg/rooms">
-      <div className="space-y-6 max-w-7xl mx-auto">
+      <div className="space-y-6 w-full">
         {/* Navigation Breadcrumb & Back Button */}
         <div className="flex items-center justify-between gap-4">
           <div className="flex items-center gap-2 text-xs text-slate-500">

@@ -21,7 +21,26 @@ import * as crypto from 'crypto';
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
 
+  // In-memory session cache with 60-second TTL to avoid 5 consecutive WAN queries per request
+  private readonly sessionCache = new Map<string, { user: AuthUser; expiresAt: number }>();
+
   constructor(private readonly prisma: PrismaService) {}
+
+  /**
+   * Clear the session cache when credentials or permissions change
+   */
+  public clearSessionCache(): void {
+    this.sessionCache.clear();
+  }
+
+  /**
+   * Invalidate a specific session token from cache
+   */
+  public invalidateSession(rawSessionToken: string): void {
+    if (rawSessionToken) {
+      this.sessionCache.delete(this.hashToken(rawSessionToken));
+    }
+  }
 
   /**
    * Hashes a raw token using SHA-256 for secure DB lookups
@@ -266,12 +285,19 @@ export class AuthService {
   }
 
   /**
-   * Session Validation by Raw Token
+   * Session Validation by Raw Token (Optimized with high-speed in-memory cache)
    */
   async validateSession(rawSessionToken: string): Promise<AuthUser | null> {
     if (!rawSessionToken) return null;
 
     const sessionTokenHash = this.hashToken(rawSessionToken);
+
+    // Fast-path: return from memory cache if valid (0ms lookup vs 1250ms remote DB round-trip)
+    const cached = this.sessionCache.get(sessionTokenHash);
+    const now = Date.now();
+    if (cached && cached.expiresAt > now) {
+      return cached.user;
+    }
 
     const session = await this.prisma.session.findUnique({
       where: { sessionToken: sessionTokenHash },
@@ -289,21 +315,26 @@ export class AuthService {
       },
     });
 
-    if (!session) return null;
+    if (!session) {
+      this.sessionCache.delete(sessionTokenHash);
+      return null;
+    }
 
     // Check expiration
     if (session.expiresAt < new Date()) {
+      this.sessionCache.delete(sessionTokenHash);
       await this.prisma.session.delete({ where: { id: session.id } }).catch(() => {});
       return null;
     }
 
     if (!session.user || !session.user.isActive) {
+      this.sessionCache.delete(sessionTokenHash);
       return null;
     }
 
     const roles = session.user.userRoles.map((ur) => ur.role.name as UserRole);
 
-    return {
+    const authUser: AuthUser = {
       id: session.user.id,
       email: session.user.email,
       firstName: session.user.firstName,
@@ -313,6 +344,14 @@ export class AuthService {
       organizationName: session.user.organization.name,
       roles,
     };
+
+    // Cache valid authenticated user for 60 seconds
+    this.sessionCache.set(sessionTokenHash, {
+      user: authUser,
+      expiresAt: now + 60_000,
+    });
+
+    return authUser;
   }
 
   /**
@@ -321,6 +360,7 @@ export class AuthService {
   async logout(rawSessionToken?: string, userId?: string, ip?: string, userAgent?: string): Promise<void> {
     if (rawSessionToken) {
       const sessionTokenHash = this.hashToken(rawSessionToken);
+      this.sessionCache.delete(sessionTokenHash);
       const session = await this.prisma.session.findUnique({
         where: { sessionToken: sessionTokenHash },
       });
@@ -513,6 +553,8 @@ export class AuthService {
     if (!updatedUser) {
       throw new NotFoundException('User not found.');
     }
+
+    this.clearSessionCache();
 
     return {
       id: updatedUser.id,

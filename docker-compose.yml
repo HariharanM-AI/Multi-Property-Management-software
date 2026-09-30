@@ -42,7 +42,7 @@ services:
     environment:
       NODE_ENV: development
       PORT: 4000
-      DATABASE_URL: "postgresql://postgres:postgrespassword@postgres:5432/propertyos?schema=public"
+      DATABASE_URL: "${DATABASE_URL:-postgresql://postgres:postgrespassword@postgres:5432/propertyos?schema=public}"
       REDIS_URL: "redis://redis:6379"
       JWT_SECRET: "docker-dev-jwt-secret-propertyos-secure-key-32chars"
       COOKIE_SECRET: "docker-dev-session-cookie-secret-min32chars"

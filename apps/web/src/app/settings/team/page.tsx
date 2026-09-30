@@ -210,7 +210,7 @@ export default function TeamSettingsPage() {
 
   return (
     <AppShell activePath="/settings">
-      <div className="space-y-6 max-w-5xl mx-auto">
+      <div className="space-y-6 w-full">
         {/* Navigation Back Button */}
         <div className="flex items-center justify-between">
           <BackButton fallbackHref="/" label="Back to Dashboard" />

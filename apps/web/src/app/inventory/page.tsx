@@ -437,7 +437,7 @@ export default function InventoryPage() {
 
   return (
     <AppShell>
-      <PageTransition className="space-y-6 max-w-7xl mx-auto pb-12">
+      <PageTransition className="space-y-6 w-full pb-12">
         <PageHeader
           title="Property & Room Inventory"
           subtitle="Operational asset ledger, appliance serial tracking, room & unit assignments, and condition grading"

@@ -212,13 +212,24 @@ export default function RentalUnitsPage() {
     }
   }, [isAuthenticated, propertyId]);
 
+  const getAuthHeaders = (): Record<string, string> => {
+    if (typeof window === 'undefined') return {};
+    const token =
+      localStorage.getItem('propertyos_access_token') ||
+      localStorage.getItem('accessToken') ||
+      localStorage.getItem('token');
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  };
+
   const fetchRealData = async () => {
     setIsLoading(true);
     setError(null);
     try {
+      const headers = getAuthHeaders();
       // 1. Fetch Property Details
       const propRes = await fetch(`${API_BASE}/properties/${propertyId}`, {
-        headers: { 'Content-Type': 'application/json' },
+        headers,
+        credentials: 'include',
       });
       if (!propRes.ok) {
         throw new Error('Failed to fetch property details');
@@ -234,29 +245,29 @@ export default function RentalUnitsPage() {
         return;
       }
 
-      // 2. Fetch Summary
-      const sumRes = await fetch(`${API_BASE}/properties/${propertyId}/rental/summary`);
+      // 2. Concurrently fetch Summary, Units, Leases, and Tenants in parallel
+      const [sumRes, unitsRes, leasesRes, tenantsRes] = await Promise.all([
+        fetch(`${API_BASE}/properties/${propertyId}/rental/summary`, { headers, credentials: 'include' }),
+        fetch(`${API_BASE}/properties/${propertyId}/units`, { headers, credentials: 'include' }),
+        fetch(`${API_BASE}/properties/${propertyId}/leases`, { headers, credentials: 'include' }),
+        fetch(`${API_BASE}/tenants`, { headers, credentials: 'include' }),
+      ]);
+
       if (sumRes.ok) {
         const sumData: ApiResponse<RentalPropertySummaryDto> = await sumRes.json();
         if (sumData.success && sumData.data) setSummary(sumData.data);
       }
 
-      // 3. Fetch Units
-      const unitsRes = await fetch(`${API_BASE}/properties/${propertyId}/units`);
       if (unitsRes.ok) {
         const unitsData: ApiResponse<RentalUnitDto[]> = await unitsRes.json();
         if (unitsData.success && unitsData.data) setUnits(unitsData.data);
       }
 
-      // 4. Fetch Leases
-      const leasesRes = await fetch(`${API_BASE}/properties/${propertyId}/leases`);
       if (leasesRes.ok) {
         const leasesData: ApiResponse<LeaseDto[]> = await leasesRes.json();
         if (leasesData.success && leasesData.data) setLeases(leasesData.data);
       }
 
-      // 5. Fetch Tenants (Seeded list from /tenants if available, or static fallback)
-      const tenantsRes = await fetch(`${API_BASE}/tenants`);
       if (tenantsRes.ok) {
         const tenantsData: any = await tenantsRes.json();
         if (tenantsData.success) {
@@ -327,7 +338,8 @@ export default function RentalUnitsPage() {
     try {
       const res = await fetch(`${API_BASE}/properties/${propertyId}/units`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        credentials: 'include',
         body: JSON.stringify(payload),
       });
 
@@ -366,6 +378,8 @@ export default function RentalUnitsPage() {
     try {
       const res = await fetch(`${API_BASE}/properties/${propertyId}/units/${unitId}`, {
         method: 'DELETE',
+        headers: getAuthHeaders(),
+        credentials: 'include',
       });
 
       if (!res.ok) {
@@ -446,7 +460,8 @@ export default function RentalUnitsPage() {
     try {
       const res = await fetch(`${API_BASE}/properties/${propertyId}/leases`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        credentials: 'include',
         body: JSON.stringify(payload),
       });
 
@@ -488,6 +503,8 @@ export default function RentalUnitsPage() {
     try {
       const res = await fetch(`${API_BASE}/properties/${propertyId}/leases/${leaseId}/terminate`, {
         method: 'POST',
+        headers: getAuthHeaders(),
+        credentials: 'include',
       });
 
       if (!res.ok) {
@@ -549,7 +566,8 @@ export default function RentalUnitsPage() {
     try {
       const res = await fetch(`${API_BASE}/properties/${propertyId}/leases/${selectedLease.id}/escalations`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        credentials: 'include',
         body: JSON.stringify(payload),
       });
 
@@ -561,7 +579,10 @@ export default function RentalUnitsPage() {
       // Re-fetch data and reload selected lease details
       await fetchRealData();
       
-      const refreshRes = await fetch(`${API_BASE}/properties/${propertyId}/leases/${selectedLease.id}`);
+      const refreshRes = await fetch(`${API_BASE}/properties/${propertyId}/leases/${selectedLease.id}`, {
+        headers: getAuthHeaders(),
+        credentials: 'include',
+      });
       if (refreshRes.ok) {
         const refreshData = await refreshRes.json();
         if (refreshData.success) setSelectedLease(refreshData.data);
@@ -601,6 +622,8 @@ export default function RentalUnitsPage() {
     try {
       const res = await fetch(`${API_BASE}/properties/${propertyId}/leases/${selectedLease?.id}/escalations/${escId}`, {
         method: 'DELETE',
+        headers: getAuthHeaders(),
+        credentials: 'include',
       });
 
       if (!res.ok) {
@@ -609,7 +632,10 @@ export default function RentalUnitsPage() {
 
       await fetchRealData();
       
-      const refreshRes = await fetch(`${API_BASE}/properties/${propertyId}/leases/${selectedLease?.id}`);
+      const refreshRes = await fetch(`${API_BASE}/properties/${propertyId}/leases/${selectedLease?.id}`, {
+        headers: getAuthHeaders(),
+        credentials: 'include',
+      });
       if (refreshRes.ok) {
         const refreshData = await refreshRes.json();
         if (refreshData.success) setSelectedLease(refreshData.data);
@@ -661,7 +687,7 @@ export default function RentalUnitsPage() {
 
   return (
     <AppShell>
-      <PageTransition className="p-6 max-w-7xl mx-auto space-y-6">
+      <PageTransition className="w-full space-y-6">
         
         {/* Navigation & Header Section */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">

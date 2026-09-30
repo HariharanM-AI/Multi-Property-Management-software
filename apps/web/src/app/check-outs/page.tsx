@@ -384,7 +384,7 @@ export default function CheckoutsPage() {
 
   return (
     <AppShell activePath="/check-outs">
-      <PageTransition className="space-y-6 max-w-7xl mx-auto pb-16">
+      <PageTransition className="space-y-6 w-full pb-16">
         {/* Page Header */}
         <PageHeader
           title="Digital Check-Out & Settlement"

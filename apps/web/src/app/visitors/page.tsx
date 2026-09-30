@@ -328,7 +328,7 @@ export default function VisitorsPage() {
 
   return (
     <AppShell>
-      <div className="space-y-6 max-w-7xl mx-auto pb-12">
+      <div className="space-y-6 w-full pb-12">
         <PageHeader
           title="Visitors & Gatepass Console"
           subtitle="Real-time security desk check-ins, resident guest pre-approvals, and verified audit roster"

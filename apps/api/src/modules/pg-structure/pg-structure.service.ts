@@ -1406,4 +1406,150 @@ export class PgStructureService {
       throw new BadRequestException('Cannot set occupied bed to maintenance directly. Checkout tenant first.');
     }
   }
+
+  /**
+   * High-Performance Atomic Batch Inventory Creation (Floors, Rooms, and Beds in a single round-trip)
+   */
+  async createBatchInventory(
+    organizationId: string,
+    propertyId: string,
+    userId: string,
+    input: {
+      floors: Array<{
+        floorNumber: number;
+        name?: string;
+        rooms: Array<{
+          roomNumber: string;
+          sharingType: RoomSharingType;
+          capacity?: number;
+          baseRent: number;
+          securityDeposit?: number;
+          isAc?: boolean;
+          amenities?: string[];
+        }>;
+      }>;
+    }
+  ): Promise<{ success: boolean; totalFloors: number; totalRooms: number; totalBeds: number }> {
+    await this.validatePgProperty(organizationId, propertyId);
+
+    if (!input.floors || input.floors.length === 0) {
+      throw new BadRequestException('At least one floor level must be provided.');
+    }
+
+    let createdFloorsCount = 0;
+    let createdRoomsCount = 0;
+    let createdBedsCount = 0;
+
+    await this.prisma.$transaction(async (tx) => {
+      for (const floorInput of input.floors) {
+        const floorNumber = typeof floorInput.floorNumber === 'number' && !isNaN(floorInput.floorNumber)
+          ? floorInput.floorNumber
+          : Number(floorInput.floorNumber) || 0;
+
+        const floorName = floorInput.name?.trim() || (floorNumber === 0 ? 'Ground Floor' : `Floor ${floorNumber}`);
+
+        // Find or create floor
+        let floor = await tx.floor.findFirst({
+          where: {
+            propertyId,
+            floorNumber,
+            deletedAt: null,
+          },
+        });
+
+        if (!floor) {
+          floor = await tx.floor.create({
+            data: {
+              propertyId,
+              floorNumber,
+              name: floorName,
+            },
+          });
+          createdFloorsCount++;
+        }
+
+        // Process rooms
+        if (floorInput.rooms && floorInput.rooms.length > 0) {
+          for (const roomInput of floorInput.rooms) {
+            const roomNumber = roomInput.roomNumber?.trim();
+            if (!roomNumber) continue;
+
+            const capacity = roomInput.capacity ?? this.getDefaultCapacity(roomInput.sharingType);
+            const baseRent = Number(roomInput.baseRent) || 8500;
+            const deposit = Number(roomInput.securityDeposit) || (baseRent * 2);
+
+            const roomAmenities = roomInput.amenities || [
+              ...(roomInput.isAc ? ['Air Conditioner', 'AC'] : []),
+              `DEPOSIT:${deposit}`,
+            ];
+
+            let room = await tx.room.findFirst({
+              where: {
+                floorId: floor.id,
+                roomNumber,
+                deletedAt: null,
+              },
+            });
+
+            if (!room) {
+              room = await tx.room.create({
+                data: {
+                  propertyId,
+                  floorId: floor.id,
+                  roomNumber,
+                  sharingType: roomInput.sharingType,
+                  capacity,
+                  baseRent,
+                  amenities: roomAmenities,
+                },
+              });
+              createdRoomsCount++;
+            }
+
+            // Generate beds for this room in bulk
+            const bedData = [];
+            for (let i = 0; i < capacity; i++) {
+              const bedLetter = String.fromCharCode(65 + i);
+              const bedNumber = `${room.roomNumber}-${bedLetter}`;
+              bedData.push({
+                roomId: room.id,
+                bedNumber,
+                monthlyRent: room.baseRent,
+                status: BedStatus.AVAILABLE,
+              });
+            }
+
+            if (bedData.length > 0) {
+              const result = await tx.bed.createMany({
+                data: bedData,
+                skipDuplicates: true,
+              });
+              createdBedsCount += result.count;
+            }
+          }
+        }
+      }
+
+      await this.writeAuditLog(
+        tx,
+        organizationId,
+        userId,
+        'INVENTORY_BATCH_CREATED',
+        'Property',
+        propertyId,
+        {
+          floorsCount: createdFloorsCount,
+          roomsCount: createdRoomsCount,
+          bedsCount: createdBedsCount,
+        }
+      );
+    });
+
+    return {
+      success: true,
+      totalFloors: createdFloorsCount,
+      totalRooms: createdRoomsCount,
+      totalBeds: createdBedsCount,
+    };
+  }
 }

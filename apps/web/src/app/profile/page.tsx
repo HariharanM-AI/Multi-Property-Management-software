@@ -432,7 +432,7 @@ export default function OwnerProfilePage() {
 
   return (
     <AppShell activePath="/profile">
-      <PageTransition className="max-w-6xl mx-auto space-y-8 pb-16">
+      <PageTransition className="space-y-8 w-full pb-16">
         {/* Breadcrumb & Header */}
         <div>
           <div className="flex items-center gap-2 text-xs font-semibold text-slate-500 mb-2">

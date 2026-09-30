@@ -154,7 +154,7 @@ export default function HomePage() {
   return (
     <AppShell activePath="/">
       {() => (
-        <PageTransition className="max-w-7xl mx-auto space-y-8 pb-12">
+        <PageTransition className="w-full space-y-8 pb-12">
           {/* Executive Header */}
           <div className="bg-brand-white border border-surface-border rounded-2xl p-6 shadow-sm">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -527,7 +527,7 @@ export default function HomePage() {
 
             {/* Property Cards Grid */}
             {loading ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
                 {[1, 2, 3].map((n) => (
                   <div
                     key={n}
@@ -552,7 +552,7 @@ export default function HomePage() {
                 }
               />
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
                 {filteredProperties.map((prop) => {
                   const isPg = prop.propertyType === PropertyType.PG;
                   return (

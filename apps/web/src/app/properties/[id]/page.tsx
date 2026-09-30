@@ -117,6 +117,18 @@ import { PageTransition } from '@/components/ui/MotionWrapper';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api/v1';
 
+const getAuthHeaders = (extraHeaders?: Record<string, string>): Record<string, string> => {
+  const token = typeof window !== 'undefined' ? localStorage.getItem('propertyos_token') : null;
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    ...(extraHeaders || {}),
+  };
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+  return headers;
+};
+
 const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
   Wifi,
   Zap,
@@ -1312,30 +1324,30 @@ export default function PropertyDetailPage() {
     setInventoryLoading(true);
 
     try {
+      const headers = getAuthHeaders();
       if (property?.propertyType === PropertyType.PG) {
-        // Fetch Floors
-        const fRes = await fetch(`${API_BASE}/properties/${propertyId}/floors`, { credentials: 'include' });
+        // Fetch Floors, Rooms, and Beds concurrently in a single parallel round-trip
+        const [fRes, rRes, bRes] = await Promise.all([
+          fetch(`${API_BASE}/properties/${propertyId}/floors`, { headers, credentials: 'include' }),
+          fetch(`${API_BASE}/properties/${propertyId}/rooms`, { headers, credentials: 'include' }),
+          fetch(`${API_BASE}/properties/${propertyId}/beds`, { headers, credentials: 'include' }),
+        ]);
+
         if (fRes.ok) {
           const fJson = await fRes.json();
           setFloors(fJson.data || []);
         }
-
-        // Fetch Rooms
-        const rRes = await fetch(`${API_BASE}/properties/${propertyId}/rooms`, { credentials: 'include' });
         if (rRes.ok) {
           const rJson = await rRes.json();
           setRooms(rJson.data || []);
         }
-
-        // Fetch Beds
-        const bRes = await fetch(`${API_BASE}/properties/${propertyId}/beds`, { credentials: 'include' });
         if (bRes.ok) {
           const bJson = await bRes.json();
           setBeds(bJson.data || []);
         }
       } else if (property?.propertyType === PropertyType.RENTAL_HOUSE) {
         // Fetch Units
-        const uRes = await fetch(`${API_BASE}/properties/${propertyId}/units`, { credentials: 'include' });
+        const uRes = await fetch(`${API_BASE}/properties/${propertyId}/units`, { headers, credentials: 'include' });
         if (uRes.ok) {
           const uJson = await uRes.json();
           setRentalUnits(uJson.data || []);
@@ -1558,7 +1570,7 @@ export default function PropertyDetailPage() {
 
       const res = await fetch(`${API_BASE}/properties/${propertyId}`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders(),
         credentials: 'include',
         body: JSON.stringify(cleanPayload),
       });
@@ -3064,68 +3076,52 @@ export default function PropertyDetailPage() {
     setBuilderSubmitting(true);
 
     try {
-      for (const floor of builderFloors) {
-        // 1. Create Floor on backend
-        const parsedFloorNumber = typeof floor.floorNumber === 'number' && !isNaN(floor.floorNumber) ? floor.floorNumber : (Number(floor.floorNumber) >= 0 ? Number(floor.floorNumber) : 1);
-        const floorRes = await fetch(`${API_BASE}/properties/${propertyId}/floors`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
-          body: JSON.stringify({
+      const token = typeof window !== 'undefined' ? localStorage.getItem('propertyos_token') : null;
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+
+      // Build atomic batch payload for high-speed single round-trip execution
+      const batchPayload = {
+        floors: builderFloors.map((floor) => {
+          const parsedFloorNumber = typeof floor.floorNumber === 'number' && !isNaN(floor.floorNumber)
+            ? floor.floorNumber
+            : (Number(floor.floorNumber) >= 0 ? Number(floor.floorNumber) : 1);
+
+          return {
             floorNumber: parsedFloorNumber,
             name: floor.name.trim() || (parsedFloorNumber === 0 ? 'Ground Floor' : `Floor ${parsedFloorNumber}`),
-          }),
-        });
-
-        const floorJson = await floorRes.json().catch(() => ({}));
-        if (!floorRes.ok) {
-          const errMsg = floorJson.error?.message || floorJson.message || `Failed to create floor level ${floor.floorNumber}.`;
-          setBuilderErrorMessage(errMsg);
-          setBuilderSubmitting(false);
-          return;
-        }
-
-        const createdFloorId = floorJson.data?.id;
-        if (!createdFloorId) {
-          setBuilderErrorMessage(`Failed to retrieve ID for created floor ${floor.floorNumber}.`);
-          setBuilderSubmitting(false);
-          return;
-        }
-
-        // 2. Create each room on this floor
-        for (const room of floor.rooms) {
-          const bedCount = getRoomBedCount(room);
-          const roomRes = await fetch(`${API_BASE}/properties/${propertyId}/rooms`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            credentials: 'include',
-            body: JSON.stringify({
-              floorId: createdFloorId,
+            rooms: floor.rooms.map((room) => ({
               roomNumber: room.roomNumber.trim(),
               sharingType: room.sharingType,
-              capacity: bedCount,
+              capacity: getRoomBedCount(room),
               baseRent: Number(room.baseRent) || 8500,
-              amenities: room.isAc
-                ? ['Air Conditioner', 'AC', `DEPOSIT:${Number(room.securityDeposit) || 17000}`]
-                : [`DEPOSIT:${Number(room.securityDeposit) || 17000}`],
-              autoGenerateBeds: true,
-            }),
-          });
+              securityDeposit: Number(room.securityDeposit) || (Number(room.baseRent) * 2) || 17000,
+              isAc: room.isAc,
+            })),
+          };
+        }),
+      };
 
-          const roomJson = await roomRes.json().catch(() => ({}));
-          if (!roomRes.ok) {
-            const errMsg = roomJson.error?.message || roomJson.message || `Failed to create room ${room.roomNumber}.`;
-            setBuilderErrorMessage(errMsg);
-            setBuilderSubmitting(false);
-            return;
-          }
-        }
+      const res = await fetch(`${API_BASE}/properties/${propertyId}/inventory/batch`, {
+        method: 'POST',
+        headers,
+        credentials: 'include',
+        body: JSON.stringify(batchPayload),
+      });
+
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok || !json.success) {
+        const errMsg = json.error?.message || json.message || 'Failed to save inventory batch.';
+        setBuilderErrorMessage(errMsg);
+        setBuilderSubmitting(false);
+        return;
       }
 
       setShowAddInventoryBuilderModal(false);
       setSuccessMessage('Floors, rooms, and bed inventory generated successfully.');
-      await fetchInventory();
-      await fetchProperty();
+      await Promise.all([fetchInventory(), fetchProperty()]);
     } catch {
       setBuilderErrorMessage('Network error while saving inventory records.');
     } finally {
@@ -3930,40 +3926,46 @@ export default function PropertyDetailPage() {
     setRentalBuilderSubmitting(true);
 
     try {
+      const unitsToCreate: Array<Promise<Response>> = [];
+
       for (const floor of builderRentalFloors) {
         const parsedFloorNumber = typeof floor.floorNumber === 'number' && !isNaN(floor.floorNumber) ? floor.floorNumber : (Number(floor.floorNumber) >= 0 ? Number(floor.floorNumber) : 1);
         for (const house of floor.houses) {
-          const res = await fetch(`${API_BASE}/properties/${propertyId}/units`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            credentials: 'include',
-            body: JSON.stringify({
-              unitNumber: house.houseNumber.trim(),
-              unitType: house.bhkType,
-              floorNumber: parsedFloorNumber,
-              carpetAreaSqFt: Number(house.carpetAreaSqFt) || undefined,
-              superBuiltupAreaSqFt: Number(house.superBuiltupAreaSqFt) || undefined,
-              furnishingStatus: house.furnishingStatus || 'SEMI_FURNISHED',
-              monthlyRent: Number(house.monthlyRent) || 25000,
-              securityDeposit: Number(house.securityDeposit) || 50000,
-              maintenanceCharges: Number(house.maintenanceCharges) || 0,
-            }),
-          });
+          unitsToCreate.push(
+            fetch(`${API_BASE}/properties/${propertyId}/units`, {
+              method: 'POST',
+              headers: getAuthHeaders(),
+              credentials: 'include',
+              body: JSON.stringify({
+                unitNumber: house.houseNumber.trim(),
+                unitType: house.bhkType,
+                floorNumber: parsedFloorNumber,
+                carpetAreaSqFt: Number(house.carpetAreaSqFt) || undefined,
+                superBuiltupAreaSqFt: Number(house.superBuiltupAreaSqFt) || undefined,
+                furnishingStatus: house.furnishingStatus || 'SEMI_FURNISHED',
+                monthlyRent: Number(house.monthlyRent) || 25000,
+                securityDeposit: Number(house.securityDeposit) || 50000,
+                maintenanceCharges: Number(house.maintenanceCharges) || 0,
+              }),
+            })
+          );
+        }
+      }
 
+      const responses = await Promise.all(unitsToCreate);
+      for (const res of responses) {
+        if (!res.ok) {
           const json = await res.json().catch(() => ({}));
-          if (!res.ok) {
-            const errMsg = json.error?.message || json.message || `Failed to create house ${house.houseNumber}.`;
-            setRentalBuilderErrorMessage(errMsg);
-            setRentalBuilderSubmitting(false);
-            return;
-          }
+          const errMsg = json.error?.message || json.message || 'Failed to create one or more residential units.';
+          setRentalBuilderErrorMessage(errMsg);
+          setRentalBuilderSubmitting(false);
+          return;
         }
       }
 
       setShowRentalBuilderModal(false);
       setSuccessMessage('Residential units and floors generated successfully.');
-      await fetchInventory();
-      await fetchProperty();
+      await Promise.all([fetchInventory(), fetchProperty()]);
     } catch {
       setRentalBuilderErrorMessage('Network error while adding rental units.');
     } finally {
@@ -4336,7 +4338,7 @@ export default function PropertyDetailPage() {
   if (isLoading) {
     return (
       <AppShell activePath="/properties">
-        <div className="max-w-6xl mx-auto space-y-6 animate-pulse">
+        <div className="w-full space-y-6 animate-pulse">
           <div className="h-8 bg-slate-100 rounded w-1/3" />
           <div className="h-48 bg-slate-100 rounded-2xl" />
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -4475,7 +4477,7 @@ export default function PropertyDetailPage() {
 
   return (
     <AppShell activePath="/properties" propertyType={property?.propertyType} propertyName={property?.name}>
-      <div className="max-w-6xl mx-auto space-y-6">
+      <div className="w-full space-y-6">
         {/* Navigation Breadcrumb & Back Button */}
         <div className="flex items-center justify-between gap-4">
           <div className="flex items-center gap-2 text-xs text-surface-textSecondary">
@@ -4766,7 +4768,7 @@ export default function PropertyDetailPage() {
             </div>
 
             {property.amenities && property.amenities.length > 0 ? (
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-4 2xl:grid-cols-6 gap-3">
                 {property.amenities.map((pa) => {
                   const catalogItem = STANDARD_AMENITIES_CATALOG.find((a) => a.name === pa.name);
                   const Icon = catalogItem ? ICON_MAP[catalogItem.icon] || Sparkles : Sparkles;
@@ -4800,8 +4802,8 @@ export default function PropertyDetailPage() {
         {isPG ? (
           /* PG BEDS & ROOMS MANAGEMENT HUB */
           <div className="space-y-6">
-            {/* Live Metrics Grid (2x4 Grid of Modern Field Boxes) */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {/* Live Metrics Grid (Responsive Modern Field Boxes) */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-8 gap-4">
               <div className="bg-white p-4 rounded-2xl border border-slate-200/90 shadow-2xs hover:shadow-xs transition space-y-2">
                 <div className="flex items-center justify-between">
                   <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Floors</span>
@@ -5102,8 +5104,8 @@ export default function PropertyDetailPage() {
                           </div>
                         </div>
 
-                        {/* ROOMS GRID FOR THIS SPECIFIC FLOOR (Spacious 2-Column Clean Layout) */}
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                        {/* ROOMS GRID FOR THIS SPECIFIC FLOOR (Responsive Grid Layout) */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
                           {floorRooms.map((room) => {
                             const roomBeds = beds.filter((b) => b.roomId === room.id);
                             const hasAc = isRoomAcEquipped(room.amenities);
@@ -5303,8 +5305,8 @@ export default function PropertyDetailPage() {
         ) : (
           /* WHOLE-UNIT RENTAL HOUSES & UNITS MANAGEMENT HUB */
           <div className="space-y-6">
-            {/* Live Metrics Grid (2x4 Grid of Modern Field Boxes) */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {/* Live Metrics Grid (Responsive Modern Field Boxes) */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-8 gap-4">
               <div className="bg-white p-4 rounded-2xl border border-slate-200/90 shadow-2xs hover:shadow-xs transition space-y-2">
                 <div className="flex items-center justify-between">
                   <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Floors</span>
@@ -5601,8 +5603,8 @@ export default function PropertyDetailPage() {
                           </div>
                         </div>
 
-                        {/* Grid of Residential House Cards (Spacious 2-Column Clean Layout Matching PG) */}
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                        {/* Grid of Residential House Cards (Responsive Grid Layout) */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
                           {floorUnits.map((unit) => {
                             const isOccupied = unit.status === RentalUnitStatus.OCCUPIED;
                             const isAvailable = unit.status === RentalUnitStatus.AVAILABLE;

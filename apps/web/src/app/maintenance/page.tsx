@@ -286,7 +286,7 @@ export default function MaintenancePage() {
 
   return (
     <AppShell activePath="/maintenance">
-      <div className="space-y-6 max-w-7xl mx-auto pb-16">
+      <div className="space-y-6 w-full pb-16">
         {/* Page Header */}
         <PageHeader
           title="Maintenance & Work Orders"

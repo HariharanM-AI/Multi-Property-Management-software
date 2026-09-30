@@ -425,7 +425,7 @@ export default function MarketplacePage() {
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 p-4 md:p-8">
       {/* Header */}
-      <div className="max-w-7xl mx-auto mb-6">
+      <div className="w-full mb-6">
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
           <div>
             <div className="flex items-center gap-3 mb-1">
@@ -477,7 +477,7 @@ export default function MarketplacePage() {
       </div>
 
       {/* Notifications / Alerts */}
-      <div className="max-w-7xl mx-auto">
+      <div className="w-full">
         {error && (
           <div className="mb-4 p-4 rounded-xl bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-800 flex items-center justify-between text-rose-800 dark:text-rose-200 text-sm">
             <div className="flex items-center gap-2">
@@ -507,7 +507,7 @@ export default function MarketplacePage() {
       </div>
 
       {/* Summary KPI Cards */}
-      <div className="max-w-7xl mx-auto mb-6 grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="w-full mb-6 grid grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm flex items-center justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
@@ -566,7 +566,7 @@ export default function MarketplacePage() {
       </div>
 
       {/* Filter and Search Bar */}
-      <div className="max-w-7xl mx-auto mb-6 bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
+      <div className="w-full mb-6 bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
         <div className="flex flex-col md:flex-row gap-3 items-stretch md:items-center justify-between">
           {/* Search Input */}
           <div className="relative flex-1">
@@ -669,9 +669,9 @@ export default function MarketplacePage() {
       </div>
 
       {/* Main Grid View */}
-      <div className="max-w-7xl mx-auto">
+      <div className="w-full">
         {loading ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 py-12">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 py-12">
             {[1, 2, 3, 4, 5, 6].map((n) => (
               <div
                 key={n}
@@ -708,7 +708,7 @@ export default function MarketplacePage() {
             </button>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
             {listings.map((listing) => {
               const isOwner = user?.id === listing.sellerId;
               const canEdit = isOwner || isModerator;
