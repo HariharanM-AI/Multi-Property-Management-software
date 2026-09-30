@@ -113,9 +113,14 @@ export const Header: React.FC<HeaderProps> = ({
 }) => {
   const router = useRouter();
   const { user, isAuthenticated, logout } = useAuth();
+  const [mounted, setMounted] = useState(false);
   const [properties, setProperties] = useState<PropertyDto[]>([]);
   const [selectedProperty, setSelectedProperty] = useState<PropertyDto | null>(null);
   const [isPropertyDropdownOpen, setIsPropertyDropdownOpen] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   // In-App Notification Center State
   const [unreadCount, setUnreadCount] = useState<number>(0);
@@ -445,8 +450,12 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
 
         {/* User / Authentication Actions */}
-        <div className="flex items-center gap-3 pl-2 border-l border-surface-border">
-          {isAuthenticated && user ? (
+        <div className="flex items-center gap-3 pl-2 border-l border-surface-border min-h-[36px]">
+          {!mounted ? (
+            <div className="flex items-center gap-2 invisible" aria-hidden="true">
+              <div className="w-24 h-8" />
+            </div>
+          ) : isAuthenticated && user ? (
             <div className="flex items-center gap-3">
               <div className="text-right">
                 <p className="text-xs font-semibold text-brand-navy">
@@ -459,7 +468,7 @@ export const Header: React.FC<HeaderProps> = ({
               <button
                 onClick={() => logout()}
                 title="Sign Out"
-                className="p-2 rounded-lg text-surface-textSecondary hover:bg-slate-100 hover:text-brand-navy transition-colors"
+                className="p-2 rounded-lg text-surface-textSecondary hover:bg-slate-100 hover:text-brand-navy transition-colors cursor-pointer"
                 aria-label="Sign out"
               >
                 <LogOut className="w-4 h-4" />

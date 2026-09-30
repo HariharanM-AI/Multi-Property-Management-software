@@ -26,52 +26,9 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 const API_BASE = typeof window !== 'undefined' ? '/api/v1' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api/v1');
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<AuthUser | null>(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const saved = localStorage.getItem('propertyos_offline_session');
-        if (saved) {
-          const parsed = JSON.parse(saved);
-          if (parsed?.user) {
-            if (parsed.user.firstName === 'Authorized' && parsed.user.lastName === 'Owner') {
-              parsed.user.id = 'a3915c70-7690-4a8a-910f-fbd7590038b6';
-              parsed.user.firstName = 'Arun';
-              parsed.user.lastName = 'Sharma';
-              parsed.user.email = 'owner-a@propertyos.com';
-            }
-            return parsed.user;
-          }
-        }
-      } catch {}
-    }
-    return null;
-  });
-
-  const [organization, setOrganization] = useState<AuthOrganization | null>(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const saved = localStorage.getItem('propertyos_offline_session');
-        if (saved) {
-          const parsed = JSON.parse(saved);
-          if (parsed?.org) return parsed.org;
-          if (parsed?.user?.organizationId) {
-            return { id: parsed.user.organizationId, name: parsed.user.organizationName || 'Hari Buildings' };
-          }
-        }
-      } catch {}
-    }
-    return null;
-  });
-
-  const [isLoading, setIsLoading] = useState<boolean>(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const saved = localStorage.getItem('propertyos_offline_session');
-        if (saved) return false;
-      } catch {}
-    }
-    return true;
-  });
+  const [user, setUser] = useState<AuthUser | null>(null);
+  const [organization, setOrganization] = useState<AuthOrganization | null>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
 
   const refreshUser = useCallback(async () => {
     const token = typeof window !== 'undefined' ? localStorage.getItem('propertyos_token') : null;
@@ -173,6 +130,40 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   useEffect(() => {
+    // Immediately restore offline session from localStorage on client mount (avoids SSR hydration mismatch)
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem('propertyos_offline_session');
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (parsed?.user) {
+            if (parsed.user.firstName === 'Authorized' && parsed.user.lastName === 'Owner') {
+              parsed.user.id = 'a3915c70-7690-4a8a-910f-fbd7590038b6';
+              parsed.user.firstName = 'Arun';
+              parsed.user.lastName = 'Sharma';
+              parsed.user.email = 'owner-a@propertyos.com';
+              parsed.user.phone = '9845011223';
+              parsed.user.organizationId = '4021e99d-1f33-46c6-ab03-65d22df18ec6';
+              parsed.user.organizationName = 'Hari Buildings';
+              if (parsed.org) {
+                parsed.org.id = '4021e99d-1f33-46c6-ab03-65d22df18ec6';
+                parsed.org.name = 'Hari Buildings';
+              }
+              localStorage.setItem('propertyos_offline_session', JSON.stringify(parsed));
+            }
+            setUser(parsed.user);
+            setOrganization(
+              parsed.org ||
+              (parsed.user.organizationId
+                ? { id: parsed.user.organizationId, name: parsed.user.organizationName || 'Hari Buildings' }
+                : null)
+            );
+            setIsLoading(false);
+          }
+        }
+      } catch {}
+    }
+
     refreshUser();
   }, [refreshUser]);
 
