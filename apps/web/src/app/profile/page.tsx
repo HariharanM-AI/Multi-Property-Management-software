@@ -37,7 +37,9 @@ import {
   User,
   RotateCcw,
   Lock,
+  Keyboard,
 } from 'lucide-react';
+import { PageTransition } from '@/components/ui/MotionWrapper';
 import Link from 'next/link';
 
 export default function OwnerProfilePage() {
@@ -430,7 +432,7 @@ export default function OwnerProfilePage() {
 
   return (
     <AppShell activePath="/profile">
-      <div className="max-w-6xl mx-auto space-y-8 pb-16">
+      <PageTransition className="max-w-6xl mx-auto space-y-8 pb-16">
         {/* Breadcrumb & Header */}
         <div>
           <div className="flex items-center gap-2 text-xs font-semibold text-slate-500 mb-2">
@@ -574,7 +576,7 @@ export default function OwnerProfilePage() {
             </div>
           </div>
         </Card>
-      </div>
+      </PageTransition>
 
       {/* Edit Profile Modal */}
       {isEditModalOpen && (
@@ -746,13 +748,14 @@ export default function OwnerProfilePage() {
                     <button
                       type="button"
                       onClick={() => setModalSignMode('draw')}
-                      className={`px-3.5 py-1.5 rounded-md text-xs font-bold transition-colors cursor-pointer ${
+                      className={`px-3.5 py-1.5 rounded-md text-xs font-bold transition-colors cursor-pointer inline-flex items-center gap-1.5 ${
                         modalSignMode === 'draw'
                           ? 'bg-white text-slate-900 shadow-xs'
                           : 'text-slate-500 hover:text-slate-900'
                       }`}
                     >
-                      ✍️ Draw Signature
+                      <PenTool className="w-3.5 h-3.5 text-brand-teal" />
+                      <span>Draw Signature</span>
                     </button>
                     <button
                       type="button"
@@ -761,13 +764,14 @@ export default function OwnerProfilePage() {
                         const typed = modalTypedName.trim() || `${editFirstName.trim()} ${editLastName.trim()}` || 'Arun Sharma';
                         setModalSignatureData(generateNormalTypedSignatureDataUrl(typed, 'Authorized Landlord / Owner'));
                       }}
-                      className={`px-3.5 py-1.5 rounded-md text-xs font-bold transition-colors cursor-pointer ${
+                      className={`px-3.5 py-1.5 rounded-md text-xs font-bold transition-colors cursor-pointer inline-flex items-center gap-1.5 ${
                         modalSignMode === 'type'
                           ? 'bg-white text-slate-900 shadow-xs'
                           : 'text-slate-500 hover:text-slate-900'
                       }`}
                     >
-                      ⌨️ Type Signature
+                      <Keyboard className="w-3.5 h-3.5 text-slate-500" />
+                      <span>Type Signature</span>
                     </button>
                   </div>
                 </div>
@@ -794,7 +798,7 @@ export default function OwnerProfilePage() {
 
                       {!hasDrawnInModal && !lastDrawnSignatureRef.current && (
                         <div className="absolute inset-0 flex items-center justify-center pointer-events-none text-slate-400 text-xs sm:text-sm italic">
-                          ✍️ Draw landlord legal signature here with mouse or finger (Large Full-Width Pad)
+                          Draw landlord legal signature here with mouse or finger (Large Full-Width Pad)
                         </div>
                       )}
 

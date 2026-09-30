@@ -47,6 +47,7 @@ import {
 } from '@/components/agreements/AgreementDocumentViewerModal';
 import { CheckoutAgreementViewerModal } from '@/components/agreements/CheckoutAgreementViewerModal';
 import { formatIdProofDisplay } from '@/components/agreements/AgreementSignModal';
+import { PageTransition } from '@/components/ui/MotionWrapper';
 import {
   saveAgreementSignature,
   getOrGenerateAgreementSignature,
@@ -1204,7 +1205,7 @@ export default function TenantsPage() {
   return (
     <AppShell activePath="/tenants">
       {/* Full-width responsive container scaling seamlessly at any screen resolution and zoom level */}
-      <div className="space-y-6 w-full px-4 sm:px-6 lg:px-8 pb-16">
+      <PageTransition className="space-y-6 w-full px-4 sm:px-6 lg:px-8 pb-16">
         {/* Top Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="space-y-1">
@@ -2028,7 +2029,7 @@ export default function TenantsPage() {
           onClose={() => setViewingCheckoutAgreementData(null)}
           agreementData={viewingCheckoutAgreementData}
         />
-      </div>
+      </PageTransition>
     </AppShell>
   );
 }

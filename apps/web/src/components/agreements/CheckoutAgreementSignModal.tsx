@@ -16,6 +16,7 @@ import {
   Users,
   KeyRound,
   Receipt,
+  Keyboard,
 } from 'lucide-react';
 import { CheckoutAgreementData } from '../../lib/agreementStorage';
 
@@ -811,24 +812,26 @@ export function CheckoutAgreementSignModal({
                 <button
                   type="button"
                   onClick={() => setSignMode('draw')}
-                  className={`px-4 py-1.5 rounded-lg transition ${
+                  className={`px-4 py-1.5 rounded-lg transition inline-flex items-center gap-1.5 ${
                     signMode === 'draw'
                       ? `${theme.primaryBg} text-white shadow-2xs`
                       : 'text-slate-600 hover:text-slate-900'
                   }`}
                 >
-                  ✍️ Draw Pad
+                  <PenTool className="w-3.5 h-3.5" />
+                  <span>Draw Pad</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => setSignMode('type')}
-                  className={`px-4 py-1.5 rounded-lg transition ${
+                  className={`px-4 py-1.5 rounded-lg transition inline-flex items-center gap-1.5 ${
                     signMode === 'type'
                       ? `${theme.primaryBg} text-white shadow-2xs`
                       : 'text-slate-600 hover:text-slate-900'
                   }`}
                 >
-                  ⌨️ Type Name
+                  <Keyboard className="w-3.5 h-3.5" />
+                  <span>Type Name</span>
                 </button>
               </div>
             </div>
@@ -854,7 +857,7 @@ export function CheckoutAgreementSignModal({
                   />
                   {!hasDrawn && !currentSignatureImage && (
                     <div className="absolute inset-0 flex items-center justify-center pointer-events-none text-slate-400 text-xs sm:text-sm font-medium italic">
-                      ✍️ Draw your signature here with mouse or finger (Large Full-Width Pad)
+                      Draw your signature here with mouse or finger (Large Full-Width Pad)
                     </div>
                   )}
                   <button
@@ -962,24 +965,26 @@ export function CheckoutAgreementSignModal({
                     <button
                       type="button"
                       onClick={() => setW1SignMode('draw')}
-                      className={`px-3 py-1 rounded-lg transition ${
+                      className={`px-3 py-1 rounded-lg transition inline-flex items-center gap-1 ${
                         w1SignMode === 'draw'
                           ? `${theme.primaryBg} text-white shadow-2xs`
                           : 'text-slate-600 hover:text-slate-900'
                       }`}
                     >
-                      ✍️ Draw
+                      <PenTool className="w-3 h-3" />
+                      <span>Draw</span>
                     </button>
                     <button
                       type="button"
                       onClick={() => setW1SignMode('type')}
-                      className={`px-3 py-1 rounded-lg transition ${
+                      className={`px-3 py-1 rounded-lg transition inline-flex items-center gap-1 ${
                         w1SignMode === 'type'
                           ? `${theme.primaryBg} text-white shadow-2xs`
                           : 'text-slate-600 hover:text-slate-900'
                       }`}
                     >
-                      ⌨️ Type
+                      <Keyboard className="w-3 h-3" />
+                      <span>Type</span>
                     </button>
                   </div>
                 </div>
@@ -1004,7 +1009,7 @@ export function CheckoutAgreementSignModal({
                     />
                     {!hasW1Drawn && !w1DrawnSignature && (
                       <div className="absolute inset-0 flex items-center justify-center pointer-events-none text-slate-400 text-xs sm:text-sm font-medium italic">
-                        ✍️ Draw Witness 1 signature here with mouse or finger
+                        Draw Witness 1 signature here with mouse or finger
                       </div>
                     )}
                     <button
@@ -1099,24 +1104,26 @@ export function CheckoutAgreementSignModal({
                     <button
                       type="button"
                       onClick={() => setW2SignMode('draw')}
-                      className={`px-3.5 py-1 rounded-lg transition ${
+                      className={`px-3.5 py-1 rounded-lg transition inline-flex items-center gap-1 ${
                         w2SignMode === 'draw'
                           ? `${theme.primaryBg} text-white shadow-2xs`
                           : 'text-slate-600 hover:text-slate-900'
                       }`}
                     >
-                      ✍️ Draw Pad
+                      <PenTool className="w-3 h-3" />
+                      <span>Draw Pad</span>
                     </button>
                     <button
                       type="button"
                       onClick={() => setW2SignMode('type')}
-                      className={`px-3.5 py-1 rounded-lg transition ${
+                      className={`px-3.5 py-1 rounded-lg transition inline-flex items-center gap-1 ${
                         w2SignMode === 'type'
                           ? `${theme.primaryBg} text-white shadow-2xs`
                           : 'text-slate-600 hover:text-slate-900'
                       }`}
                     >
-                      ⌨️ Type Name
+                      <Keyboard className="w-3 h-3" />
+                      <span>Type Name</span>
                     </button>
                   </div>
                 </div>
@@ -1141,7 +1148,7 @@ export function CheckoutAgreementSignModal({
                     />
                     {!hasW2Drawn && !w2DrawnSignature && (
                       <div className="absolute inset-0 flex items-center justify-center pointer-events-none text-slate-400 text-xs sm:text-sm font-medium italic">
-                        ✍️ Draw Witness 2 signature here with mouse or finger
+                        Draw Witness 2 signature here with mouse or finger
                       </div>
                     )}
                     <button

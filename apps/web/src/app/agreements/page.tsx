@@ -43,6 +43,7 @@ import {
 } from '@/components/agreements/AgreementDocumentViewerModal';
 import { downloadAgreementPdf } from '@/components/agreements/downloadAgreementPdf';
 import { CheckoutAgreementViewerModal } from '@/components/agreements/CheckoutAgreementViewerModal';
+import { PageTransition } from '@/components/ui/MotionWrapper';
 import { downloadCheckoutAgreementPdf } from '@/components/agreements/downloadCheckoutAgreementPdf';
 import {
   saveAgreementSignature,
@@ -1189,7 +1190,7 @@ export default function AgreementsDashboardPage() {
 
   return (
     <AppShell activePath="/agreements">
-      <div className="space-y-6 max-w-7xl mx-auto pb-16 animate-in fade-in duration-200">
+      <PageTransition className="space-y-6 max-w-7xl mx-auto pb-16">
         {/* Toast Alert */}
         {toastMessage && (
           <div
@@ -1765,7 +1766,7 @@ export default function AgreementsDashboardPage() {
             </div>
           </div>
         )}
-      </div>
+      </PageTransition>
     </AppShell>
   );
 }

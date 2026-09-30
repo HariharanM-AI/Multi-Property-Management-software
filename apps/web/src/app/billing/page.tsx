@@ -41,6 +41,7 @@ import {
   User,
   Scale,
 } from 'lucide-react';
+import { PageTransition } from '@/components/ui/MotionWrapper';
 
 export default function BillingDashboardPage() {
   const router = useRouter();
@@ -271,7 +272,7 @@ export default function BillingDashboardPage() {
 
   return (
     <AppShell activePath="/billing">
-      <div className="space-y-6">
+      <PageTransition className="space-y-6">
         {/* Page Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
@@ -995,7 +996,7 @@ export default function BillingDashboardPage() {
             </div>
           </div>
         )}
-      </div>
+      </PageTransition>
     </AppShell>
   );
 }

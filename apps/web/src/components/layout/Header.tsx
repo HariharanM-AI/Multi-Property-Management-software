@@ -32,6 +32,7 @@ import {
   FileText,
   ExternalLink,
   Loader2,
+  MapPin,
 } from 'lucide-react';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api/v1';
@@ -392,8 +393,9 @@ export const Header: React.FC<HeaderProps> = ({
                         </p>
 
                         {notif.property && (
-                          <p className="text-[10px] text-brand-teal font-medium mt-1">
-                            📍 {notif.property.name}
+                          <p className="text-[10px] text-brand-teal font-medium mt-1 flex items-center gap-1">
+                            <MapPin className="w-3 h-3 text-brand-teal shrink-0" />
+                            <span>{notif.property.name}</span>
                           </p>
                         )}
                       </div>

@@ -33,7 +33,9 @@ import {
   Sparkles,
   Loader2,
   RefreshCw,
+  MapPin,
 } from 'lucide-react';
+import { PageTransition } from '@/components/ui/MotionWrapper';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api/v1';
 
@@ -290,7 +292,7 @@ export default function NotificationsPage() {
 
   return (
     <AppShell activePath="/notifications">
-      <div className="space-y-6 max-w-7xl mx-auto pb-12">
+      <PageTransition className="space-y-6 max-w-7xl mx-auto pb-12">
         {/* Navigation Back Button */}
         <div className="flex items-center justify-between">
           <BackButton fallbackHref="/" label="Back to Dashboard" />
@@ -530,8 +532,9 @@ export default function NotificationsPage() {
                     <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
                       <div className="flex items-center gap-3 text-[11px]">
                         {notif.property && (
-                          <span className="font-semibold text-brand-teal">
-                            📍 {notif.property.name} ({notif.property.code})
+                          <span className="font-semibold text-brand-teal inline-flex items-center gap-1">
+                            <MapPin className="w-3 h-3 shrink-0 text-brand-teal" />
+                            {notif.property.name} ({notif.property.code})
                           </span>
                         )}
                         {notif.readAt && (
@@ -562,8 +565,9 @@ export default function NotificationsPage() {
                             <span>Mark read</span>
                           </button>
                         ) : (
-                          <span className="text-[11px] text-slate-400 font-medium px-2 py-0.5">
-                            ✓ Read
+                          <span className="text-[11px] text-slate-400 font-medium px-2 py-0.5 inline-flex items-center gap-1">
+                            <Check className="w-3 h-3 text-slate-400" />
+                            Read
                           </span>
                         )}
 
@@ -623,7 +627,7 @@ export default function NotificationsPage() {
             </div>
           )}
         </div>
-      </div>
+      </PageTransition>
     </AppShell>
   );
 }

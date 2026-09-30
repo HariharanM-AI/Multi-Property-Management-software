@@ -26,6 +26,7 @@ import {
   Sparkles,
   Info,
   Maximize2,
+  X,
 } from 'lucide-react';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api/v1';
@@ -457,9 +458,9 @@ export default function PropertyDetailPage() {
                 <h3 className="text-base font-bold text-slate-900 dark:text-white">Host Contact Information</h3>
                 <button
                   onClick={() => setShowContactModal(false)}
-                  className="text-slate-400 hover:text-slate-600 p-1"
+                  className="text-slate-400 hover:text-slate-600 p-1 rounded-lg hover:bg-slate-100 transition"
                 >
-                  ✕
+                  <X className="w-5 h-5" />
                 </button>
               </div>
 

@@ -6,6 +6,7 @@ import { AppShell } from '@/components/layout/AppShell';
 import { StatCard } from '@/components/ui/StatCard';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { PageTransition } from '@/components/ui/MotionWrapper';
 import { useAuth } from '@/lib/auth-context';
 import {
   PortfolioDashboardDto,
@@ -153,7 +154,7 @@ export default function HomePage() {
   return (
     <AppShell activePath="/">
       {() => (
-        <div className="max-w-7xl mx-auto space-y-8 pb-12">
+        <PageTransition className="max-w-7xl mx-auto space-y-8 pb-12">
           {/* Executive Header */}
           <div className="bg-brand-white border border-surface-border rounded-2xl p-6 shadow-sm">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -747,7 +748,7 @@ export default function HomePage() {
               </div>
             </div>
           )}
-        </div>
+        </PageTransition>
       )}
     </AppShell>
   );

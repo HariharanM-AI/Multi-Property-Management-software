@@ -31,7 +31,9 @@ import {
   Users,
   DollarSign,
   Info,
+  X,
 } from 'lucide-react';
+import { PageTransition } from '@/components/ui/MotionWrapper';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api/v1';
 
@@ -659,7 +661,7 @@ export default function RentalUnitsPage() {
 
   return (
     <AppShell>
-      <div className="p-6 max-w-7xl mx-auto space-y-6">
+      <PageTransition className="p-6 max-w-7xl mx-auto space-y-6">
         
         {/* Navigation & Header Section */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -822,7 +824,9 @@ export default function RentalUnitsPage() {
             <Card className="w-full max-w-lg p-6 space-y-4">
               <div className="flex items-center justify-between">
                 <h3 className="text-lg font-bold text-slate-900">Add Rental Unit</h3>
-                <button onClick={() => setShowAddUnitModal(false)} className="text-slate-400 hover:text-slate-900 font-bold">✕</button>
+                <button onClick={() => setShowAddUnitModal(false)} className="text-slate-400 hover:text-slate-900 transition p-1 rounded-lg hover:bg-slate-100">
+                  <X className="w-5 h-5" />
+                </button>
               </div>
 
               <form onSubmit={handleAddUnit} className="space-y-4">
@@ -956,7 +960,9 @@ export default function RentalUnitsPage() {
             <Card className="w-full max-w-lg p-6 space-y-4">
               <div className="flex items-center justify-between">
                 <h3 className="text-lg font-bold text-slate-900">Create Lease: {selectedUnit.unitNumber}</h3>
-                <button onClick={() => setShowAddLeaseModal(false)} className="text-slate-400 hover:text-slate-900 font-bold">✕</button>
+                <button onClick={() => setShowAddLeaseModal(false)} className="text-slate-400 hover:text-slate-900 transition p-1 rounded-lg hover:bg-slate-100">
+                  <X className="w-5 h-5" />
+                </button>
               </div>
 
               <form onSubmit={handleAddLease} className="space-y-4">
@@ -1084,7 +1090,9 @@ export default function RentalUnitsPage() {
                   <h3 className="text-lg font-bold text-slate-900">Lease Details</h3>
                   <p className="text-xs text-slate-400 mt-0.5">ID: {selectedLease.id}</p>
                 </div>
-                <button onClick={() => setShowLeaseDetailsModal(false)} className="text-slate-400 hover:text-slate-900 font-bold">✕</button>
+                <button onClick={() => setShowLeaseDetailsModal(false)} className="text-slate-400 hover:text-slate-900 transition p-1 rounded-lg hover:bg-slate-100">
+                  <X className="w-5 h-5" />
+                </button>
               </div>
 
               {/* Lease Specs */}
@@ -1208,7 +1216,7 @@ export default function RentalUnitsPage() {
           </div>
         )}
 
-      </div>
+      </PageTransition>
     </AppShell>
   );
 }

@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { AppShell } from '@/components/layout/AppShell';
 import { Button } from '@/components/ui/Button';
 import { BackButton } from '@/components/ui/BackButton';
+import { PageTransition } from '@/components/ui/MotionWrapper';
 import { useAuth } from '@/lib/auth-context';
 import { getOwnerProfile, onOwnerProfileChange } from '@/lib/ownerProfileStorage';
 import { getCleanPropertyDescription } from '@/lib/propertyUtils';
@@ -1003,7 +1004,7 @@ export default function NewPropertyPage() {
 
   return (
     <AppShell activePath="/properties">
-      <div className="max-w-4xl mx-auto space-y-6">
+      <PageTransition className="max-w-4xl mx-auto space-y-6">
         {/* Navigation Breadcrumb & Back Button */}
         <div className="flex items-center justify-between gap-4">
           <div className="flex items-center gap-2 text-xs text-surface-textSecondary">
@@ -1789,8 +1790,8 @@ export default function NewPropertyPage() {
                                                 : 'bg-slate-50 text-slate-600 border-slate-300'
                                             }`}
                                           >
-                                            <option value="NON_AC">💨 Non-AC</option>
-                                            <option value="AC">❄️ AC</option>
+                                            <option value="NON_AC">Non-AC</option>
+                                            <option value="AC">AC</option>
                                           </select>
                                         </td>
                                         <td className="py-2.5 pr-2">
@@ -2135,8 +2136,9 @@ export default function NewPropertyPage() {
 
                       {/* Rental Summary Card */}
                       <div className="p-4 rounded-xl bg-blue-50/60 border border-blue-200 flex items-center justify-between text-xs text-blue-950 flex-wrap gap-2">
-                        <span className="font-bold">
-                          ⚡ {totalRentalUnitsCount} Houses across {totalRentalFloors} Floors Ready to Initialize
+                        <span className="font-bold flex items-center gap-1.5">
+                          <Zap className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                          <span>{totalRentalUnitsCount} Houses across {totalRentalFloors} Floors Ready to Initialize</span>
                         </span>
                         <span>
                           Total Rent Roll: <strong>₹{totalRentalMonthlyRevenue.toLocaleString('en-IN')}/mo</strong> | Total Deposit: <strong>₹{totalRentalSecurityDeposit.toLocaleString('en-IN')}</strong>
@@ -2211,8 +2213,9 @@ export default function NewPropertyPage() {
                       <>
                         <span className="text-slate-800">{formData.ownerName}</span>
                         {formData.ownerSignature ? (
-                          <span className="text-[10px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full font-bold border border-emerald-200">
-                            ✓ E-Sign Recorded
+                          <span className="text-[10px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full font-bold border border-emerald-200 inline-flex items-center gap-1">
+                            <Check className="w-3 h-3 text-emerald-700" />
+                            E-Sign Recorded
                           </span>
                         ) : (
                           <span className="text-[10px] bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full font-bold border border-amber-200">
@@ -2277,7 +2280,7 @@ export default function NewPropertyPage() {
             )}
           </div>
         </div>
-      </div>
+      </PageTransition>
     </AppShell>
   );
 }

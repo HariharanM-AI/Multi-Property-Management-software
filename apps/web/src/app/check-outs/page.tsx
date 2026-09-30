@@ -21,7 +21,9 @@ import {
   RefreshCw,
   IndianRupee,
   ReceiptText,
+  X,
 } from 'lucide-react';
+import { PageTransition } from '@/components/ui/MotionWrapper';
 
 interface Property {
   id: string;
@@ -382,7 +384,7 @@ export default function CheckoutsPage() {
 
   return (
     <AppShell activePath="/check-outs">
-      <div className="space-y-6 max-w-7xl mx-auto pb-16">
+      <PageTransition className="space-y-6 max-w-7xl mx-auto pb-16">
         {/* Page Header */}
         <PageHeader
           title="Digital Check-Out & Settlement"
@@ -413,9 +415,9 @@ export default function CheckoutsPage() {
             </div>
             <button
               onClick={() => setActionMessage(null)}
-              className="text-emerald-700 hover:text-emerald-900 font-bold p-1 rounded-md"
+              className="text-emerald-700 hover:text-emerald-900 p-1 rounded-md transition hover:bg-emerald-100"
             >
-              ✕
+              <X className="w-4 h-4" />
             </button>
           </div>
         )}
@@ -631,7 +633,7 @@ export default function CheckoutsPage() {
             </div>
           )}
         </div>
-      </div>
+      </PageTransition>
 
       {/* Checkout Wizard Modal */}
       <Modal

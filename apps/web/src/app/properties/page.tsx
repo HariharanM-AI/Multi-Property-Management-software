@@ -37,6 +37,7 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api/v
 
 import { BackButton } from '@/components/ui/BackButton';
 import { getCleanPropertyDescription } from '@/lib/propertyUtils';
+import { PageTransition } from '@/components/ui/MotionWrapper';
 
 function getFallbackPropertiesFromAgreements(): PropertyDto[] {
   if (typeof window === 'undefined') return [];
@@ -258,7 +259,7 @@ export default function PropertiesListPage() {
 
   return (
     <AppShell activePath="/properties">
-      <div className="max-w-7xl mx-auto space-y-6">
+      <PageTransition className="max-w-7xl mx-auto space-y-6">
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="space-y-1">
@@ -563,7 +564,7 @@ export default function PropertiesListPage() {
             </div>
           </div>
         )}
-      </div>
+      </PageTransition>
 
       {/* ========================================================================= */}
       {/* DELETE PROPERTY APPROVAL & DISCLAIMER CONFIRMATION MODAL                   */}
@@ -601,8 +602,9 @@ export default function PropertiesListPage() {
                 You are about to remove <strong>{deleteTargetProperty.name}</strong> (Code: <code>{deleteTargetProperty.code}</code>).
                 All configured floors, rooms, beds, assigned leases, tenant stays, and media files under this property will be decommissioned.
               </p>
-              <p className="font-semibold text-rose-700">
-                ⚠️ This action cannot be reversed without administrative intervention.
+              <p className="font-semibold text-rose-700 flex items-center gap-1.5">
+                <AlertTriangle className="w-3.5 h-3.5 shrink-0 text-rose-600" />
+                <span>This action cannot be reversed without administrative intervention.</span>
               </p>
             </div>
 

@@ -7,6 +7,7 @@ import { StatCard } from '@/components/ui/StatCard';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Button } from '@/components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
+import { PageTransition } from '@/components/ui/MotionWrapper';
 import {
   Package,
   Plus,
@@ -415,7 +416,12 @@ export default function InventoryPage() {
   const getConditionBadge = (condition: string) => {
     switch (condition) {
       case 'NEW':
-        return <span className="text-emerald-600 font-semibold text-xs">★ Brand New</span>;
+        return (
+          <span className="inline-flex items-center gap-1 text-emerald-600 font-semibold text-xs">
+            <Sparkles className="w-3 h-3 text-emerald-500" />
+            <span>Brand New</span>
+          </span>
+        );
       case 'GOOD':
         return <span className="text-teal-600 font-semibold text-xs">Good</span>;
       case 'FAIR':
@@ -431,7 +437,7 @@ export default function InventoryPage() {
 
   return (
     <AppShell>
-      <div className="space-y-6 max-w-7xl mx-auto pb-12">
+      <PageTransition className="space-y-6 max-w-7xl mx-auto pb-12">
         <PageHeader
           title="Property & Room Inventory"
           subtitle="Operational asset ledger, appliance serial tracking, room & unit assignments, and condition grading"
@@ -1064,7 +1070,7 @@ export default function InventoryPage() {
             </div>
           </form>
         </Modal>
-      </div>
+      </PageTransition>
     </AppShell>
   );
 }

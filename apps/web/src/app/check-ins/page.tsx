@@ -22,7 +22,10 @@ import {
   RefreshCw,
   Calendar,
   AlertTriangle,
+  X,
+  XCircle,
 } from 'lucide-react';
+import { PageTransition } from '@/components/ui/MotionWrapper';
 
 interface Property {
   id: string;
@@ -438,7 +441,7 @@ export default function CheckInsPage() {
 
   return (
     <AppShell activePath="/check-ins">
-      <div className="space-y-6 max-w-7xl mx-auto pb-16">
+      <PageTransition className="space-y-6 max-w-7xl mx-auto pb-16">
         {/* Page Header */}
         <PageHeader
           title="Digital Check-In & Onboarding"
@@ -474,9 +477,9 @@ export default function CheckInsPage() {
             </div>
             <button
               onClick={() => setActionMessage(null)}
-              className="text-emerald-700 hover:text-emerald-900 font-bold p-1 rounded-md"
+              className="text-emerald-700 hover:text-emerald-900 p-1 rounded-md transition hover:bg-emerald-100"
             >
-              ✕
+              <X className="w-4 h-4" />
             </button>
           </div>
         )}
@@ -687,7 +690,7 @@ export default function CheckInsPage() {
             </div>
           )}
         </div>
-      </div>
+      </PageTransition>
 
       {/* Digital Check-In Wizard Modal */}
       <Modal
@@ -750,17 +753,37 @@ export default function CheckInsPage() {
                 </div>
               ) : onboardingStatus ? (
                 <div className="grid grid-cols-2 gap-2 text-xs pt-1">
-                  <div className={onboardingStatus.tenantProfileComplete ? 'text-emerald-700' : 'text-rose-700'}>
-                    {onboardingStatus.tenantProfileComplete ? '✓ Profile Complete' : '✕ Incomplete Profile'}
+                  <div className={`flex items-center gap-1.5 ${onboardingStatus.tenantProfileComplete ? 'text-emerald-700' : 'text-rose-700'}`}>
+                    {onboardingStatus.tenantProfileComplete ? (
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                    ) : (
+                      <XCircle className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+                    )}
+                    <span>{onboardingStatus.tenantProfileComplete ? 'Profile Complete' : 'Incomplete Profile'}</span>
                   </div>
-                  <div className={onboardingStatus.emergencyContactComplete ? 'text-emerald-700' : 'text-rose-700'}>
-                    {onboardingStatus.emergencyContactComplete ? '✓ Emergency Contact' : '✕ Missing Emergency Info'}
+                  <div className={`flex items-center gap-1.5 ${onboardingStatus.emergencyContactComplete ? 'text-emerald-700' : 'text-rose-700'}`}>
+                    {onboardingStatus.emergencyContactComplete ? (
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                    ) : (
+                      <XCircle className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+                    )}
+                    <span>{onboardingStatus.emergencyContactComplete ? 'Emergency Contact' : 'Missing Emergency Info'}</span>
                   </div>
-                  <div className={onboardingStatus.kycVerified ? 'text-emerald-700' : 'text-rose-700'}>
-                    {onboardingStatus.kycVerified ? '✓ KYC Verified' : '✕ KYC Pending/Missing'}
+                  <div className={`flex items-center gap-1.5 ${onboardingStatus.kycVerified ? 'text-emerald-700' : 'text-rose-700'}`}>
+                    {onboardingStatus.kycVerified ? (
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                    ) : (
+                      <XCircle className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+                    )}
+                    <span>{onboardingStatus.kycVerified ? 'KYC Verified' : 'KYC Pending/Missing'}</span>
                   </div>
-                  <div className={!onboardingStatus.activePgStayPresent ? 'text-emerald-700' : 'text-rose-700'}>
-                    {!onboardingStatus.activePgStayPresent ? '✓ No Active PG Stay' : '✕ Active Stay Exists'}
+                  <div className={`flex items-center gap-1.5 ${!onboardingStatus.activePgStayPresent ? 'text-emerald-700' : 'text-rose-700'}`}>
+                    {!onboardingStatus.activePgStayPresent ? (
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                    ) : (
+                      <XCircle className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+                    )}
+                    <span>{!onboardingStatus.activePgStayPresent ? 'No Active PG Stay' : 'Active Stay Exists'}</span>
                   </div>
                 </div>
               ) : null}

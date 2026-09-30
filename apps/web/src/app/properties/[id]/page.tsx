@@ -111,7 +111,9 @@ import {
   Globe,
   Tag,
   IndianRupee,
+  Snowflake,
 } from 'lucide-react';
+import { PageTransition } from '@/components/ui/MotionWrapper';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api/v1';
 
@@ -5139,11 +5141,13 @@ export default function PropertyDetailPage() {
                                         </span>
                                         {hasAc ? (
                                           <span className="inline-flex items-center gap-1 text-[11px] text-sky-800 bg-sky-50 px-2.5 py-1 rounded-lg font-bold border border-sky-200 shadow-2xs">
-                                            ❄️ AC Equipped
+                                            <Snowflake className="w-3 h-3 text-sky-600 shrink-0" />
+                                            <span>AC Equipped</span>
                                           </span>
                                         ) : (
                                           <span className="inline-flex items-center gap-1 text-[11px] text-slate-600 bg-slate-100 px-2.5 py-1 rounded-lg font-semibold border border-slate-200 shadow-2xs">
-                                            💨 Non-AC
+                                            <Wind className="w-3 h-3 text-slate-500 shrink-0" />
+                                            <span>Non-AC</span>
                                           </span>
                                         )}
                                       </div>
@@ -7743,7 +7747,17 @@ export default function PropertyDetailPage() {
                           : 'bg-slate-100 text-slate-600 border-slate-300'
                       }`}
                     >
-                      {manageRoomForm.isAc ? '❄️ AC Equipped' : '💨 Non-AC'}
+                      {manageRoomForm.isAc ? (
+                        <span className="flex items-center gap-1">
+                          <Snowflake className="w-3.5 h-3.5 text-sky-600" />
+                          <span>AC Equipped</span>
+                        </span>
+                      ) : (
+                        <span className="flex items-center gap-1">
+                          <Wind className="w-3.5 h-3.5 text-slate-500" />
+                          <span>Non-AC</span>
+                        </span>
+                      )}
                     </button>
                   </div>
                 </div>
@@ -8042,7 +8056,17 @@ export default function PropertyDetailPage() {
                           : 'bg-slate-100 text-slate-600 border-slate-300'
                       }`}
                     >
-                      {addRoomForm.isAc ? '❄️ AC Equipped' : '💨 Non-AC'}
+                      {addRoomForm.isAc ? (
+                        <span className="flex items-center gap-1">
+                          <Snowflake className="w-3.5 h-3.5 text-sky-600" />
+                          <span>AC Equipped</span>
+                        </span>
+                      ) : (
+                        <span className="flex items-center gap-1">
+                          <Wind className="w-3.5 h-3.5 text-slate-500" />
+                          <span>Non-AC</span>
+                        </span>
+                      )}
                     </button>
                   </div>
                 </div>
@@ -8465,8 +8489,8 @@ export default function PropertyDetailPage() {
                                         }
                                         className="w-full px-2 py-1.5 bg-slate-50 border border-slate-300 rounded text-xs font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-brand-teal"
                                       >
-                                        <option value="NON_AC">💨 Non-AC</option>
-                                        <option value="AC">❄️ AC</option>
+                                        <option value="NON_AC">Non-AC</option>
+                                        <option value="AC">AC</option>
                                       </select>
                                     </td>
 
